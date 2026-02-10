@@ -1,6 +1,23 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:intl/intl.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart'; // Fixes DateFormat error
+import 'package:google_maps_flutter/google_maps_flutter.dart'; // Fixes LatLng error
+import 'package:url_launcher/url_launcher.dart';
 
-void main() => runApp(const TereaApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // --- DATABASE SETUP ---
+  // Get these from your Supabase Project Settings > API
+  await Supabase.initialize(
+    url: 'https://ppeptqgaroispxwvezcq.supabase.co',
+    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwZXB0cWdhcm9pc3B4d3ZlemNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2MDk5NzIsImV4cCI6MjA4NjE4NTk3Mn0.XfrgVO5GviO43PKU_tkGbuo0afq3J54B0tQoQXZmumo',
+  );
+
+  runApp(const TereaApp());
+}
 
 // --- 0. DATA MODELS ---
 class Medicine {
@@ -73,8 +90,32 @@ class StartupPage extends StatelessWidget {
 }
 
 // --- 2. LOGIN PAGE ---
-class LoginPage extends StatelessWidget {
+class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
+
+  @override
+  State<LoginPage> createState() => _LoginPageState();
+}
+
+class _LoginPageState extends State<LoginPage> {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _isLoading = false;
+
+  Future<void> _signIn() async {
+    setState(() => _isLoading = true);
+    try {
+      await Supabase.instance.client.auth.signInWithPassword(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+      if (mounted) Navigator.pushNamed(context, '/home');
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Failed: $e")));
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -88,11 +129,13 @@ class LoginPage extends StatelessWidget {
             const Text('Welcome back', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
             const Text('Sign in to continue', style: TextStyle(color: Color(0xFF606C38))),
             const SizedBox(height: 40),
-            _buildTextField("Email", "you@example.com"),
+            _buildTextField("Email", "you@example.com", controller: _emailController),
             const SizedBox(height: 20),
-            _buildTextField("Password", "........", isPassword: true),
+            _buildTextField("Password", "........", isPassword: true, controller: _passwordController),
             const SizedBox(height: 30),
-            _buildPrimaryButton(context, "Sign in", () => Navigator.pushNamed(context, '/home')),
+            _isLoading 
+                ? const CircularProgressIndicator()
+                : _buildPrimaryButton(context, "Sign in", _signIn),
             const SizedBox(height: 20),
             TextButton(
               onPressed: () => Navigator.pushNamed(context, '/signup'),
@@ -106,8 +149,61 @@ class LoginPage extends StatelessWidget {
 }
 
 // --- 3. SIGN UP PAGE ---
-class SignUpPage extends StatelessWidget {
+class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
+
+  @override
+  State<SignUpPage> createState() => _SignUpPageState();
+}
+
+class _SignUpPageState extends State<SignUpPage> {
+  final _nameController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _contactController = TextEditingController();
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  
+  // Changed gender from a controller to a string for the dropdown
+  String? _selectedGender; 
+  final List<String> _genderOptions = ['Male', 'Female', 'Other'];
+
+  bool _isLoading = false;
+
+  Future<void> _handleSignUp() async {
+    // Validation to make sure gender is selected
+    if (_selectedGender == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please select a gender")),
+      );
+      return;
+    }
+
+    setState(() => _isLoading = true);
+    try {
+      // 1. Create User in Auth
+      final authResponse = await Supabase.instance.client.auth.signUp(
+        email: _emailController.text.trim(),
+        password: _passwordController.text.trim(),
+      );
+
+      if (authResponse.user != null) {
+        // 2. Insert extra data into 'profiles' table
+        await Supabase.instance.client.from('profiles').insert({
+          'id': authResponse.user!.id,
+          'full_name': _nameController.text.trim(),
+          'age': _ageController.text.trim(),
+          'gender': _selectedGender, // Saves the dropdown value
+          'contact_number': _contactController.text.trim(),
+          'email': _emailController.text.trim(),
+        });
+        if (mounted) Navigator.pushNamed(context, '/home');
+      }
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Registration Error: $e")));
+    } finally {
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -119,7 +215,8 @@ class SignUpPage extends StatelessWidget {
           children: [
             Row(
               children: [
-                _buildLogo(size: 50),
+                // Assuming _buildLogo is defined globally or within the class
+                const Icon(Icons.local_hospital, size: 50, color: Color(0xFF283618)),
                 const SizedBox(width: 15),
                 const Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -131,25 +228,107 @@ class SignUpPage extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 30),
-            _buildTextField("Full Name", "Juan Dela Cruz"),
+            _buildTextField("Full Name", "Juan Dela Cruz", controller: _nameController),
             const SizedBox(height: 15),
             Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Expanded(child: _buildTextField("Age", "25")),
+                Expanded(child: _buildTextField("Age", "25", controller: _ageController)),
                 const SizedBox(width: 15),
-                Expanded(child: _buildTextField("Gender", "Select")),
+                // --- DROPDOWN FOR GENDER ---
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Gender", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618))),
+                      const SizedBox(height: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: Colors.grey.shade300),
+                        ),
+                        child: DropdownButtonHideUnderline(
+                          child: DropdownButton<String>(
+                            value: _selectedGender,
+                            hint: const Text("Select", style: TextStyle(fontSize: 14, color: Colors.grey)),
+                            isExpanded: true,
+                            items: _genderOptions.map((String value) {
+                              return DropdownMenuItem<String>(
+                                value: value,
+                                child: Text(value),
+                              );
+                            }).toList(),
+                            onChanged: (newValue) {
+                              setState(() {
+                                _selectedGender = newValue;
+                              });
+                            },
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ), 
               ],
             ),
             const SizedBox(height: 15),
-            _buildTextField("Contact Number", "+63 912 345 6789"),
+            _buildTextField("Contact Number", "+63 912 345 6789", controller: _contactController),
             const SizedBox(height: 15),
-            _buildTextField("Email", "you@example.com"),
+            _buildTextField("Email", "you@example.com", controller: _emailController),
             const SizedBox(height: 15),
-            _buildTextField("Password", "........", isPassword: true),
+            _buildTextField("Password", "........", isPassword: true, controller: _passwordController),
             const SizedBox(height: 30),
-            _buildPrimaryButton(context, "Create account", () => Navigator.pushNamed(context, '/home')),
+            _isLoading 
+              ? const CircularProgressIndicator()
+              : _buildPrimaryButton(context, "Create account", _handleSignUp),
           ],
         ),
+      ),
+    );
+  }
+
+  // Included helper to ensure the code is complete and functional
+  Widget _buildTextField(String label, String hint, {required TextEditingController controller, bool isPassword = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618))),
+        const SizedBox(height: 8),
+        TextField(
+          controller: controller,
+          obscureText: isPassword,
+          decoration: InputDecoration(
+            hintText: hint,
+            filled: true,
+            fillColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+            enabledBorder: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(10),
+              borderSide: BorderSide(color: Colors.grey.shade300),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPrimaryButton(BuildContext context, String text, VoidCallback onPressed) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: ElevatedButton(
+        onPressed: onPressed,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: const Color(0xFF606C38),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+        ),
+        child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
       ),
     );
   }
@@ -222,7 +401,7 @@ class DashboardPage extends StatelessWidget {
   }
 }
 
-// --- 5. ASSESSMENT PAGE ---
+// --- 5. ASSESSMENT PAGE & RESULT LOGIC ---
 class AssessmentPage extends StatefulWidget {
   const AssessmentPage({super.key});
 
@@ -232,62 +411,110 @@ class AssessmentPage extends StatefulWidget {
 
 class _AssessmentPageState extends State<AssessmentPage> {
   int currentIndex = 0;
-  int yesCount = 0;
+  int riskScore = 0;
   String? selected;
+  bool showResult = false;
+  bool _showError = false;
 
-  final List<String> questions = [
-    "Do you have a persistent cough lasting more than 2 weeks?",
-    "Have you experienced unexplained weight loss recently?",
-    "Do you suffer from night sweats?",
-    "Have you been feeling unusually tired or fatigued?",
-    "Do you have chest pain or pain when breathing?",
-    "Have you noticed blood in your phlegm or cough?",
-    "Have you been in close contact with someone who has TB?"
+  // 12 Targeted TB Screening Questions
+  final List<Map<String, dynamic>> questions = [
+    {"q": "Do you have a persistent cough lasting more than 2 weeks?", "weight": 3},
+    {"q": "Have you noticed blood in your phlegm or mucus?", "weight": 5},
+    {"q": "Have you experienced unexplained weight loss recently?", "weight": 2},
+    {"q": "Do you suffer from frequent night sweats?", "weight": 2},
+    {"q": "Do you have persistent chest pain or pain when breathing?", "weight": 2},
+    {"q": "Have you been feeling unusually tired or fatigued for weeks?", "weight": 1},
+    {"q": "Do you have a recurring fever (especially in the afternoon)?", "weight": 2},
+    {"q": "Have you lost your appetite significantly?", "weight": 1},
+    {"q": "Have you lived with or cared for someone with active TB?", "weight": 4},
+    {"q": "Do you have a weakened immune system (e.g., Diabetes, HIV)?", "weight": 3},
+    {"q": "Have you recently traveled to an area with high TB rates?", "weight": 2},
+    {"q": "Do you smoke or have a history of heavy tobacco use?", "weight": 1},
   ];
 
   void _handleNext() {
-    if (selected == null) return;
-
-    if (selected == "Yes") yesCount++;
-
+    if (selected == null) {
+      setState(() => _showError = true);
+      return;
+    }
+    if (selected == "Yes") {
+      riskScore += (questions[currentIndex]['weight'] as int);
+    }
     if (currentIndex < questions.length - 1) {
       setState(() {
         currentIndex++;
         selected = null;
+        _showError = false;
       });
     } else {
-      Navigator.pushNamed(context, '/result', arguments: yesCount);
+      _calculateAndSaveResult();
     }
+  }
+
+  Future<void> _calculateAndSaveResult() async {
+    String finalRisk = "Low Risk";
+    if (riskScore >= 12) finalRisk = "High Risk";
+    else if (riskScore >= 6) finalRisk = "Medium Risk";
+
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user != null) {
+      await Supabase.instance.client
+          .from('profiles')
+          .update({'risk_level': finalRisk})
+          .eq('id', user.id);
+    }
+    setState(() => showResult = true);
   }
 
   @override
   Widget build(BuildContext context) {
+    if (showResult) return _buildResultPage();
+
     return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent, title: const Text('Assessment')),
+      backgroundColor: const Color(0xFFFEFAE0),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent, elevation: 0,
+        title: const Text('Assessment', style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold)),
+        automaticallyImplyLeading: false,
+      ),
       body: Padding(
-        padding: const EdgeInsets.all(25),
+        padding: const EdgeInsets.symmetric(horizontal: 25),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Question ${currentIndex + 1} of ${questions.length}', style: const TextStyle(color: Colors.grey)),
+            const SizedBox(height: 20),
+            Text('Question ${currentIndex + 1} of ${questions.length}', style: const TextStyle(color: Color(0xFF606C38))),
             const SizedBox(height: 10),
-            LinearProgressIndicator(
-              value: (currentIndex + 1) / questions.length, 
-              color: const Color(0xFF606C38), 
-              backgroundColor: Colors.white
+            ClipRRect(
+              borderRadius: BorderRadius.circular(10),
+              child: LinearProgressIndicator(
+                value: (currentIndex + 1) / questions.length,
+                minHeight: 10,
+                color: const Color(0xFF606C38),
+                backgroundColor: Colors.white,
+              ),
             ),
             const SizedBox(height: 40),
-            Text(questions[currentIndex], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 30),
-            _buildOption("Yes"),
-            const SizedBox(height: 15),
-            _buildOption("No"),
-            const Spacer(),
-            _buildPrimaryButton(
-              context, 
-              currentIndex < questions.length - 1 ? "Next →" : "See Results", 
-              _handleNext
+            Text(questions[currentIndex]['q'], style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
+            if (_showError) const Padding(
+              padding: EdgeInsets.only(top: 8.0),
+              child: Text("This question is required", style: TextStyle(color: Colors.redAccent, fontSize: 14, fontWeight: FontWeight.w500)),
             ),
+            const SizedBox(height: 30),
+            _buildHoverOption("Yes"),
+            const SizedBox(height: 15),
+            _buildHoverOption("No"),
+            const Spacer(),
+            SizedBox(
+              width: double.infinity,
+              height: 55,
+              child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15))),
+                onPressed: _handleNext,
+                child: Text(currentIndex < questions.length - 1 ? "Next →" : "See Results", style: const TextStyle(color: Colors.white, fontSize: 18)),
+              ),
+            ),
+            const SizedBox(height: 40),
           ],
         ),
       ),
@@ -295,25 +522,131 @@ class _AssessmentPageState extends State<AssessmentPage> {
     );
   }
 
-  Widget _buildOption(String text) {
+  Widget _buildHoverOption(String text) {
     bool isSel = selected == text;
-    return GestureDetector(
+    return InkWell(
       onTap: () => setState(() => selected = text),
-      child: Container(
-        width: double.infinity,
+      borderRadius: BorderRadius.circular(15),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: isSel ? const Color(0xFFE9EDC9) : Colors.white,
+          color: isSel ? const Color(0xFFDDA15E).withOpacity(0.2) : Colors.white,
           borderRadius: BorderRadius.circular(15),
-          border: Border.all(color: isSel ? const Color(0xFF606C38) : Colors.transparent),
+          border: Border.all(color: isSel ? const Color(0xFFBC6C25) : Colors.transparent, width: 2),
         ),
-        child: Text(text, style: TextStyle(fontWeight: FontWeight.bold, color: isSel ? const Color(0xFF283618) : Colors.black54)),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(text, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isSel ? const Color(0xFF283618) : Colors.black54)),
+            if (isSel) const Icon(Icons.check_circle, color: Color(0xFF606C38))
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResultPage() {
+    String riskTitle = riskScore >= 12 ? "HIGH RISK" : (riskScore >= 6 ? "MEDIUM RISK" : "LOW RISK");
+    Color riskColor = riskScore >= 12 ? Colors.redAccent : (riskScore >= 6 ? const Color(0xFFBC6C25) : const Color(0xFF606C38));
+
+    return Scaffold(
+      backgroundColor: const Color(0xFFFEFAE0),
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, title: const Text("Assessment Results", style: TextStyle(color: Color(0xFF283618))), automaticallyImplyLeading: false),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(25),
+        child: Column(
+          children: [
+            // Header Info
+            Align(alignment: Alignment.centerLeft, child: Text("Completed on ${DateFormat('MMMM d, yyyy').format(DateTime.now())}", style: const TextStyle(color: Colors.grey))),
+            const SizedBox(height: 20),
+            
+            // Result Card
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(30),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: riskColor.withOpacity(0.1))),
+              child: Column(
+                children: [
+                  Icon(Icons.report_problem_outlined, size: 64, color: riskColor),
+                  const SizedBox(height: 12),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+                    decoration: BoxDecoration(color: const Color(0xFFDDA15E), borderRadius: BorderRadius.circular(20)),
+                    child: const Text("IMPORTANT", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white)),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(riskTitle, style: TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: riskColor)),
+                  const SizedBox(height: 12),
+                  const Text("Some of your symptoms warrant medical attention. Schedule a check-up with a healthcare provider soon.", textAlign: TextAlign.center, style: TextStyle(color: Colors.black54, height: 1.4)),
+                ],
+              ),
+            ),
+            
+            const SizedBox(height: 25),
+            _buildRecommendedSection(),
+            const SizedBox(height: 25),
+            
+            // Link Buttons
+            _buildNavListTile("Return to Dashboard", Icons.dashboard_outlined, () => Navigator.pushNamed(context, '/home')),
+            _buildNavListTile("Take the Test Again", Icons.restart_alt, () => setState(() { showResult = false; currentIndex = 0; riskScore = 0; selected = null; })),
+            _buildNavListTile("Chat with AI Chatbot", Icons.chat_outlined, () => Navigator.pushNamed(context, '/chat')),
+            _buildNavListTile("View Nearby Facilities", Icons.location_on_outlined, () {
+               // LINKED TO YOUR FACILITIES PAGE
+               Navigator.push(context, MaterialPageRoute(builder: (context) => const FacilitiesPage()));
+            }),
+            const SizedBox(height: 40),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRecommendedSection() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Row(children: [Icon(Icons.info_outline, color: Colors.blue, size: 20), SizedBox(width: 10), Text("Recommended Actions", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16))]),
+          const SizedBox(height: 15),
+          _bulletItem("Schedule a medical consultation within 3-5 days"),
+          _bulletItem("Monitor your symptoms daily"),
+          _bulletItem("Maintain good hygiene practices"),
+          _bulletItem("Get adequate rest and nutrition"),
+          _bulletItem("Consider getting a TB screening test"),
+        ],
+      ),
+    );
+  }
+
+  Widget _bulletItem(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8.0),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text("• ", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF606C38))),
+        Expanded(child: Text(text, style: const TextStyle(fontSize: 14, color: Colors.black87))),
+      ]),
+    );
+  }
+
+  Widget _buildNavListTile(String title, IconData icon, VoidCallback onTap) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(icon, color: const Color(0xFF606C38)),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 14, color: Colors.grey),
       ),
     );
   }
 }
 
-// --- 6. MEDS PAGE ---
+// --- 6. MEDS PAGE (CRUD + MULTI-VIEW CALENDAR) ---
 class MedsPage extends StatefulWidget {
   const MedsPage({super.key});
 
@@ -322,106 +655,456 @@ class MedsPage extends StatefulWidget {
 }
 
 class _MedsPageState extends State<MedsPage> {
-  List<Medicine> myMeds = [
-    Medicine(name: 'Isoniazid', dosage: '300mg', time: '08:00 AM'),
-    Medicine(name: 'Rifampicin', dosage: '600mg', time: '08:00 AM', isTaken: true),
-  ];
+  List<dynamic> myMeds = [];
+  bool _isLoading = true;
+  DateTime _selectedDate = DateTime.now();
+  String _viewType = 'Week'; // Can be 'Day', 'Week', 'Month'
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        title: Row(children: [_buildLogo(size: 32), const SizedBox(width: 10), const Text('TEREA', style: TextStyle(fontWeight: FontWeight.bold))]),
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+  void initState() {
+    super.initState();
+    _fetchMeds();
+  }
+
+  // --- DATA FETCHING ---
+  Future<void> _fetchMeds() async {
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user == null) return;
+
+      final data = await Supabase.instance.client
+          .from('medications')
+          .select()
+          .eq('user_id', user.id);
+
+      if (mounted) {
+        setState(() {
+          myMeds = data as List<dynamic>;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching meds: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // --- CRUD OPERATIONS ---
+
+  Future<void> _saveMed({
+    String? medId, 
+    required String name, 
+    required String dosage, 
+    required String time, 
+    required DateTime start, 
+    required DateTime end
+  }) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final medData = {
+      'user_id': user.id,
+      'name': name,
+      'dosage': dosage,
+      'time': time,
+      'start_date': start.toIso8601String(),
+      'end_date': end.toIso8601String(),
+      'is_taken': false, // Default to not taken
+    };
+
+    try {
+      if (medId == null) {
+        await Supabase.instance.client.from('medications').insert(medData);
+      } else {
+        await Supabase.instance.client.from('medications').update(medData).eq('id', medId);
+      }
+      _fetchMeds(); // Refresh list after save
+    } catch (e) {
+      debugPrint("Error saving med: $e");
+    }
+  }
+
+  Future<void> _deleteMed(String medId) async {
+    try {
+      await Supabase.instance.client.from('medications').delete().eq('id', medId);
+      _fetchMeds();
+    } catch (e) {
+      debugPrint("Error deleting med: $e");
+    }
+  }
+
+  // FIXED: The missing logic you requested
+  Future<void> _toggleMed(bool currentValue, String medId) async {
+    try {
+      // 1. Update the database
+      await Supabase.instance.client
+          .from('medications')
+          .update({'is_taken': !currentValue}) // Flip the value
+          .eq('id', medId);
+      
+      // 2. Refresh the local list to show the checkmark immediately
+      _fetchMeds(); 
+    } catch (e) {
+      debugPrint("Error toggling med: $e");
+    }
+  }
+
+  // --- DIALOGS ---
+
+  void _showMedDialog({Map<String, dynamic>? existingMed}) async {
+    final nameController = TextEditingController(text: existingMed?['name']);
+    final dosageController = TextEditingController(text: existingMed?['dosage']);
+    String selectedTime = existingMed?['time'] ?? "08:00 AM";
+    DateTime startDate = existingMed != null ? DateTime.parse(existingMed['start_date']) : DateTime.now();
+    DateTime endDate = existingMed != null ? DateTime.parse(existingMed['end_date']) : DateTime.now().add(const Duration(days: 7));
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFFFEFAE0),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text(existingMed == null ? "Add Medication" : "Edit Medication", 
+            style: const TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Medication Diary', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
-                    Text('Track your daily medicines', style: TextStyle(color: Color(0xFF606C38))),
-                  ],
+                TextField(controller: nameController, decoration: const InputDecoration(labelText: "Medicine Name")),
+                TextField(controller: dosageController, decoration: const InputDecoration(labelText: "Dosage")),
+                ListTile(
+                  title: const Text("Daily Time", style: TextStyle(fontSize: 14)),
+                  subtitle: Text(selectedTime),
+                  trailing: const Icon(Icons.access_time),
+                  onTap: () async {
+                    TimeOfDay? picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                    if (picked != null) setDialogState(() => selectedTime = picked.format(context));
+                  },
                 ),
-                _buildAddButtonSmall(),
+                ListTile(
+                  title: const Text("Duration", style: TextStyle(fontSize: 14)),
+                  subtitle: Text("${DateFormat('MMM d').format(startDate)} to ${DateFormat('MMM d').format(endDate)}"),
+                  trailing: const Icon(Icons.date_range),
+                  onTap: () async {
+                    DateTimeRange? picked = await showDateRangePicker(
+                      context: context, 
+                      firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                      lastDate: DateTime.now().add(const Duration(days: 365)),
+                    );
+                    if (picked != null) {
+                      setDialogState(() {
+                        startDate = picked.start;
+                        endDate = picked.end;
+                      });
+                    }
+                  },
+                ),
               ],
             ),
-            const SizedBox(height: 30),
-            Expanded(
-              child: ListView.builder(
-                itemCount: myMeds.length,
-                itemBuilder: (context, index) {
-                  final med = myMeds[index];
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 15),
-                    padding: const EdgeInsets.all(15),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.5),
-                      borderRadius: BorderRadius.circular(15),
-                      border: Border.all(color: const Color(0xFF606C38).withOpacity(0.1)),
-                    ),
-                    child: Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => setState(() => med.isTaken = !med.isTaken),
-                          child: Icon(
-                            med.isTaken ? Icons.check_circle : Icons.radio_button_unchecked,
-                            color: const Color(0xFF606C38),
-                            size: 28,
-                          ),
-                        ),
-                        const SizedBox(width: 15),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(med.name, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: const Color(0xFF283618), decoration: med.isTaken ? TextDecoration.lineThrough : null)),
-                              Text('${med.dosage}  •  ${med.time}  •  Daily', style: const TextStyle(color: Colors.grey, fontSize: 12)),
-                            ],
-                          ),
-                        ),
-                        IconButton(icon: const Icon(Icons.delete_outline, color: Colors.grey), onPressed: () => setState(() => myMeds.removeAt(index))),
-                      ],
-                    ),
-                  );
-                },
-              ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38)),
+              onPressed: () {
+                _saveMed(
+                  medId: existingMed?['id']?.toString(),
+                  name: nameController.text,
+                  dosage: dosageController.text,
+                  time: selectedTime,
+                  start: startDate,
+                  end: endDate,
+                );
+                Navigator.pop(context);
+              },
+              child: const Text("Save", style: TextStyle(color: Colors.white)),
             ),
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(2, context),
     );
   }
 
-  Widget _buildAddButtonSmall() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: BoxDecoration(color: const Color(0xFF606C38), borderRadius: BorderRadius.circular(10)),
-      child: const Row(children: [Icon(Icons.add, color: Colors.white, size: 18), SizedBox(width: 5), Text('Add', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))]),
-    );
-  }
-}
-
-// --- 7. FOLLOW-UP PAGE ---
-class FollowUpPage extends StatelessWidget {
-  const FollowUpPage({super.key});
+  // --- BUILD METHODS ---
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFEFAE0),
       appBar: AppBar(
-        backgroundColor: Colors.transparent, elevation: 0,
+        backgroundColor: Colors.transparent, elevation: 0, automaticallyImplyLeading: false,
+        title: Row(children: [
+          _buildLogo(size: 32), const SizedBox(width: 10), // Assumes _buildLogo exists in main.dart
+          const Text('TEREA', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618)))
+        ]),
+        actions: [
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.calendar_month, color: Color(0xFF606C38)),
+            onSelected: (value) => setState(() => _viewType = value),
+            itemBuilder: (context) => [
+              const PopupMenuItem(value: 'Day', child: Text('View By Day')),
+              const PopupMenuItem(value: 'Week', child: Text('View By Week')),
+              const PopupMenuItem(value: 'Month', child: Text('View By Month')),
+            ],
+          )
+        ],
+      ),
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFF606C38)))
+        : Column(
+            children: [
+              _buildHeader(),
+              _buildCalendarSection(),
+              const SizedBox(height: 10),
+              Expanded(child: _buildMedList()),
+            ],
+          ),
+      bottomNavigationBar: _buildBottomNav(2, context), // Assumes _buildBottomNav exists in main.dart
+    );
+  }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Medication Diary', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
+              Text('$_viewType View • ${DateFormat('MMMM yyyy').format(_selectedDate)}', style: const TextStyle(color: Color(0xFF606C38))),
+            ],
+          ),
+          ElevatedButton.icon(
+            onPressed: () => _showMedDialog(),
+            icon: const Icon(Icons.add, size: 18, color: Colors.white),
+            label: const Text("Add", style: TextStyle(color: Colors.white)),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCalendarSection() {
+    if (_viewType == 'Month') {
+      return SizedBox(height: 320, child: _buildMonthGrid());
+    } else if (_viewType == 'Day') {
+      return Center(child: _buildDateCard(_selectedDate, true));
+    } else {
+      // Default to Week view
+      return SizedBox(height: 100, child: _buildWeekStrip());
+    }
+  }
+
+  Widget _buildWeekStrip() {
+    return ListView.builder(
+      scrollDirection: Axis.horizontal,
+      itemCount: 14, // 2 weeks range
+      itemBuilder: (context, index) {
+        DateTime date = DateTime.now().add(Duration(days: index - 3));
+        bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month;
+        return _buildDateCard(date, isSelected);
+      },
+    );
+  }
+
+  Widget _buildMonthGrid() {
+    // Calculate accurate days in month
+    int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day;
+    
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            IconButton(icon: const Icon(Icons.chevron_left), onPressed: () => setState(() => _selectedDate = DateTime(_selectedDate.year, _selectedDate.month - 1))),
+            Text(DateFormat('MMMM yyyy').format(_selectedDate), style: const TextStyle(fontWeight: FontWeight.bold)),
+            IconButton(icon: const Icon(Icons.chevron_right), onPressed: () => setState(() => _selectedDate = DateTime(_selectedDate.year, _selectedDate.month + 1))),
+          ],
+        ),
+        Expanded(
+          child: GridView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7),
+            itemCount: daysInMonth,
+            itemBuilder: (context, index) {
+              DateTime date = DateTime(_selectedDate.year, _selectedDate.month, index + 1);
+              bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month;
+              return _buildDateCard(date, isSelected, compact: true);
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildDateCard(DateTime date, bool isSelected, {bool compact = false}) {
+    return GestureDetector(
+      onTap: () => setState(() => _selectedDate = date),
+      child: Container(
+        width: compact ? null : 60,
+        margin: const EdgeInsets.all(4),
+        decoration: BoxDecoration(
+          color: isSelected ? const Color(0xFF606C38) : Colors.white.withOpacity(0.5),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: const Color(0xFF606C38).withOpacity(0.1)),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Text(DateFormat('E').format(date)[0], 
+              style: TextStyle(fontSize: 10, color: isSelected ? Colors.white70 : Colors.grey)),
+            Text(date.day.toString(), 
+              style: TextStyle(fontSize: compact ? 14 : 18, fontWeight: FontWeight.bold, color: isSelected ? Colors.white : const Color(0xFF283618))),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMedList() {
+    // Filter logic: Ensure we compare just the DATE part, ignoring the exact time
+    final filteredMeds = myMeds.where((med) {
+      DateTime start = DateTime.parse(med['start_date']);
+      DateTime end = DateTime.parse(med['end_date']);
+      
+      // Normalize dates to midnight (00:00:00) for accurate comparison
+      DateTime startDate = DateTime(start.year, start.month, start.day);
+      DateTime endDate = DateTime(end.year, end.month, end.day);
+      DateTime selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
+
+      // Check if selectedDate is within start and end (inclusive)
+      return !selectedDate.isBefore(startDate) && !selectedDate.isAfter(endDate);
+    }).toList();
+
+    if (filteredMeds.isEmpty) return const Center(child: Text("No medicines scheduled for this day."));
+    
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 25),
+      itemCount: filteredMeds.length,
+      itemBuilder: (context, index) {
+        final med = filteredMeds[index];
+        bool isTaken = med['is_taken'] ?? false;
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          padding: const EdgeInsets.all(15),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+          child: Row(
+            children: [
+              IconButton(
+                // Dynamic Icon: Green Check or Grey Circle
+                icon: Icon(isTaken ? Icons.check_circle : Icons.radio_button_unchecked, 
+                  color: isTaken ? const Color(0xFF606C38) : Colors.grey),
+                // Calls the fixed _toggleMed function
+                onPressed: () => _toggleMed(isTaken, med['id'].toString()),
+              ),
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(med['name'], style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, 
+                    decoration: isTaken ? TextDecoration.lineThrough : null, // Strikethrough if taken
+                    color: isTaken ? Colors.grey : Colors.black
+                  )),
+                  Text('${med['dosage']} • Daily at ${med['time']}', style: const TextStyle(fontSize: 12, color: Colors.grey)),
+                ]),
+              ),
+              IconButton(icon: const Icon(Icons.edit_outlined, size: 20, color: Colors.blueGrey), onPressed: () => _showMedDialog(existingMed: med)),
+              IconButton(icon: const Icon(Icons.delete_outline, size: 20, color: Colors.redAccent), onPressed: () => _deleteMed(med['id'].toString())),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+
+class FollowUpPage extends StatefulWidget {
+  const FollowUpPage({super.key});
+
+  @override
+  State<FollowUpPage> createState() => _FollowUpPageState();
+}
+
+class _FollowUpPageState extends State<FollowUpPage> {
+  // --- STATE VARIABLES ---
+  int _streakDays = 0; // Changed from final 12 to dynamic 0
+  bool _isLoadingStreak = true;
+  
+  final TextEditingController _noteController = TextEditingController();
+  final List<Map<String, dynamic>> _doctorNotes = [
+    {'id': 1, 'text': 'Is it normal to feel dizzy after the morning dose?', 'checked': false},
+    {'id': 2, 'text': 'Can I take vitamins with my TB meds?', 'checked': true},
+  ];
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchStreak(); // Load the streak when the page opens
+  }
+
+  // --- LOGIC: FETCH STREAK FROM DATABASE ---
+  Future<void> _fetchStreak() async {
+    try {
+      final userId = Supabase.instance.client.auth.currentUser?.id;
+      if (userId == null) return;
+
+      // Calls the SQL function we created in Step 1
+      final response = await Supabase.instance.client
+          .rpc('get_medication_streak', params: {'p_user_id': userId});
+
+      setState(() {
+        _streakDays = response as int;
+        _isLoadingStreak = false;
+      });
+    } catch (e) {
+      debugPrint('Error fetching streak: $e');
+      setState(() => _isLoadingStreak = false);
+    }
+  }
+
+  void _addNote() {
+    if (_noteController.text.isNotEmpty) {
+      setState(() {
+        _doctorNotes.add({
+          'id': DateTime.now().millisecondsSinceEpoch,
+          'text': _noteController.text,
+          'checked': false,
+        });
+        _noteController.clear();
+      });
+    }
+  }
+
+  void _toggleNote(int index) {
+    setState(() {
+      _doctorNotes[index]['checked'] = !_doctorNotes[index]['checked'];
+    });
+  }
+
+  void _deleteNote(int index) {
+    setState(() {
+      _doctorNotes.removeAt(index);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFFEFAE0),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         automaticallyImplyLeading: false,
-        title: Row(children: [_buildLogo(size: 32), const SizedBox(width: 10), const Text('TEREA', style: TextStyle(fontWeight: FontWeight.bold))]),
+        title: const Row(
+          children: [
+            Icon(Icons.local_hospital, color: Color(0xFF283618), size: 32), 
+            SizedBox(width: 10),
+            Text('TEREA', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618)))
+          ],
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(25),
@@ -429,43 +1112,152 @@ class FollowUpPage extends StatelessWidget {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Follow-up', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
-            const Text('Your upcoming medical visits', style: TextStyle(color: Color(0xFF606C38))),
+            const Text('Your progress & upcoming visits', style: TextStyle(color: Color(0xFF606C38))),
+            
+            const SizedBox(height: 20),
+
+            // --- 1. DYNAMIC PROGRESS STREAK CARD ---
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF606C38), Color(0xFF283618)],
+                  begin: Alignment.topLeft, end: Alignment.bottomRight,
+                ),
+                borderRadius: BorderRadius.circular(15),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(color: const Color(0xFFFEFAE0).withOpacity(0.2), shape: BoxShape.circle),
+                    child: Icon(
+                      Icons.local_fire_department, 
+                      color: _streakDays > 0 ? Colors.orangeAccent : const Color(0xFFFEFAE0), 
+                      size: 30
+                    ),
+                  ),
+                  const SizedBox(width: 15),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _isLoadingStreak 
+                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : Text(
+                            '$_streakDays Day Streak!',
+                            style: const TextStyle(color: Color(0xFFFEFAE0), fontWeight: FontWeight.bold, fontSize: 18),
+                          ),
+                      Text(
+                        _streakDays == 0 ? 'Start your diary to build a streak!' : 'You are doing great! Keep it up.',
+                        style: const TextStyle(color: Colors.white70, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+
             const SizedBox(height: 30),
-            const Text('SCHEDULED', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF606C38), letterSpacing: 1.2)),
+            const Text("Appointments", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF283618))),
             const SizedBox(height: 15),
             _buildAppointmentCard("General Check-up", "Feb 24, 2026", "09:00 AM", "Health Center A", isUpcoming: true),
-            const SizedBox(height: 30),
-            const Text('HISTORY', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF606C38), letterSpacing: 1.2)),
-            const SizedBox(height: 15),
+            const SizedBox(height: 10),
             _buildAppointmentCard("Initial Consultation", "Jan 10, 2026", "10:30 AM", "Health Center A", isUpcoming: false),
-            _buildAppointmentCard("Lab Test", "Jan 15, 2026", "08:00 AM", "City Lab", isUpcoming: false),
+
+            const SizedBox(height: 30),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text("Ask Your Doctor", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF283618))),
+                Icon(Icons.edit_note, color: const Color(0xFF283618).withOpacity(0.6)),
+              ],
+            ),
+            const SizedBox(height: 5),
+            const Text("Write down questions so you don't forget.", style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
+            const SizedBox(height: 15),
+
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _noteController,
+                    decoration: InputDecoration(
+                      hintText: "Type a question...",
+                      filled: true, fillColor: Colors.white,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                FloatingActionButton.small(
+                  onPressed: _addNote,
+                  backgroundColor: const Color(0xFF606C38),
+                  child: const Icon(Icons.add, color: Colors.white),
+                ),
+              ],
+            ),
+            const SizedBox(height: 15),
+            ListView.builder(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: _doctorNotes.length,
+              itemBuilder: (context, index) {
+                final note = _doctorNotes[index];
+                return Dismissible(
+                  key: Key(note['id'].toString()),
+                  onDismissed: (direction) => _deleteNote(index),
+                  background: Container(color: Colors.red.withOpacity(0.8), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.delete, color: Colors.white)),
+                  child: Card(
+                    elevation: 0,
+                    margin: const EdgeInsets.only(bottom: 8),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    child: CheckboxListTile(
+                      activeColor: const Color(0xFF606C38),
+                      title: Text(note['text'], style: TextStyle(decoration: note['checked'] ? TextDecoration.lineThrough : null, color: note['checked'] ? Colors.grey : Colors.black87)),
+                      value: note['checked'],
+                      onChanged: (bool? value) => _toggleNote(index),
+                      controlAffinity: ListTileControlAffinity.leading,
+                    ),
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 80),
           ],
         ),
       ),
-      bottomNavigationBar: _buildBottomNav(3, context),
     );
   }
 
   Widget _buildAppointmentCard(String title, String date, String time, String loc, {required bool isUpcoming}) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: isUpcoming ? const Color(0xFF606C38) : Colors.white, borderRadius: BorderRadius.circular(15)),
+      decoration: BoxDecoration(
+        color: isUpcoming ? const Color(0xFF606C38) : Colors.white,
+        borderRadius: BorderRadius.circular(15),
+      ),
       child: Row(
         children: [
-          Icon(Icons.calendar_month, color: isUpcoming ? const Color(0xFFFEFAE0) : const Color(0xFF606C38), size: 30),
-          const SizedBox(width: 20),
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: isUpcoming ? Colors.white.withOpacity(0.2) : const Color(0xFFFEFAE0),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(Icons.calendar_month, color: isUpcoming ? const Color(0xFFFEFAE0) : const Color(0xFF606C38)),
+          ),
+          const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.bold, color: isUpcoming ? Colors.white : const Color(0xFF283618))),
-                Text('$date • $time', style: TextStyle(color: isUpcoming ? Colors.white70 : Colors.grey, fontSize: 12)),
-                Text(loc, style: TextStyle(color: isUpcoming ? Colors.white70 : Colors.grey, fontSize: 12, fontStyle: FontStyle.italic)),
+                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isUpcoming ? Colors.white : Colors.black87)),
+                Text('$date • $time', style: TextStyle(color: isUpcoming ? Colors.white70 : Colors.grey, fontSize: 13)),
               ],
             ),
           ),
-          if (!isUpcoming) const Icon(Icons.check_circle, color: Color(0xFF606C38), size: 20),
         ],
       ),
     );
@@ -691,7 +1483,6 @@ class RiskResultPage extends StatelessWidget {
               style: const TextStyle(fontSize: 16, color: Colors.black87),
             ),
             const SizedBox(height: 40),
-            // Updated Section with TWO buttons
             _buildPrimaryButton(context, "View Nearby Facilities", () {
               Navigator.pushNamed(context, '/facilities');
             }),
@@ -712,68 +1503,111 @@ class RiskResultPage extends StatelessWidget {
   }
 }
 
-// --- 11. FACILITIES PAGE ---
-class FacilitiesPage extends StatelessWidget {
+// --- 7. FACILITIES PAGE (MAP + LIST) ---
+class FacilitiesPage extends StatefulWidget {
   const FacilitiesPage({super.key});
+
+  @override
+  State<FacilitiesPage> createState() => _FacilitiesPageState();
+}
+
+class _FacilitiesPageState extends State<FacilitiesPage> {
+  // Center of Carmona, Cavite (Adjust as needed)
+  static const LatLng _carmonaCenter = LatLng(14.3135, 121.0574);
+
+  final Set<Marker> _markers = {
+    const Marker(
+      markerId: MarkerId('city_health'),
+      position: LatLng(14.3122, 121.0558),
+      infoWindow: InfoWindow(title: 'City Health Office - Main'),
+    ),
+    const Marker(
+      markerId: MarkerId('brgy_center'),
+      position: LatLng(14.3050, 121.0600),
+      infoWindow: InfoWindow(title: 'Barangay Health Center A'),
+    ),
+  };
+
+  Future<void> _launchMaps(double lat, double lng) async {
+    final Uri url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    if (!await launchUrl(url)) {
+      throw Exception('Could not launch $url');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFFEFAE0),
       appBar: AppBar(
+        title: const Text('Nearby Facilities', style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
-        title: const Text("Nearby Facilities", style: TextStyle(fontWeight: FontWeight.bold)),
+        elevation: 0,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(20),
+      body: Column(
         children: [
-          const Text("Recommended centers for TB testing:", style: TextStyle(color: Color(0xFF606C38), fontStyle: FontStyle.italic)),
-          const SizedBox(height: 20),
-          _buildFacilityTile("City Health Office - Main", "1.2 km away", "8:00 AM - 5:00 PM", "0912-345-6789"),
-          _buildFacilityTile("Barangay Health Center A", "2.5 km away", "9:00 AM - 4:00 PM", "0917-888-2222"),
-          _buildFacilityTile("Community Medical Clinic", "3.8 km away", "24/7", "0922-333-4444"),
+          // Map Section - The part that was crashing
+          SizedBox(
+            height: 300,
+            child: GoogleMap(
+              initialCameraPosition: const CameraPosition(target: _carmonaCenter, zoom: 14),
+              markers: _markers,
+              myLocationButtonEnabled: false,
+              zoomControlsEnabled: true,
+            ),
+          ),
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text("Recommended centers for TB testing.", style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic)),
+          ),
+          // Facilities List Section
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 15),
+              children: [
+                _buildFacilityCard('City Health Office - Main', '8:00 AM - 5:00 PM', '14.3122', '121.0558'),
+                _buildFacilityCard('Barangay Health Center A', '9:00 AM - 4:00 PM', '14.3050', '121.0600'),
+              ],
+            ),
+          ),
         ],
       ),
+      bottomNavigationBar: _buildBottomNav(3, context), // Assumes _buildBottomNav exists in your main.dart
     );
   }
 
-  Widget _buildFacilityTile(String name, String dist, String hours, String phone) {
+  Widget _buildFacilityCard(String name, String hours, String lat, String lng) {
     return Container(
       margin: const EdgeInsets.only(bottom: 15),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              Text(dist, style: const TextStyle(color: Color(0xFF606C38), fontSize: 12)),
-            ],
-          ),
-          const Divider(height: 20),
-          Row(children: [const Icon(Icons.access_time, size: 16, color: Colors.grey), const SizedBox(width: 5), Text(hours, style: const TextStyle(color: Colors.grey))]),
+          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
           const SizedBox(height: 5),
-          Row(children: [const Icon(Icons.phone, size: 16, color: Colors.grey), const SizedBox(width: 5), Text(phone, style: const TextStyle(color: Colors.grey))]),
-          const SizedBox(height: 15),
+          Row(children: [
+            const Icon(Icons.access_time, size: 16, color: Colors.grey),
+            const SizedBox(width: 5),
+            Text(hours, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+          ]),
+          const SizedBox(height: 10),
           Row(
             children: [
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.directions, size: 18),
-                  label: const Text("Directions"),
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38), foregroundColor: Colors.white),
+                  onPressed: () => _launchMaps(double.parse(lat), double.parse(lng)),
+                  icon: const Icon(Icons.directions, color: Colors.white),
+                  label: const Text("Directions", style: TextStyle(color: Colors.white)),
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38)),
                 ),
               ),
               const SizedBox(width: 10),
-              Expanded(
-                child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.call, size: 18),
-                  label: const Text("Call"),
-                  style: OutlinedButton.styleFrom(side: const BorderSide(color: Color(0xFF606C38)), foregroundColor: const Color(0xFF606C38)),
-                ),
+              OutlinedButton.icon(
+                onPressed: () {}, // Add call logic if needed
+                icon: const Icon(Icons.phone),
+                label: const Text("Call"),
+                style: OutlinedButton.styleFrom(foregroundColor: const Color(0xFF606C38)),
               ),
             ],
           )
@@ -792,13 +1626,14 @@ Widget _buildLogo({double size = 80}) {
   );
 }
 
-Widget _buildTextField(String label, String hint, {bool isPassword = false}) {
+Widget _buildTextField(String label, String hint, {bool isPassword = false, TextEditingController? controller}) {
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
       Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618))),
       const SizedBox(height: 8),
       TextField(
+        controller: controller,
         obscureText: isPassword,
         decoration: InputDecoration(
           hintText: hint, filled: true, fillColor: Colors.white,
