@@ -1,16 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'package:intl/intl.dart'; // Fixes DateFormat error
-import 'package:google_maps_flutter/google_maps_flutter.dart'; // Fixes LatLng error
-import 'package:url_launcher/url_launcher.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart'; 
+
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // --- DATABASE SETUP ---
-  // Get these from your Supabase Project Settings > API
+  // SUPABASE API ITO AHHHHH HAHAH 
   await Supabase.initialize(
     url: 'https://ppeptqgaroispxwvezcq.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwZXB0cWdhcm9pc3B4d3ZlemNxIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA2MDk5NzIsImV4cCI6MjA4NjE4NTk3Mn0.XfrgVO5GviO43PKU_tkGbuo0afq3J54B0tQoQXZmumo',
@@ -19,7 +18,6 @@ Future<void> main() async {
   runApp(const TereaApp());
 }
 
-// --- 0. DATA MODELS ---
 class Medicine {
   String name;
   String dosage;
@@ -27,7 +25,6 @@ class Medicine {
   bool isTaken;
   Medicine({required this.name, required this.dosage, required this.time, this.isTaken = false});
 }
-
 class ChatMessage {
   String text;
   bool isUser;
@@ -64,7 +61,7 @@ class TereaApp extends StatelessWidget {
   }
 }
 
-// --- 1. STARTUP PAGE ---
+//  STARTUP PAGE natin
 class StartupPage extends StatelessWidget {
   const StartupPage({super.key});
 
@@ -89,7 +86,7 @@ class StartupPage extends StatelessWidget {
   }
 }
 
-// --- 2. LOGIN PAGE ---
+// Login Page natin toh
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -148,7 +145,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
-// --- 3. SIGN UP PAGE ---
+// ign Up Page natin 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
@@ -163,14 +160,12 @@ class _SignUpPageState extends State<SignUpPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   
-  // Changed gender from a controller to a string for the dropdown
   String? _selectedGender; 
   final List<String> _genderOptions = ['Male', 'Female', 'Other'];
 
   bool _isLoading = false;
 
   Future<void> _handleSignUp() async {
-    // Validation to make sure gender is selected
     if (_selectedGender == null) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("Please select a gender")),
@@ -180,14 +175,12 @@ class _SignUpPageState extends State<SignUpPage> {
 
     setState(() => _isLoading = true);
     try {
-      // 1. Create User in Auth
       final authResponse = await Supabase.instance.client.auth.signUp(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (authResponse.user != null) {
-        // 2. Insert extra data into 'profiles' table
         await Supabase.instance.client.from('profiles').insert({
           'id': authResponse.user!.id,
           'full_name': _nameController.text.trim(),
@@ -215,7 +208,6 @@ class _SignUpPageState extends State<SignUpPage> {
           children: [
             Row(
               children: [
-                // Assuming _buildLogo is defined globally or within the class
                 const Icon(Icons.local_hospital, size: 50, color: Color(0xFF283618)),
                 const SizedBox(width: 15),
                 const Column(
@@ -289,7 +281,6 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  // Included helper to ensure the code is complete and functional
   Widget _buildTextField(String label, String hint, {required TextEditingController controller, bool isPassword = false}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -334,9 +325,50 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 }
 
-// --- 4. DASHBOARD PAGE ---
-class DashboardPage extends StatelessWidget {
+// Dashburdddd
+class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
+
+  @override
+  State<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends State<DashboardPage> {
+  final _supabase = Supabase.instance.client;
+  String _username = "Patient";
+  String? _avatarUrl;
+  String _riskLevel = "Not yet assessed";
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchUserData();
+  }
+
+  // Fetches latest profile data (Name, Photo, and Assessment Result)
+  Future<void> _fetchUserData() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        final data = await _supabase
+            .from('profiles')
+            .select('full_name, avatar_url, risk_level')
+            .eq('id', user.id)
+            .single();
+
+        setState(() {
+          _username = data['full_name'] ?? "Patient";
+          _avatarUrl = data['avatar_url'];
+          _riskLevel = data['risk_level'] ?? "Not yet assessed";
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error fetching dashboard data: $e');
+      setState(() => _isLoading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -345,55 +377,87 @@ class DashboardPage extends StatelessWidget {
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
-        title: Row(children: [_buildLogo(size: 32), const SizedBox(width: 10), const Text('TEREA', style: TextStyle(fontWeight: FontWeight.bold))]),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            const Text('Hello, Patient', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
-            const Text('How are you feeling today?', style: TextStyle(color: Color(0xFF606C38))),
-            const SizedBox(height: 25),
-            _buildTreatmentBanner(),
-            const SizedBox(height: 30),
-            const Text('QUICK ACTIONS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF606C38), letterSpacing: 1.2)),
-            const SizedBox(height: 15),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              crossAxisSpacing: 15,
-              mainAxisSpacing: 15,
-              children: [
-                _buildActionCard(context, Icons.assignment_outlined, 'Risk Assessment', 'Check your TB risk', '/assess'),
-                _buildActionCard(context, Icons.medication_outlined, 'Medication Diary', 'Track your medicines', '/meds'),
-                _buildActionCard(context, Icons.calendar_today_outlined, 'Follow-up', 'Upcoming appointments', '/followup'),
-                _buildActionCard(context, Icons.chat_bubble_outline, 'Chatbot', 'Get instant help', '/chat'),
-                _buildActionCard(context, Icons.settings_outlined, 'Settings', 'Profile & preferences', '/settings'),
-              ],
-            ),
+            _buildLogo(size: 32), 
+            const SizedBox(width: 10), 
+            const Text('TEREA', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618)))
           ],
         ),
+        actions: [
+          // Small profile icon in top right
+          Padding(
+            padding: const EdgeInsets.only(right: 20),
+            child: CircleAvatar(
+              radius: 18,
+              backgroundColor: const Color(0xFFE9EDC9),
+              backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+              child: _avatarUrl == null ? const Icon(Icons.person, size: 20, color: Color(0xFF606C38)) : null,
+            ),
+          )
+        ],
       ),
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFF606C38)))
+        : RefreshIndicator(
+            onRefresh: _fetchUserData, // Pull to refresh data
+            color: const Color(0xFF606C38),
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(25),
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text('Hello, $_username', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
+                  const Text('How are you feeling today?', style: TextStyle(color: Color(0xFF606C38))),
+                  const SizedBox(height: 25),
+                  _buildTreatmentBanner(),
+                  const SizedBox(height: 30),
+                  const Text('QUICK ACTIONS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF606C38), letterSpacing: 1.2)),
+                  const SizedBox(height: 15),
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 15,
+                    mainAxisSpacing: 15,
+                    children: [
+                      _buildActionCard(context, Icons.assignment_outlined, 'Risk Assessment', 'Check your TB risk', '/assess'),
+                      _buildActionCard(context, Icons.medication_outlined, 'Medication Diary', 'Track your medicines', '/meds'),
+                      _buildActionCard(context, Icons.calendar_today_outlined, 'Follow-up', 'Upcoming appointments', '/followup'),
+                      _buildActionCard(context, Icons.chat_bubble_outline, 'Chatbot', 'Get instant help', '/chat'),
+                      _buildActionCard(context, Icons.settings_outlined, 'Settings', 'Profile & preferences', '/settings'),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
       bottomNavigationBar: _buildBottomNav(0, context),
     );
   }
 
   Widget _buildTreatmentBanner() {
+    // Dynamic styling based on Risk Level
+    Color bannerColor = const Color(0xFF606C38);
+    if (_riskLevel.contains("High")) bannerColor = Colors.redAccent;
+    if (_riskLevel.contains("Medium")) bannerColor = const Color(0xFFBC6C25);
+
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF606C38), borderRadius: BorderRadius.circular(15)),
-      child: const Row(
+      decoration: BoxDecoration(color: bannerColor, borderRadius: BorderRadius.circular(15)),
+      child: Row(
         children: [
-          Icon(Icons.monitor_heart_outlined, color: Color(0xFFFEFAE0), size: 30),
-          SizedBox(width: 15),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Treatment Status', style: TextStyle(color: Color(0xFFFEFAE0), fontWeight: FontWeight.bold)),
-              Text('Not yet assessed', style: TextStyle(color: Colors.white70)),
-            ],
+          const Icon(Icons.monitor_heart_outlined, color: Color(0xFFFEFAE0), size: 30),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('Treatment Status', style: TextStyle(color: Color(0xFFFEFAE0), fontWeight: FontWeight.bold)),
+                Text(_riskLevel, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+              ],
+            ),
           )
         ],
       ),
@@ -456,14 +520,22 @@ class _AssessmentPageState extends State<AssessmentPage> {
     if (riskScore >= 12) finalRisk = "High Risk";
     else if (riskScore >= 6) finalRisk = "Medium Risk";
 
-    final user = Supabase.instance.client.auth.currentUser;
-    if (user != null) {
-      await Supabase.instance.client
-          .from('profiles')
-          .update({'risk_level': finalRisk})
-          .eq('id', user.id);
+    try {
+      final user = Supabase.instance.client.auth.currentUser;
+      if (user != null) {
+        // Updates the risk_level column in the profiles table
+        await Supabase.instance.client
+            .from('profiles')
+            .update({'risk_level': finalRisk})
+            .eq('id', user.id);
+      }
+    } catch (e) {
+      debugPrint('Error updating database: $e');
     }
-    setState(() => showResult = true);
+
+    if (mounted) {
+      setState(() => showResult = true);
+    }
   }
 
   @override
@@ -592,7 +664,6 @@ class _AssessmentPageState extends State<AssessmentPage> {
             _buildNavListTile("Take the Test Again", Icons.restart_alt, () => setState(() { showResult = false; currentIndex = 0; riskScore = 0; selected = null; })),
             _buildNavListTile("Chat with AI Chatbot", Icons.chat_outlined, () => Navigator.pushNamed(context, '/chat')),
             _buildNavListTile("View Nearby Facilities", Icons.location_on_outlined, () {
-               // LINKED TO YOUR FACILITIES PAGE
                Navigator.push(context, MaterialPageRoute(builder: (context) => const FacilitiesPage()));
             }),
             const SizedBox(height: 40),
@@ -1020,7 +1091,6 @@ class _MedsPageState extends State<MedsPage> {
   }
 }
 
-
 class FollowUpPage extends StatefulWidget {
   const FollowUpPage({super.key});
 
@@ -1029,65 +1099,186 @@ class FollowUpPage extends StatefulWidget {
 }
 
 class _FollowUpPageState extends State<FollowUpPage> {
-  // --- STATE VARIABLES ---
-  int _streakDays = 0; // Changed from final 12 to dynamic 0
-  bool _isLoadingStreak = true;
+  final _supabase = Supabase.instance.client;
+  int _streakDays = 0;
+  bool _isLoading = true;
   
   final TextEditingController _noteController = TextEditingController();
-  final List<Map<String, dynamic>> _doctorNotes = [
-    {'id': 1, 'text': 'Is it normal to feel dizzy after the morning dose?', 'checked': false},
-    {'id': 2, 'text': 'Can I take vitamins with my TB meds?', 'checked': true},
-  ];
+  
+  List<Map<String, dynamic>> _doctorNotes = [];
+  List<Map<String, dynamic>> _appointments = [];
 
   @override
   void initState() {
     super.initState();
-    _fetchStreak(); // Load the streak when the page opens
+    _loadAllData();
   }
 
-  // --- LOGIC: FETCH STREAK FROM DATABASE ---
+  Future<void> _loadAllData() async {
+    try {
+      await Future.wait([
+        _fetchStreak(),
+        _fetchNotes(),
+        _fetchAppointments(),
+      ]);
+    } catch (e) {
+      debugPrint('Initialization error: $e');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
   Future<void> _fetchStreak() async {
     try {
-      final userId = Supabase.instance.client.auth.currentUser?.id;
+      final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
-
-      // Calls the SQL function we created in Step 1
-      final response = await Supabase.instance.client
-          .rpc('get_medication_streak', params: {'p_user_id': userId});
-
-      setState(() {
-        _streakDays = response as int;
-        _isLoadingStreak = false;
-      });
+      final response = await _supabase.rpc('get_medication_streak', params: {'p_user_id': userId});
+      if (mounted) setState(() => _streakDays = response as int);
     } catch (e) {
-      debugPrint('Error fetching streak: $e');
-      setState(() => _isLoadingStreak = false);
+      debugPrint('Streak Error: $e');
     }
   }
 
-  void _addNote() {
-    if (_noteController.text.isNotEmpty) {
-      setState(() {
-        _doctorNotes.add({
-          'id': DateTime.now().millisecondsSinceEpoch,
-          'text': _noteController.text,
-          'checked': false,
-        });
-        _noteController.clear();
+  Future<void> _fetchNotes() async {
+    try {
+      final data = await _supabase.from('doctor_notes').select().order('created_at', ascending: false);
+      if (mounted) setState(() => _doctorNotes = List<Map<String, dynamic>>.from(data));
+    } catch (e) {
+      debugPrint('Notes Fetch Error: $e');
+    }
+  }
+
+  Future<void> _addNote() async {
+    if (_noteController.text.isEmpty) return;
+    final text = _noteController.text;
+    _noteController.clear();
+    try {
+      await _supabase.from('doctor_notes').insert({
+        'note_text': text, 
+        'user_id': _supabase.auth.currentUser!.id
       });
+      _fetchNotes();
+    } catch (e) {
+      debugPrint('Add Note Error: $e');
     }
   }
 
-  void _toggleNote(int index) {
-    setState(() {
-      _doctorNotes[index]['checked'] = !_doctorNotes[index]['checked'];
-    });
+  Future<void> _toggleNote(int index, bool currentVal) async {
+    final noteId = _doctorNotes[index]['id'];
+    setState(() => _doctorNotes[index]['is_checked'] = !currentVal);
+    try {
+      await _supabase.from('doctor_notes').update({'is_checked': !currentVal}).eq('id', noteId);
+    } catch (e) {
+      debugPrint('Toggle Note Error: $e');
+    }
   }
 
-  void _deleteNote(int index) {
-    setState(() {
-      _doctorNotes.removeAt(index);
-    });
+  Future<void> _deleteNote(String id) async {
+    try {
+      await _supabase.from('doctor_notes').delete().eq('id', id);
+      _fetchNotes();
+    } catch (e) {
+      debugPrint('Delete Note Error: $e');
+    }
+  }
+
+  Future<void> _fetchAppointments() async {
+    try {
+      final data = await _supabase.from('appointments').select().order('appointment_date', ascending: true);
+      if (mounted) setState(() => _appointments = List<Map<String, dynamic>>.from(data));
+    } catch (e) {
+      debugPrint('Appointments Fetch Error: $e');
+    }
+  }
+
+  Future<void> _deleteAppointment(String id) async {
+    try {
+      await _supabase.from('appointments').delete().eq('id', id);
+      _fetchAppointments();
+    } catch (e) {
+      debugPrint('Delete Appointment Error: $e');
+    }
+  }
+
+  void _showAddAppointmentModal() {
+    final docController = TextEditingController();
+    final locController = TextEditingController();
+    DateTime? selectedDate;
+    TimeOfDay? selectedTime;
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFFFEFAE0),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(25))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 25, right: 25, top: 25),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text("Add Appointment", style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
+              TextField(controller: docController, decoration: const InputDecoration(labelText: "Doctor/Clinic")),
+              TextField(controller: locController, decoration: const InputDecoration(labelText: "Location")),
+              const SizedBox(height: 15),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceAround,
+                children: [
+                  TextButton.icon(
+                    onPressed: () async {
+                      final pickedDate = await showDatePicker(context: context, initialDate: DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030));
+                      if (pickedDate != null) setModalState(() => selectedDate = pickedDate);
+                    }, 
+                    icon: const Icon(Icons.calendar_month), 
+                    label: Text(selectedDate == null ? "Date" : DateFormat('MMM dd').format(selectedDate!))
+                  ),
+                  TextButton.icon(
+                    onPressed: () async {
+                      final pickedTime = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                      if (pickedTime != null) setModalState(() => selectedTime = pickedTime);
+                    }, 
+                    icon: const Icon(Icons.access_time), 
+                    label: Text(selectedTime == null ? "Time" : selectedTime!.format(context))
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                  onPressed: isSaving ? null : () async {
+                    if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) {
+                      setModalState(() => isSaving = true);
+                      try {
+                        final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00';
+                        await _supabase.from('appointments').insert({
+                          'user_id': _supabase.auth.currentUser!.id,
+                          'doctor_name': docController.text,
+                          'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                          'appointment_time': timeString,
+                          'location': locController.text,
+                        });
+                        await _fetchAppointments();
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                        debugPrint('Save Appointment Error: $e');
+                        setModalState(() => isSaving = false);
+                      }
+                    }
+                  },
+                  child: isSaving 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                    : const Text("Save Appointment", style: TextStyle(color: Colors.white)),
+                ),
+              ),
+              const SizedBox(height: 30),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -1106,77 +1297,47 @@ class _FollowUpPageState extends State<FollowUpPage> {
           ],
         ),
       ),
-      body: SingleChildScrollView(
+      body: _isLoading 
+      ? const Center(child: CircularProgressIndicator(color: Color(0xFF606C38)))
+      : SingleChildScrollView(
         padding: const EdgeInsets.all(25),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('Follow-up', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
             const Text('Your progress & upcoming visits', style: TextStyle(color: Color(0xFF606C38))),
-            
             const SizedBox(height: 20),
-
-            // --- 1. DYNAMIC PROGRESS STREAK CARD ---
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                gradient: const LinearGradient(
-                  colors: [Color(0xFF606C38), Color(0xFF283618)],
-                  begin: Alignment.topLeft, end: Alignment.bottomRight,
-                ),
-                borderRadius: BorderRadius.circular(15),
-                boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 4))],
-              ),
-              child: Row(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(color: const Color(0xFFFEFAE0).withOpacity(0.2), shape: BoxShape.circle),
-                    child: Icon(
-                      Icons.local_fire_department, 
-                      color: _streakDays > 0 ? Colors.orangeAccent : const Color(0xFFFEFAE0), 
-                      size: 30
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _isLoadingStreak 
-                        ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                        : Text(
-                            '$_streakDays Day Streak!',
-                            style: const TextStyle(color: Color(0xFFFEFAE0), fontWeight: FontWeight.bold, fontSize: 18),
-                          ),
-                      Text(
-                        _streakDays == 0 ? 'Start your diary to build a streak!' : 'You are doing great! Keep it up.',
-                        style: const TextStyle(color: Colors.white70, fontSize: 12),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-
-            const SizedBox(height: 30),
-            const Text("Appointments", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF283618))),
-            const SizedBox(height: 15),
-            _buildAppointmentCard("General Check-up", "Feb 24, 2026", "09:00 AM", "Health Center A", isUpcoming: true),
-            const SizedBox(height: 10),
-            _buildAppointmentCard("Initial Consultation", "Jan 10, 2026", "10:30 AM", "Health Center A", isUpcoming: false),
-
+            _buildStreakCard(),
             const SizedBox(height: 30),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text("Ask Your Doctor", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF283618))),
-                Icon(Icons.edit_note, color: const Color(0xFF283618).withOpacity(0.6)),
+                const Text("Appointments", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF283618))),
+                IconButton(onPressed: _showAddAppointmentModal, icon: const Icon(Icons.add_circle, color: Color(0xFF606C38), size: 28)),
               ],
             ),
-            const SizedBox(height: 5),
+            const SizedBox(height: 10),
+            if (_appointments.isEmpty) 
+              const Padding(padding: EdgeInsets.all(10), child: Text("No appointments scheduled.", style: TextStyle(color: Colors.grey))),
+            ..._appointments.map((appt) => Dismissible(
+              key: Key(appt['id'].toString()),
+              direction: DismissDirection.endToStart,
+              onDismissed: (dir) => _deleteAppointment(appt['id'].toString()),
+              background: Container(
+                decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(15)),
+                alignment: Alignment.centerRight, 
+                padding: const EdgeInsets.only(right: 20),
+                child: const Icon(Icons.delete, color: Colors.white)
+              ),
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: _buildAppointmentCard(appt['doctor_name'], appt['appointment_date'], appt['appointment_time'], appt['location'] ?? ""),
+              ),
+            )),
+            const SizedBox(height: 30),
+            const Text("Ask Your Doctor", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: Color(0xFF283618))),
             const Text("Write down questions so you don't forget.", style: TextStyle(fontSize: 12, color: Colors.grey, fontStyle: FontStyle.italic)),
             const SizedBox(height: 15),
-
             Row(
               children: [
                 Expanded(
@@ -1194,6 +1355,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
                 FloatingActionButton.small(
                   onPressed: _addNote,
                   backgroundColor: const Color(0xFF606C38),
+                  elevation: 0,
                   child: const Icon(Icons.add, color: Colors.white),
                 ),
               ],
@@ -1205,20 +1367,26 @@ class _FollowUpPageState extends State<FollowUpPage> {
               itemCount: _doctorNotes.length,
               itemBuilder: (context, index) {
                 final note = _doctorNotes[index];
-                return Dismissible(
-                  key: Key(note['id'].toString()),
-                  onDismissed: (direction) => _deleteNote(index),
-                  background: Container(color: Colors.red.withOpacity(0.8), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.delete, color: Colors.white)),
-                  child: Card(
-                    elevation: 0,
-                    margin: const EdgeInsets.only(bottom: 8),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    child: CheckboxListTile(
-                      activeColor: const Color(0xFF606C38),
-                      title: Text(note['text'], style: TextStyle(decoration: note['checked'] ? TextDecoration.lineThrough : null, color: note['checked'] ? Colors.grey : Colors.black87)),
-                      value: note['checked'],
-                      onChanged: (bool? value) => _toggleNote(index),
-                      controlAffinity: ListTileControlAffinity.leading,
+                bool isChecked = note['is_checked'] ?? false;
+                return AnimatedOpacity(
+                  duration: const Duration(milliseconds: 400),
+                  opacity: isChecked ? 0.3 : 1.0,
+                  child: Dismissible(
+                    key: Key(note['id'].toString()),
+                    direction: DismissDirection.endToStart,
+                    onDismissed: (direction) => _deleteNote(note['id'].toString()),
+                    background: Container(color: Colors.red, alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 20), child: const Icon(Icons.delete, color: Colors.white)),
+                    child: Card(
+                      elevation: 0,
+                      margin: const EdgeInsets.only(bottom: 8),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      child: CheckboxListTile(
+                        activeColor: const Color(0xFF606C38),
+                        title: Text(note['note_text'], style: TextStyle(decoration: isChecked ? TextDecoration.lineThrough : null, color: isChecked ? Colors.grey : Colors.black87)),
+                        value: isChecked,
+                        onChanged: (bool? value) => _toggleNote(index, isChecked),
+                        controlAffinity: ListTileControlAffinity.leading,
+                      ),
                     ),
                   ),
                 );
@@ -1231,30 +1399,45 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  Widget _buildAppointmentCard(String title, String date, String time, String loc, {required bool isUpcoming}) {
+  Widget _buildStreakCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: isUpcoming ? const Color(0xFF606C38) : Colors.white,
+        gradient: const LinearGradient(colors: [Color(0xFF606C38), Color(0xFF283618)]),
         borderRadius: BorderRadius.circular(15),
+        boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 5))]
       ),
       child: Row(
         children: [
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: isUpcoming ? Colors.white.withOpacity(0.2) : const Color(0xFFFEFAE0),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(Icons.calendar_month, color: isUpcoming ? const Color(0xFFFEFAE0) : const Color(0xFF606C38)),
+          const Icon(Icons.local_fire_department, color: Colors.orangeAccent, size: 30),
+          const SizedBox(width: 15),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('$_streakDays Day Streak!', style: const TextStyle(color: Color(0xFFFEFAE0), fontWeight: FontWeight.bold, fontSize: 18)),
+              const Text('Keep up the good work!', style: TextStyle(color: Colors.white70, fontSize: 12)),
+            ],
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAppointmentCard(String title, String date, String time, String loc) {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: const Color(0xFF606C38), borderRadius: BorderRadius.circular(15)),
+      child: Row(
+        children: [
+          const Icon(Icons.calendar_month, color: Color(0xFFFEFAE0)),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: isUpcoming ? Colors.white : Colors.black87)),
-                Text('$date • $time', style: TextStyle(color: isUpcoming ? Colors.white70 : Colors.grey, fontSize: 13)),
+                Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white)),
+                Text('$date • $time', style: const TextStyle(color: Colors.white70, fontSize: 13)),
+                if (loc.isNotEmpty) Text(loc, style: const TextStyle(color: Colors.white60, fontSize: 11)),
               ],
             ),
           ),
@@ -1362,39 +1545,158 @@ class _ChatPageState extends State<ChatPage> {
 }
 
 // --- 9. SETTINGS PAGE ---
-class SettingsPage extends StatelessWidget {
+class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key});
+
+  @override
+  State<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends State<SettingsPage> {
+  final _supabase = Supabase.instance.client;
+  String _username = "Loading...";
+  String _email = "";
+  String? _avatarUrl;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserProfile();
+  }
+
+  // Fetch data from Supabase Profiles table
+  Future<void> _loadUserProfile() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user != null) {
+        setState(() => _email = user.email ?? "");
+        
+        final data = await _supabase
+            .from('profiles')
+            .select()
+            .eq('id', user.id)
+            .single();
+
+        setState(() {
+          _username = data['full_name'] ?? "New User";
+          _avatarUrl = data['avatar_url'];
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error: $e');
+      setState(() => _isLoading = false);
+    }
+  }
+
+  // Change Username Logic
+  Future<void> _updateUsername() async {
+    final controller = TextEditingController(text: _username);
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text("Update Username"),
+        content: TextField(
+          controller: controller,
+          decoration: const InputDecoration(hintText: "Enter new username"),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel")),
+          ElevatedButton(
+            onPressed: () async {
+              final newName = controller.text.trim();
+              if (newName.isNotEmpty) {
+                await _supabase.from('profiles').update({'full_name': newName}).eq('id', _supabase.auth.currentUser!.id);
+                setState(() => _username = newName);
+                if (mounted) Navigator.pop(context);
+              }
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38)),
+            child: const Text("Save", style: TextStyle(color: Colors.white)),
+          )
+        ],
+      ),
+    );
+  }
+
+  // Upload Photo Logic
+  Future<void> _uploadPhoto() async {
+    try {
+      // Pick the file
+      FilePickerResult? result = await FilePicker.platform.pickFiles(
+        type: FileType.image,
+        allowMultiple: false,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final fileBytes = file.bytes; // Necessary for Chrome/Web
+      final userId = _supabase.auth.currentUser!.id;
+      final fileName = '$userId/profile_${DateTime.now().millisecondsSinceEpoch}.png';
+
+      if (fileBytes != null) {
+        // Show a loading snackbar
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Uploading photo...")));
+
+        // 1. Upload to Storage
+        await _supabase.storage.from('avatars').uploadBinary(
+          fileName,
+          fileBytes,
+          fileOptions: const FileOptions(cacheControl: '3600', upsert: true),
+        );
+
+        // 2. Get Public URL
+        final String publicUrl = _supabase.storage.from('avatars').getPublicUrl(fileName);
+
+        // 3. Update Database Profile
+        await _supabase.from('profiles').update({'avatar_url': publicUrl}).eq('id', userId);
+
+        setState(() => _avatarUrl = publicUrl);
+        
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Photo updated!")));
+      }
+    } catch (e) {
+      debugPrint('Upload failed: $e');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Upload failed. Check Supabase Storage permissions.")));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent, elevation: 0,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
         leading: BackButton(color: const Color(0xFF606C38), onPressed: () => Navigator.pop(context)),
         title: const Text('Settings', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618))),
       ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(25),
-        child: Column(
-          children: [
-            _buildProfileSection(),
-            const SizedBox(height: 30),
-            _buildSettingsGroup("General", [
-              _buildSettingsTile(Icons.person_outline, "Edit Profile"),
-              _buildSettingsTile(Icons.notifications_none, "Notifications", trailing: Switch(value: true, activeColor: const Color(0xFF606C38), onChanged: (v){})),
-              _buildSettingsTile(Icons.language, "Language", subtext: "English"),
-            ]),
-            const SizedBox(height: 20),
-            _buildSettingsGroup("Privacy & Support", [
-              _buildSettingsTile(Icons.lock_outline, "Privacy Policy"),
-              _buildSettingsTile(Icons.help_outline, "Help Center"),
-              _buildSettingsTile(Icons.info_outline, "About TEREA"),
-            ]),
-            const SizedBox(height: 40),
-            _buildPrimaryButton(context, "Log Out", () => Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false)),
-          ],
-        ),
-      ),
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator(color: Color(0xFF606C38)))
+        : SingleChildScrollView(
+            padding: const EdgeInsets.all(25),
+            child: Column(
+              children: [
+                _buildProfileSection(),
+                const SizedBox(height: 30),
+                _buildSettingsGroup("General", [
+                  _buildSettingsTile(Icons.person_outline, "Edit Username", onTap: _updateUsername),
+                  _buildSettingsTile(Icons.notifications_none, "Notifications", 
+                      trailing: Switch(value: true, activeColor: const Color(0xFF606C38), onChanged: (v){})),
+                  _buildSettingsTile(Icons.language, "Language", subtext: "English"),
+                ]),
+                const SizedBox(height: 20),
+                _buildSettingsGroup("Privacy & Support", [
+                  _buildSettingsTile(Icons.lock_outline, "Privacy Policy"),
+                  _buildSettingsTile(Icons.help_outline, "Help Center"),
+                  _buildSettingsTile(Icons.info_outline, "About TEREA"),
+                ]),
+                const SizedBox(height: 40),
+                _buildPrimaryButton(context, "Log Out", () => Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false)),
+              ],
+            ),
+          ),
     );
   }
 
@@ -1402,16 +1704,38 @@ class SettingsPage extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-      child: const Row(
+      child: Row(
         children: [
-          CircleAvatar(radius: 35, backgroundColor: Color(0xFFE9EDC9), child: Icon(Icons.person, size: 40, color: Color(0xFF606C38))),
-          SizedBox(width: 20),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Stack(
             children: [
-              Text("Juan Dela Cruz", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
-              Text("juan.dc@example.com", style: TextStyle(color: Colors.grey)),
+              CircleAvatar(
+                radius: 35, 
+                backgroundColor: const Color(0xFFE9EDC9),
+                backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                child: _avatarUrl == null ? const Icon(Icons.person, size: 40, color: Color(0xFF606C38)) : null,
+              ),
+              Positioned(
+                bottom: 0, right: 0,
+                child: GestureDetector(
+                  onTap: _uploadPhoto,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: const BoxDecoration(color: Color(0xFF606C38), shape: BoxShape.circle),
+                    child: const Icon(Icons.camera_alt, size: 14, color: Colors.white),
+                  ),
+                ),
+              )
             ],
+          ),
+          const SizedBox(width: 20),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(_username, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
+                Text(_email, style: const TextStyle(color: Colors.grey, fontSize: 13)),
+              ],
+            ),
           )
         ],
       ),
@@ -1434,13 +1758,24 @@ class SettingsPage extends StatelessWidget {
     );
   }
 
-  Widget _buildSettingsTile(IconData icon, String title, {String? subtext, Widget? trailing}) {
+  Widget _buildSettingsTile(IconData icon, String title, {String? subtext, Widget? trailing, VoidCallback? onTap}) {
     return ListTile(
       leading: Icon(icon, color: const Color(0xFF606C38)),
       title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
       subtitle: subtext != null ? Text(subtext) : null,
       trailing: trailing ?? const Icon(Icons.chevron_right, color: Colors.grey),
-      onTap: () {},
+      onTap: onTap ?? () {},
+    );
+  }
+
+  Widget _buildPrimaryButton(BuildContext context, String text, VoidCallback onTap) {
+    return SizedBox(
+      width: double.infinity, height: 55,
+      child: ElevatedButton(
+        onPressed: onTap,
+        style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+        child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+      ),
     );
   }
 }
@@ -1452,7 +1787,13 @@ class RiskResultPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final int score = (ModalRoute.of(context)!.settings.arguments as int? ?? 0);
-    final bool isHighRisk = score >= 3;
+    
+    // Updated logic to match the 12/6 assessment thresholds
+    final bool isHighRisk = score >= 12;
+    final bool isMediumRisk = score >= 6 && score < 12;
+
+    String riskLabel = isHighRisk ? "HIGH RISK" : (isMediumRisk ? "MEDIUM RISK" : "LOW RISK");
+    Color riskColor = isHighRisk ? Colors.redAccent : (isMediumRisk ? const Color(0xFFBC6C25) : const Color(0xFF606C38));
 
     return Scaffold(
       body: Padding(
@@ -1461,24 +1802,26 @@ class RiskResultPage extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              isHighRisk ? Icons.warning_amber_rounded : Icons.check_circle_outline,
+              isHighRisk ? Icons.warning_amber_rounded : (isMediumRisk ? Icons.info_outline : Icons.check_circle_outline),
               size: 100,
-              color: isHighRisk ? Colors.redAccent : const Color(0xFF606C38),
+              color: riskColor,
             ),
             const SizedBox(height: 20),
             Text(
-              isHighRisk ? "HIGH RISK" : "LOW RISK",
+              riskLabel,
               style: TextStyle(
                 fontSize: 32,
                 fontWeight: FontWeight.bold,
-                color: isHighRisk ? Colors.redAccent : const Color(0xFF283618),
+                color: riskColor,
               ),
             ),
             const SizedBox(height: 15),
             Text(
               isHighRisk
-                  ? "Based on your symptoms ($score/7), we highly recommend visiting the nearest health center for a professional check-up."
-                  : "Your symptoms currently suggest a lower risk ($score/7). However, if your condition worsens, please consult a doctor.",
+                  ? "Based on your symptoms ($score points), we highly recommend visiting the nearest health center for a professional check-up."
+                  : (isMediumRisk 
+                      ? "Your symptoms suggest a moderate risk ($score points). Please monitor your health and consider a consultation."
+                      : "Your symptoms currently suggest a lower risk ($score points). However, if your condition worsens, please consult a doctor."),
               textAlign: TextAlign.center,
               style: const TextStyle(fontSize: 16, color: Colors.black87),
             ),
