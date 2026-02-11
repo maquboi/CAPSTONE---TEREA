@@ -67,21 +67,103 @@ class StartupPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Theme colors for the "Modern Health" vibe
+    const Color forestDark = Color(0xFF283618);
+    const Color forestLight = Color(0xFF606C38);
+
     return Scaffold(
       body: InkWell(
         onTap: () => Navigator.pushNamed(context, '/login'),
-        child: Center(
+        child: Container(
+          width: double.infinity,
+          height: double.infinity,
+          decoration: const BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topCenter,
+              end: Alignment.bottomCenter,
+              colors: [forestLight, forestDark],
+            ),
+          ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              _buildLogo(size: 100),
-              const SizedBox(height: 20),
-              const Text('TEREA', style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, letterSpacing: 4, color: Color(0xFF283618))),
-              const Text('Tap to continue', style: TextStyle(fontStyle: FontStyle.italic, color: Color(0xFF606C38))),
+              // Logo with shadow/glow
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      blurRadius: 30,
+                      offset: const Offset(0, 10),
+                    ),
+                  ],
+                ),
+                child: _buildLogo(size: 120),
+              ),
+              const SizedBox(height: 30),
+              
+              // TEREA Header
+              const Text(
+                'TEREA',
+                style: TextStyle(
+                  fontSize: 52, 
+                  fontWeight: FontWeight.w900, 
+                  letterSpacing: 8, 
+                  color: Colors.white,
+                  shadows: [
+                    Shadow(
+                      blurRadius: 10.0,
+                      color: Colors.black26,
+                      offset: Offset(0, 4),
+                    ),
+                  ],
+                ),
+              ),
+              
+              const SizedBox(height: 10),
+              
+              Text(
+                'Personalized TB Care'.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                  letterSpacing: 2,
+                  color: Colors.white.withOpacity(0.7),
+                ),
+              ),
+
+              const SizedBox(height: 80),
+
+              // Interaction Hint
+              const Column(
+                children: [
+                  Icon(Icons.touch_app_outlined, color: Colors.white60, size: 20),
+                  SizedBox(height: 8),
+                  Text(
+                    'Tap anywhere to continue',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w300,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  // FIXED: Using 'Icons.eco' which is a standard leaf icon
+  Widget _buildLogo({required double size}) {
+    return Icon(
+      Icons.eco, // Standard Material leaf icon
+      size: size, 
+      color: const Color(0xFFFEFAE0),
     );
   }
 }
@@ -95,6 +177,7 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  // --- LOGIC SECTION (Untouched) ---
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -108,44 +191,275 @@ class _LoginPageState extends State<LoginPage> {
       );
       if (mounted) Navigator.pushNamed(context, '/home');
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Login Failed: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Login Failed: $e"),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
+  // --------------------------------
 
   @override
   Widget build(BuildContext context) {
+    // Theme Colors
+    const Color forestDark = Color(0xFF283618);
+    const Color forestLight = Color(0xFF606C38);
+    const Color bgWhite = Color(0xFFF9FAFB);
+
     return Scaffold(
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 80),
-        child: Column(
-          children: [
-            _buildLogo(size: 60),
-            const SizedBox(height: 20),
-            const Text('Welcome back', style: TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
-            const Text('Sign in to continue', style: TextStyle(color: Color(0xFF606C38))),
-            const SizedBox(height: 40),
-            _buildTextField("Email", "you@example.com", controller: _emailController),
-            const SizedBox(height: 20),
-            _buildTextField("Password", "........", isPassword: true, controller: _passwordController),
-            const SizedBox(height: 30),
-            _isLoading 
-                ? const CircularProgressIndicator()
-                : _buildPrimaryButton(context, "Sign in", _signIn),
-            const SizedBox(height: 20),
-            TextButton(
-              onPressed: () => Navigator.pushNamed(context, '/signup'),
-              child: const Text("Don't have an account? Sign up", style: TextStyle(color: Color(0xFF606C38))),
+      backgroundColor: bgWhite,
+      body: Stack( // Using Stack to layer background designs behind the content
+        children: [
+          // --- BACKGROUND DECORATIONS ---
+          // Top right organic shape
+          Positioned(
+            top: -60,
+            right: -60,
+            child: Container(
+              width: 220,
+              height: 220,
+              decoration: BoxDecoration(
+                color: forestLight.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(80), // Soft rounded corner look
+              ),
             ),
-          ],
+          ),
+          // Bottom left organic shape
+          Positioned(
+            bottom: -100,
+            left: -40,
+            child: Container(
+              width: 250,
+              height: 250,
+              decoration: BoxDecoration(
+                color: forestDark.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+            ),
+          ),
+
+          // --- MAIN CONTENT ---
+          Center(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // 1. Logo Section
+                  Center(child: _buildLogo(size: 80)),
+                  
+                  const SizedBox(height: 30),
+                  
+                  // 2. Header Text
+                  const Text(
+                    'Welcome back',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 32, 
+                      fontWeight: FontWeight.w800, 
+                      color: forestDark,
+                      letterSpacing: -0.5,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Sign in to your personalized tracker',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: forestLight.withOpacity(0.8),
+                      fontWeight: FontWeight.w500
+                    ),
+                  ),
+                  
+                  const SizedBox(height: 50),
+                  
+                  // 3. Inputs
+                  _buildTextField(
+                    label: "Email", 
+                    hint: "you@example.com", 
+                    controller: _emailController, 
+                    icon: Icons.email_outlined
+                  ),
+                  const SizedBox(height: 20),
+                  _buildTextField(
+                    label: "Password", 
+                    hint: "••••••••", 
+                    isPassword: true, 
+                    controller: _passwordController,
+                    icon: Icons.lock_outline
+                  ),
+                  
+                  const SizedBox(height: 40),
+                  
+                  // 4. Action Button
+                  _isLoading 
+                    ? const Center(child: CircularProgressIndicator(color: forestDark))
+                    : _buildGradientButton(
+                        text: "Sign in", 
+                        onPressed: _signIn,
+                        colors: [forestLight, forestDark],
+                      ),
+                
+                  const SizedBox(height: 25),
+                  
+                  // 5. Sign Up Link
+                  TextButton(
+                    onPressed: () => Navigator.pushNamed(context, '/signup'),
+                    style: TextButton.styleFrom(
+                      foregroundColor: forestLight,
+                    ),
+                    child: RichText(
+                      text: const TextSpan(
+                        text: "Don't have an account? ",
+                        style: TextStyle(color: Colors.grey, fontSize: 14),
+                        children: [
+                          TextSpan(
+                            text: "Sign up",
+                            style: TextStyle(
+                              color: forestDark,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- UI HELPER WIDGETS ---
+
+  Widget _buildTextField({
+    required String label, 
+    required String hint, 
+    required TextEditingController controller,
+    bool isPassword = false,
+    IconData? icon,
+  }) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style: const TextStyle(
+            color: Color(0xFF283618),
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
         ),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.08),
+                blurRadius: 15,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: controller,
+            obscureText: isPassword,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
+              prefixIcon: Icon(icon, color: const Color(0xFF606C38).withOpacity(0.6), size: 20),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: BorderSide.none,
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(16),
+                borderSide: const BorderSide(color: Color(0xFF606C38), width: 1.5),
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGradientButton({
+    required String text, 
+    required VoidCallback onPressed,
+    required List<Color> colors,
+  }) {
+    return Container(
+      width: double.infinity,
+      height: 55,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withOpacity(0.3),
+            blurRadius: 15,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(16),
+          child: Center(
+            child: Text(
+              text,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                letterSpacing: 1,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLogo({required double size}) {
+    return Container(
+      padding: const EdgeInsets.all(15),
+      decoration: BoxDecoration(
+        color: const Color(0xFF283618).withOpacity(0.1),
+        shape: BoxShape.circle,
+      ),
+      child: Icon(
+        Icons.eco, 
+        size: size, 
+        color: const Color(0xFF283618),
       ),
     );
   }
 }
 
-// ign Up Page natin 
+//Sign Up Page natin 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
@@ -154,6 +468,7 @@ class SignUpPage extends StatefulWidget {
 }
 
 class _SignUpPageState extends State<SignUpPage> {
+  // --- LOGIC SECTION (Untouched) ---
   final _nameController = TextEditingController();
   final _ageController = TextEditingController();
   final _contactController = TextEditingController();
@@ -162,7 +477,6 @@ class _SignUpPageState extends State<SignUpPage> {
   
   String? _selectedGender; 
   final List<String> _genderOptions = ['Male', 'Female', 'Other'];
-
   bool _isLoading = false;
 
   Future<void> _handleSignUp() async {
@@ -185,123 +499,183 @@ class _SignUpPageState extends State<SignUpPage> {
           'id': authResponse.user!.id,
           'full_name': _nameController.text.trim(),
           'age': _ageController.text.trim(),
-          'gender': _selectedGender, // Saves the dropdown value
+          'gender': _selectedGender,
           'contact_number': _contactController.text.trim(),
           'email': _emailController.text.trim(),
         });
         if (mounted) Navigator.pushNamed(context, '/home');
       }
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text("Registration Error: $e")));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("Registration Error: $e"), backgroundColor: Colors.redAccent)
+        );
+      }
     } finally {
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
+  // --------------------------------
 
   @override
   Widget build(BuildContext context) {
+    const Color forestDark = Color(0xFF283618);
+    const Color forestLight = Color(0xFF606C38);
+    const Color bgWhite = Color(0xFFF9FAFB);
+
     return Scaffold(
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: const BackButton(color: Color(0xFF606C38))),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
-        child: Column(
-          children: [
-            Row(
+      backgroundColor: bgWhite,
+      extendBodyBehindAppBar: true,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+      ),
+      body: Stack(
+        children: [
+          // 1. Background Blobs (for consistency with Login)
+          Positioned(
+            top: 200,
+            right: -50,
+            child: _buildBackgroundShape(180, forestLight.withOpacity(0.08)),
+          ),
+
+          SingleChildScrollView(
+            child: Column(
               children: [
-                const Icon(Icons.local_hospital, size: 50, color: Color(0xFF283618)),
-                const SizedBox(width: 15),
-                const Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Create account', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
-                    Text('Join TEREA today', style: TextStyle(color: Color(0xFF606C38))),
-                  ],
-                ),
-              ],
-            ),
-            const SizedBox(height: 30),
-            _buildTextField("Full Name", "Juan Dela Cruz", controller: _nameController),
-            const SizedBox(height: 15),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(child: _buildTextField("Age", "25", controller: _ageController)),
-                const SizedBox(width: 15),
-                // --- DROPDOWN FOR GENDER ---
-                Expanded(
+                // 2. Header Section (Gradient Background)
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.only(top: 80, bottom: 40),
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [forestLight, forestDark],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    borderRadius: BorderRadius.only(
+                      bottomLeft: Radius.circular(40),
+                      bottomRight: Radius.circular(40),
+                    ),
+                  ),
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("Gender", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618))),
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12),
-                        decoration: BoxDecoration(
+                      _buildLogo(size: 60),
+                      const SizedBox(height: 20),
+                      const Text(
+                        'Join TB HealthCare',
+                        style: TextStyle(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
                           color: Colors.white,
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: Colors.grey.shade300),
+                          letterSpacing: -0.5,
                         ),
-                        child: DropdownButtonHideUnderline(
-                          child: DropdownButton<String>(
-                            value: _selectedGender,
-                            hint: const Text("Select", style: TextStyle(fontSize: 14, color: Colors.grey)),
-                            isExpanded: true,
-                            items: _genderOptions.map((String value) {
-                              return DropdownMenuItem<String>(
-                                value: value,
-                                child: Text(value),
-                              );
-                            }).toList(),
-                            onChanged: (newValue) {
-                              setState(() {
-                                _selectedGender = newValue;
-                              });
-                            },
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Start your wellness journey today',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.85),
+                          fontSize: 14,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // 3. Form Card
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(25, 30, 25, 40),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Create Account',
+                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: forestDark),
+                      ),
+                      const SizedBox(height: 25),
+                      
+                      _buildTextField(label: "Full Name", hint: "Juan Dela Cruz", controller: _nameController, icon: Icons.person_outline),
+                      const SizedBox(height: 20),
+                      
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _buildTextField(label: "Age", hint: "25", controller: _ageController, icon: Icons.cake_outlined)),
+                          const SizedBox(width: 15),
+                          Expanded(child: _buildGenderDropdown(forestDark, forestLight)),
+                        ],
+                      ),
+                      
+                      const SizedBox(height: 20),
+                      _buildTextField(label: "Contact Number", hint: "+63 912 345 6789", controller: _contactController, icon: Icons.phone_android_outlined),
+                      const SizedBox(height: 20),
+                      _buildTextField(label: "Email Address", hint: "your.email@example.com", controller: _emailController, icon: Icons.mail_outline),
+                      const SizedBox(height: 20),
+                      _buildTextField(label: "Password", hint: "Minimum 6 characters", isPassword: true, controller: _passwordController, icon: Icons.lock_open_outlined),
+                      
+                      const SizedBox(height: 40),
+                      
+                      _isLoading 
+                        ? const Center(child: CircularProgressIndicator(color: forestDark))
+                        : _buildGradientButton("Create Account", _handleSignUp, [forestLight, forestDark]),
+                    
+                      const SizedBox(height: 25),
+                      Center(
+                        child: TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: RichText(
+                            text: const TextSpan(
+                              text: "Already have an account? ",
+                              style: TextStyle(color: Colors.grey, fontSize: 14),
+                              children: [
+                                TextSpan(
+                                  text: "Sign In",
+                                  style: TextStyle(color: forestDark, fontWeight: FontWeight.bold),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ],
                   ),
-                ), 
+                ),
               ],
             ),
-            const SizedBox(height: 15),
-            _buildTextField("Contact Number", "+63 912 345 6789", controller: _contactController),
-            const SizedBox(height: 15),
-            _buildTextField("Email", "you@example.com", controller: _emailController),
-            const SizedBox(height: 15),
-            _buildTextField("Password", "........", isPassword: true, controller: _passwordController),
-            const SizedBox(height: 30),
-            _isLoading 
-              ? const CircularProgressIndicator()
-              : _buildPrimaryButton(context, "Create account", _handleSignUp),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
 
-  Widget _buildTextField(String label, String hint, {required TextEditingController controller, bool isPassword = false}) {
+  // --- UI COMPONENTS ---
+
+  Widget _buildGenderDropdown(Color forestDark, Color forestLight) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618))),
+        const Text("Gender", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618), fontSize: 14)),
         const SizedBox(height: 8),
-        TextField(
-          controller: controller,
-          obscureText: isPassword,
-          decoration: InputDecoration(
-            hintText: hint,
-            filled: true,
-            fillColor: Colors.white,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade300),
-            ),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade300),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedGender,
+              hint: Text("Select", style: TextStyle(fontSize: 14, color: forestLight.withOpacity(0.5))),
+              isExpanded: true,
+              items: _genderOptions.map((String value) {
+                return DropdownMenuItem<String>(value: value, child: Text(value, style: const TextStyle(fontSize: 14)));
+              }).toList(),
+              onChanged: (newValue) => setState(() => _selectedGender = newValue),
             ),
           ),
         ),
@@ -309,18 +683,67 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  Widget _buildPrimaryButton(BuildContext context, String text, VoidCallback onPressed) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
+  Widget _buildTextField({required String label, required String hint, required TextEditingController controller, bool isPassword = false, IconData? icon}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: const TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold, fontSize: 14)),
+        const SizedBox(height: 8),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
+          ),
+          child: TextField(
+            controller: controller,
+            obscureText: isPassword,
+            decoration: InputDecoration(
+              hintText: hint,
+              hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
+              prefixIcon: Icon(icon, color: const Color(0xFF606C38).withOpacity(0.5), size: 20),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGradientButton(String text, VoidCallback onPressed, List<Color> colors) {
+    return Container(
+      height: 58,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(colors: colors),
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [BoxShadow(color: colors.last.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 8))],
+      ),
       child: ElevatedButton(
         onPressed: onPressed,
         style: ElevatedButton.styleFrom(
-          backgroundColor: const Color(0xFF606C38),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          backgroundColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         ),
-        child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+        child: Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
       ),
+    );
+  }
+
+  Widget _buildLogo({required double size}) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+      child: Icon(Icons.favorite, size: size, color: const Color(0xFF283618)),
+    );
+  }
+
+  Widget _buildBackgroundShape(double size, Color color) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(size / 3)),
     );
   }
 }
@@ -334,6 +757,7 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
+  // --- LOGIC (Untouched) ---
   final _supabase = Supabase.instance.client;
   String _username = "Patient";
   String? _avatarUrl;
@@ -346,7 +770,6 @@ class _DashboardPageState extends State<DashboardPage> {
     _fetchUserData();
   }
 
-  // Fetches latest profile data (Name, Photo, and Assessment Result)
   Future<void> _fetchUserData() async {
     try {
       final user = _supabase.auth.currentUser;
@@ -372,93 +795,257 @@ class _DashboardPageState extends State<DashboardPage> {
 
   @override
   Widget build(BuildContext context) {
+    // Enhanced Green Palette
+    const Color forestDark = Color(0xFF283618); // Primary
+    const Color forestMed = Color(0xFF606C38);  // Secondary
+    const Color mossGreen = Color(0xFFADC178); // Accents
+    const Color paleGreen = Color(0xFFDDE5B6); // Card Backgrounds
+    const Color softWhite = Color(0xFFF8F9FA);
+
     return Scaffold(
+      backgroundColor: Colors.white,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: Colors.white,
         elevation: 0,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
-            _buildLogo(size: 32), 
-            const SizedBox(width: 10), 
-            const Text('TEREA', style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618)))
+            _buildLogo(size: 32),
+            const SizedBox(width: 10),
+            const Text('TEREA', 
+              style: TextStyle(fontWeight: FontWeight.w900, color: forestDark, letterSpacing: 1.1)
+            )
           ],
         ),
         actions: [
-          // Small profile icon in top right
           Padding(
             padding: const EdgeInsets.only(right: 20),
-            child: CircleAvatar(
-              radius: 18,
-              backgroundColor: const Color(0xFFE9EDC9),
-              backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
-              child: _avatarUrl == null ? const Icon(Icons.person, size: 20, color: Color(0xFF606C38)) : null,
+            child: Container(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 2))
+                ],
+                border: Border.all(color: mossGreen, width: 2),
+              ),
+              child: CircleAvatar(
+                radius: 18,
+                backgroundColor: paleGreen,
+                backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
+                child: _avatarUrl == null ? const Icon(Icons.person, size: 20, color: forestDark) : null,
+              ),
             ),
           )
         ],
       ),
-      body: _isLoading 
-        ? const Center(child: CircularProgressIndicator(color: Color(0xFF606C38)))
-        : RefreshIndicator(
-            onRefresh: _fetchUserData, // Pull to refresh data
-            color: const Color(0xFF606C38),
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.all(25),
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Hello, $_username', style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Color(0xFF283618))),
-                  const Text('How are you feeling today?', style: TextStyle(color: Color(0xFF606C38))),
-                  const SizedBox(height: 25),
-                  _buildTreatmentBanner(),
-                  const SizedBox(height: 30),
-                  const Text('QUICK ACTIONS', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF606C38), letterSpacing: 1.2)),
-                  const SizedBox(height: 15),
-                  GridView.count(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    crossAxisCount: 2,
-                    crossAxisSpacing: 15,
-                    mainAxisSpacing: 15,
+      body: Stack(
+        children: [
+          // Background Blobs for depth
+          Positioned(top: -50, right: -30, child: _buildBlob(200, mossGreen)),
+          Positioned(bottom: 100, left: -50, child: _buildBlob(250, forestMed)),
+          
+          _isLoading 
+            ? const Center(child: CircularProgressIndicator(color: forestMed))
+            : RefreshIndicator(
+                onRefresh: _fetchUserData,
+                color: forestMed,
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(25),
+                  physics: const AlwaysScrollableScrollPhysics(),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _buildActionCard(context, Icons.assignment_outlined, 'Risk Assessment', 'Check your TB risk', '/assess'),
-                      _buildActionCard(context, Icons.medication_outlined, 'Medication Diary', 'Track your medicines', '/meds'),
-                      _buildActionCard(context, Icons.calendar_today_outlined, 'Follow-up', 'Upcoming appointments', '/followup'),
-                      _buildActionCard(context, Icons.chat_bubble_outline, 'Chatbot', 'Get instant help', '/chat'),
-                      _buildActionCard(context, Icons.settings_outlined, 'Settings', 'Profile & preferences', '/settings'),
+                      Text(
+                        'Hello, $_username', 
+                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: forestDark, letterSpacing: -0.5)
+                      ),
+                      const Text(
+                        'How are you feeling today?', 
+                        style: TextStyle(color: forestMed, fontSize: 16, fontWeight: FontWeight.w600)
+                      ),
+                      const SizedBox(height: 25),
+                      
+                      _buildTreatmentBanner(),
+                      
+                      const SizedBox(height: 35),
+                      const Text(
+                        'QUICK ACTIONS', 
+                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: forestMed, letterSpacing: 1.5)
+                      ),
+                      const SizedBox(height: 15),
+                      
+                      GridView.count(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        crossAxisCount: 2,
+                        crossAxisSpacing: 15,
+                        mainAxisSpacing: 15,
+                        children: [
+                          _buildActionCard(context, Icons.assignment_rounded, 'Risk Assessment', 'Check your TB risk', '/assess', forestMed, paleGreen),
+                          _buildActionCard(context, Icons.medication_rounded, 'Medication Diary', 'Track your medicines', '/meds', forestMed, paleGreen),
+                          _buildActionCard(context, Icons.calendar_today_rounded, 'Follow-up', 'Upcoming visits', '/followup', forestMed, paleGreen),
+                          _buildActionCard(context, Icons.chat_bubble_rounded, 'Chatbot', 'Support', '/chat', forestMed, paleGreen),
+                          _buildActionCard(context, Icons.settings_rounded, 'Settings', 'Preferences', '/settings', forestMed, paleGreen),
+                          _buildActionCard(context, Icons.help_outline_rounded, 'Support', 'Contact Us', '/support', forestMed, paleGreen),
+                        ],
+                      ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
+        ],
+      ),
       bottomNavigationBar: _buildBottomNav(0, context),
     );
   }
 
   Widget _buildTreatmentBanner() {
-    // Dynamic styling based on Risk Level
     Color bannerColor = const Color(0xFF606C38);
-    if (_riskLevel.contains("High")) bannerColor = Colors.redAccent;
-    if (_riskLevel.contains("Medium")) bannerColor = const Color(0xFFBC6C25);
+    if (_riskLevel.toLowerCase().contains("high")) bannerColor = const Color(0xFFD90429);
+    if (_riskLevel.toLowerCase().contains("medium")) bannerColor = const Color(0xFFF9C74F);
+    if (_riskLevel.toLowerCase().contains("low")) bannerColor = const Color(0xFF43AA8B);
 
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: bannerColor, borderRadius: BorderRadius.circular(15)),
+      padding: const EdgeInsets.all(22),
+      decoration: BoxDecoration(
+        color: bannerColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: bannerColor.withOpacity(0.4), 
+            blurRadius: 20, 
+            offset: const Offset(0, 10)
+          )
+        ],
+      ),
       child: Row(
         children: [
-          const Icon(Icons.monitor_heart_outlined, color: Color(0xFFFEFAE0), size: 30),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.25), shape: BoxShape.circle),
+            child: const Icon(Icons.monitor_heart_rounded, color: Colors.white, size: 30),
+          ),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Treatment Status', style: TextStyle(color: Color(0xFFFEFAE0), fontWeight: FontWeight.bold)),
-                Text(_riskLevel, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500)),
+                const Text('Treatment Status', 
+                  style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)
+                ),
+                Text(_riskLevel, 
+                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)
+                ),
               ],
             ),
           )
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionCard(BuildContext context, IconData icon, String title, String subtitle, String route, Color iconColor, Color bgColor) {
+    return Container(
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08), 
+            blurRadius: 12, 
+            offset: const Offset(0, 6)
+          )
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: () => Navigator.pushNamed(context, route),
+          borderRadius: BorderRadius.circular(24),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.6), 
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                       BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)
+                    ]
+                  ),
+                  child: Icon(icon, color: iconColor, size: 26),
+                ),
+                const SizedBox(height: 15),
+                Text(title, 
+                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF283618))
+                ),
+                const SizedBox(height: 4),
+                Text(subtitle, 
+                  style: const TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.w500, height: 1.2)
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildBlob(double size, Color color) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(size / 2.5)),
+    );
+  }
+
+  Widget _buildLogo({required double size}) {
+    return Icon(Icons.eco_rounded, color: const Color(0xFF283618), size: size);
+  }
+
+  Widget _buildBottomNav(int index, BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        boxShadow: [
+          BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 20, offset: const Offset(0, -5))
+        ],
+      ),
+      child: BottomNavigationBar(
+        currentIndex: index,
+        onTap: (int tappedIndex) {
+          if (tappedIndex == index) return; // Already on this page
+          
+          switch (tappedIndex) {
+            case 0:
+              // Home is usually the current page, but can be reset here
+              Navigator.pushReplacementNamed(context, '/dashboard');
+              break;
+            case 1:
+              Navigator.pushNamed(context, '/meds');
+              break;
+            case 2:
+              Navigator.pushNamed(context, '/followup');
+              break;
+            case 3:
+              Navigator.pushNamed(context, '/settings');
+              break;
+          }
+        },
+        selectedItemColor: const Color(0xFF283618),
+        unselectedItemColor: Colors.grey.shade500,
+        type: BottomNavigationBarType.fixed,
+        backgroundColor: Colors.white,
+        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+        unselectedLabelStyle: const TextStyle(fontSize: 11),
+        items: const [
+          BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
+          BottomNavigationBarItem(icon: Icon(Icons.medication_rounded), label: 'Meds'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Follow-up'),
+          BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
         ],
       ),
     );
