@@ -16,6 +16,10 @@ dependencies:
   google_maps_flutter: ^2.5.3
   url_launcher: ^6.2.5
   file_picker: ^8.1.7
+  # Added for Risk Assessment features
+  pdf: ^3.10.8
+  printing: ^5.11.1
+  share_plus: ^7.2.1
 
 dev_dependencies:
   flutter_test:
