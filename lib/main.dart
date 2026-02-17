@@ -8,6 +8,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:flutter/services.dart';
 
 
 Future<void> main() async {
@@ -172,7 +173,7 @@ class StartupPage extends StatelessWidget {
   }
 }
 
-// Login Page natin toh
+// --- LOGIN PAGE ---
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
 
@@ -181,7 +182,6 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
-  // --- LOGIC SECTION (Untouched) ---
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -189,11 +189,40 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
     try {
-      await Supabase.instance.client.auth.signInWithPassword(
+      // 1. Perform the Auth Login
+      final response = await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
-      if (mounted) Navigator.pushNamed(context, '/home');
+
+      if (response.user != null) {
+        // 2. FETCH ROLE: Check if this user is a Patient or Doctor
+        final data = await Supabase.instance.client
+            .from('profiles')
+            .select('role')
+            .eq('id', response.user!.id)
+            .maybeSingle(); // Use maybeSingle to avoid crashes if profile is missing
+
+        String role = data != null && data['role'] != null ? data['role'] : 'patient';
+
+        if (mounted) {
+          // 3. ROLE GATEKEEPER
+          if (role == 'doctor') {
+            // If Doctor, deny access on Mobile
+            await Supabase.instance.client.auth.signOut(); // Force sign out
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text("Access Denied: Doctors must use the Web Portal."),
+                backgroundColor: Colors.redAccent,
+                duration: Duration(seconds: 4),
+              ),
+            );
+          } else {
+            // If Patient (or null), proceed to Mobile Dashboard
+            Navigator.pushNamed(context, '/home');
+          }
+        }
+      }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -207,21 +236,18 @@ class _LoginPageState extends State<LoginPage> {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-  // --------------------------------
 
   @override
   Widget build(BuildContext context) {
-    // Theme Colors
     const Color forestDark = Color(0xFF283618);
     const Color forestLight = Color(0xFF606C38);
     const Color bgWhite = Color(0xFFF9FAFB);
 
     return Scaffold(
       backgroundColor: bgWhite,
-      body: Stack( // Using Stack to layer background designs behind the content
+      body: Stack(
         children: [
           // --- BACKGROUND DECORATIONS ---
-          // Top right organic shape
           Positioned(
             top: -60,
             right: -60,
@@ -230,11 +256,10 @@ class _LoginPageState extends State<LoginPage> {
               height: 220,
               decoration: BoxDecoration(
                 color: forestLight.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(80), // Soft rounded corner look
+                borderRadius: BorderRadius.circular(80),
               ),
             ),
           ),
-          // Bottom left organic shape
           Positioned(
             bottom: -100,
             left: -40,
@@ -256,18 +281,14 @@ class _LoginPageState extends State<LoginPage> {
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  // 1. Logo Section
                   Center(child: _buildLogo(size: 80)),
-                  
                   const SizedBox(height: 30),
-                  
-                  // 2. Header Text
                   const Text(
                     'Welcome back',
                     textAlign: TextAlign.center,
                     style: TextStyle(
-                      fontSize: 32, 
-                      fontWeight: FontWeight.w800, 
+                      fontSize: 32,
+                      fontWeight: FontWeight.w800,
                       color: forestDark,
                       letterSpacing: -0.5,
                     ),
@@ -279,42 +300,36 @@ class _LoginPageState extends State<LoginPage> {
                     style: TextStyle(
                       fontSize: 16,
                       color: forestLight.withOpacity(0.8),
-                      fontWeight: FontWeight.w500
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
-                  
                   const SizedBox(height: 50),
-                  
-                  // 3. Inputs
+
                   _buildTextField(
-                    label: "Email", 
-                    hint: "you@example.com", 
-                    controller: _emailController, 
-                    icon: Icons.email_outlined
+                    label: "Email",
+                    hint: "you@example.com",
+                    controller: _emailController,
+                    icon: Icons.email_outlined,
                   ),
                   const SizedBox(height: 20),
                   _buildTextField(
-                    label: "Password", 
-                    hint: "••••••••", 
-                    isPassword: true, 
+                    label: "Password",
+                    hint: "••••••••",
+                    isPassword: true,
                     controller: _passwordController,
-                    icon: Icons.lock_outline
+                    icon: Icons.lock_outline,
                   ),
-                  
                   const SizedBox(height: 40),
-                  
-                  // 4. Action Button
-                  _isLoading 
-                    ? const Center(child: CircularProgressIndicator(color: forestDark))
-                    : _buildGradientButton(
-                        text: "Sign in", 
-                        onPressed: _signIn,
-                        colors: [forestLight, forestDark],
-                      ),
-                
+
+                  _isLoading
+                      ? const Center(child: CircularProgressIndicator(color: forestDark))
+                      : _buildGradientButton(
+                          text: "Sign in",
+                          onPressed: _signIn,
+                          colors: [forestLight, forestDark],
+                        ),
+
                   const SizedBox(height: 25),
-                  
-                  // 5. Sign Up Link
                   TextButton(
                     onPressed: () => Navigator.pushNamed(context, '/signup'),
                     style: TextButton.styleFrom(
@@ -346,11 +361,9 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
-  // --- UI HELPER WIDGETS ---
-
   Widget _buildTextField({
-    required String label, 
-    required String hint, 
+    required String label,
+    required String hint,
     required TextEditingController controller,
     bool isPassword = false,
     IconData? icon,
@@ -404,7 +417,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Widget _buildGradientButton({
-    required String text, 
+    required String text,
     required VoidCallback onPressed,
     required List<Color> colors,
   }) {
@@ -455,15 +468,14 @@ class _LoginPageState extends State<LoginPage> {
         shape: BoxShape.circle,
       ),
       child: Icon(
-        Icons.eco, 
-        size: size, 
+        Icons.eco,
+        size: size,
         color: const Color(0xFF283618),
       ),
     );
   }
 }
 
-//Sign Up Page natin 
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
@@ -472,24 +484,76 @@ class SignUpPage extends StatefulWidget {
 }
 
 class _SignUpPageState extends State<SignUpPage> {
-  // --- LOGIC SECTION (Untouched) ---
+  // --- CONTROLLERS ---
   final _nameController = TextEditingController();
   final _ageController = TextEditingController();
   final _contactController = TextEditingController();
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
-  
-  String? _selectedGender; 
+
+  String? _selectedGender;
   final List<String> _genderOptions = ['Male', 'Female', 'Other'];
   bool _isLoading = false;
 
-  Future<void> _handleSignUp() async {
-    if (_selectedGender == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please select a gender")),
-      );
-      return;
+  // --- VALIDATION LOGIC ---
+  bool _validateInputs() {
+    // 1. Name: Letters only, max 50 chars
+    final nameRegex = RegExp(r'^[a-zA-Z ]+$');
+    if (_nameController.text.isEmpty ||
+        _nameController.text.length > 50 ||
+        !nameRegex.hasMatch(_nameController.text)) {
+      _showSnackBar("Name must contain letters only and be under 50 characters.");
+      return false;
     }
+
+    // 2. Age: Number 1-100
+    final age = int.tryParse(_ageController.text);
+    if (age == null || age < 1 || age > 100) {
+      _showSnackBar("Age must be a valid number between 1 and 100.");
+      return false;
+    }
+
+    // 3. Contact: Starts with 09, exactly 11 digits
+    if (!_contactController.text.startsWith('09') ||
+        _contactController.text.length != 11) {
+      _showSnackBar("Contact number must start with '09' and be 11 digits.");
+      return false;
+    }
+
+    // 4. Email: Must contain @
+    if (!_emailController.text.contains('@')) {
+      _showSnackBar("Please enter a valid email address.");
+      return false;
+    }
+
+    // 5. Password: Minimum 10 chars
+    if (_passwordController.text.length < 10) {
+      _showSnackBar("Password must be at least 10 characters long.");
+      return false;
+    }
+
+    // 6. Gender Check
+    if (_selectedGender == null) {
+      _showSnackBar("Please select a gender.");
+      return false;
+    }
+
+    return true;
+  }
+
+  void _showSnackBar(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.redAccent,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _handleSignUp() async {
+    // Run validation before proceeding
+    if (!_validateInputs()) return;
 
     setState(() => _isLoading = true);
     try {
@@ -499,6 +563,7 @@ class _SignUpPageState extends State<SignUpPage> {
       );
 
       if (authResponse.user != null) {
+        // --- PROCESS WORKFLOW: AUTOMATIC PATIENT ASSIGNMENT ---
         await Supabase.instance.client.from('profiles').insert({
           'id': authResponse.user!.id,
           'full_name': _nameController.text.trim(),
@@ -506,20 +571,19 @@ class _SignUpPageState extends State<SignUpPage> {
           'gender': _selectedGender,
           'contact_number': _contactController.text.trim(),
           'email': _emailController.text.trim(),
+          'role': 'patient', // HARDCODED: Mobile App registrations are always Patients
         });
+
         if (mounted) Navigator.pushNamed(context, '/home');
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Registration Error: $e"), backgroundColor: Colors.redAccent)
-        );
+        _showSnackBar("Registration Error: $e");
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
-  // --------------------------------
 
   @override
   Widget build(BuildContext context) {
@@ -540,17 +604,15 @@ class _SignUpPageState extends State<SignUpPage> {
       ),
       body: Stack(
         children: [
-          // 1. Background Blobs (for consistency with Login)
           Positioned(
             top: 200,
             right: -50,
             child: _buildBackgroundShape(180, forestLight.withOpacity(0.08)),
           ),
-
           SingleChildScrollView(
             child: Column(
               children: [
-                // 2. Header Section (Gradient Background)
+                // Header
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.only(top: 80, bottom: 40),
@@ -590,7 +652,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   ),
                 ),
 
-                // 3. Form Card
+                // Form Card
                 Padding(
                   padding: const EdgeInsets.fromLTRB(25, 30, 25, 40),
                   child: Column(
@@ -601,32 +663,81 @@ class _SignUpPageState extends State<SignUpPage> {
                         style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: forestDark),
                       ),
                       const SizedBox(height: 25),
-                      
-                      _buildTextField(label: "Full Name", hint: "Juan Dela Cruz", controller: _nameController, icon: Icons.person_outline),
+
+                      // NAME: Letters only, Max 50
+                      _buildTextField(
+                        label: "Full Name",
+                        hint: "Juan Dela Cruz",
+                        controller: _nameController,
+                        icon: Icons.person_outline,
+                        inputType: TextInputType.name,
+                        formatters: [
+                          LengthLimitingTextInputFormatter(50),
+                          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                        ],
+                      ),
                       const SizedBox(height: 20),
-                      
+
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _buildTextField(label: "Age", hint: "25", controller: _ageController, icon: Icons.cake_outlined)),
+                          // AGE: Numbers only, Max 3 digits (logic handles 1-100)
+                          Expanded(
+                            child: _buildTextField(
+                              label: "Age",
+                              hint: "25",
+                              controller: _ageController,
+                              icon: Icons.cake_outlined,
+                              inputType: TextInputType.number,
+                              formatters: [
+                                LengthLimitingTextInputFormatter(3),
+                                FilteringTextInputFormatter.digitsOnly,
+                              ],
+                            ),
+                          ),
                           const SizedBox(width: 15),
                           Expanded(child: _buildGenderDropdown(forestDark, forestLight)),
                         ],
                       ),
-                      
                       const SizedBox(height: 20),
-                      _buildTextField(label: "Contact Number", hint: "+63 912 345 6789", controller: _contactController, icon: Icons.phone_android_outlined),
+
+                      // CONTACT: Numbers only, Max 11 digits
+                      _buildTextField(
+                        label: "Contact Number",
+                        hint: "09123456789",
+                        controller: _contactController,
+                        icon: Icons.phone_android_outlined,
+                        inputType: TextInputType.phone,
+                        formatters: [
+                          LengthLimitingTextInputFormatter(11),
+                          FilteringTextInputFormatter.digitsOnly,
+                        ],
+                      ),
                       const SizedBox(height: 20),
-                      _buildTextField(label: "Email Address", hint: "your.email@example.com", controller: _emailController, icon: Icons.mail_outline),
+
+                      // EMAIL: Standard email input
+                      _buildTextField(
+                        label: "Email Address",
+                        hint: "your.email@example.com",
+                        controller: _emailController,
+                        icon: Icons.mail_outline,
+                        inputType: TextInputType.emailAddress,
+                      ),
                       const SizedBox(height: 20),
-                      _buildTextField(label: "Password", hint: "Minimum 6 characters", isPassword: true, controller: _passwordController, icon: Icons.lock_open_outlined),
-                      
+
+                      // PASSWORD: Obscured text
+                      _buildTextField(
+                        label: "Password",
+                        hint: "Minimum 10 characters",
+                        isPassword: true,
+                        controller: _passwordController,
+                        icon: Icons.lock_open_outlined,
+                      ),
+
                       const SizedBox(height: 40),
-                      
-                      _isLoading 
-                        ? const Center(child: CircularProgressIndicator(color: forestDark))
-                        : _buildGradientButton("Create Account", _handleSignUp, [forestLight, forestDark]),
-                    
+                      _isLoading
+                          ? const Center(child: CircularProgressIndicator(color: forestDark))
+                          : _buildGradientButton("Create Account", _handleSignUp, [forestLight, forestDark]),
                       const SizedBox(height: 25),
                       Center(
                         child: TextButton(
@@ -657,7 +768,6 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   // --- UI COMPONENTS ---
-
   Widget _buildGenderDropdown(Color forestDark, Color forestLight) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -687,7 +797,15 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  Widget _buildTextField({required String label, required String hint, required TextEditingController controller, bool isPassword = false, IconData? icon}) {
+  Widget _buildTextField({
+    required String label,
+    required String hint,
+    required TextEditingController controller,
+    bool isPassword = false,
+    IconData? icon,
+    TextInputType inputType = TextInputType.text,
+    List<TextInputFormatter>? formatters,
+  }) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -702,6 +820,8 @@ class _SignUpPageState extends State<SignUpPage> {
           child: TextField(
             controller: controller,
             obscureText: isPassword,
+            keyboardType: inputType,
+            inputFormatters: formatters,
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
@@ -752,7 +872,6 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 }
 
-// Dashburdddd
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -761,12 +880,25 @@ class DashboardPage extends StatefulWidget {
 }
 
 class _DashboardPageState extends State<DashboardPage> {
-  // --- LOGIC (Untouched) ---
+  // --- LOGIC ---
   final _supabase = Supabase.instance.client;
   String _username = "Patient";
   String? _avatarUrl;
   String _riskLevel = "Not yet assessed";
   bool _isLoading = true;
+  
+  // NEW: Connection Status Tracking
+  // null = no connection, 'pending' = waiting, 'active' = linked
+  String? _connectionStatus; 
+  final _codeController = TextEditingController();
+  bool _isLinking = false;
+
+  // Theme Palette (Moved here for access throughout the class)
+  final Color forestDark = const Color(0xFF283618); // Primary
+  final Color forestMed = const Color(0xFF606C38);  // Secondary
+  final Color mossGreen = const Color(0xFFADC178); // Accents
+  final Color paleGreen = const Color(0xFFDDE5B6); // Card Backgrounds
+  final Color softWhite = const Color(0xFFF8F9FA);
 
   @override
   void initState() {
@@ -774,49 +906,165 @@ class _DashboardPageState extends State<DashboardPage> {
     _fetchUserData();
   }
 
+  @override
+  void dispose() {
+    _codeController.dispose();
+    super.dispose();
+  }
+
   Future<void> _fetchUserData() async {
     try {
       final user = _supabase.auth.currentUser;
       if (user != null) {
-        final data = await _supabase
+        // 1. Fetch Profile Data
+        final profileData = await _supabase
             .from('profiles')
             .select('full_name, avatar_url, risk_level')
             .eq('id', user.id)
             .single();
 
-        setState(() {
-          _username = data['full_name'] ?? "Patient";
-          _avatarUrl = data['avatar_url'];
-          _riskLevel = data['risk_level'] ?? "Not yet assessed";
-          _isLoading = false;
-        });
+        // 2. Fetch Connection Status
+        final connectionData = await _supabase
+            .from('connections')
+            .select('status')
+            .eq('patient_id', user.id)
+            .maybeSingle();
+
+        if (mounted) {
+          setState(() {
+            _username = profileData['full_name'] ?? "Patient";
+            _avatarUrl = profileData['avatar_url'];
+            _riskLevel = profileData['risk_level'] ?? "Not yet assessed";
+            _connectionStatus = connectionData != null ? connectionData['status'] : null;
+            _isLoading = false;
+          });
+        }
       }
     } catch (e) {
       debugPrint('Error fetching dashboard data: $e');
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  // --- NEW: CLINIC CODE LOGIC ---
+  Future<void> _submitClinicCode() async {
+    if (_codeController.text.trim().isEmpty) return;
+
+    setState(() => _isLinking = true);
+    final code = _codeController.text.trim();
+    final user = _supabase.auth.currentUser;
+
+    try {
+      // 1. Find Doctor by Code
+      final doctor = await _supabase
+          .from('profiles')
+          .select('id, full_name')
+          .eq('clinic_code', code)
+          .eq('role', 'doctor')
+          .maybeSingle();
+
+      if (doctor == null) {
+        _showToast("Invalid Clinic Code. Please check again.", Colors.redAccent);
+        setState(() => _isLinking = false);
+        return;
+      }
+
+      // 2. Create Connection Request
+      await _supabase.from('connections').insert({
+        'patient_id': user!.id,
+        'doctor_id': doctor['id'],
+        'status': 'pending', // Pending Doctor Approval
+      });
+
+      // 3. Update UI
+      if (mounted) {
+        setState(() {
+          _connectionStatus = 'pending';
+          _isLinking = false;
+        });
+        Navigator.pop(context); // Close dialog
+        _showToast("Request sent to Dr. ${doctor['full_name']}!", const Color(0xFF606C38));
+      }
+
+    } catch (e) {
+      debugPrint("Linking Error: $e");
+      _showToast("Error linking to clinic: $e", Colors.redAccent);
+      setState(() => _isLinking = false);
+    }
+  }
+
+  void _showClinicCodeDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text("Enter Clinic Code", style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              "Please enter the code provided by your doctor in Carmona (e.g., CMC-001).",
+              style: TextStyle(fontSize: 14, color: Colors.grey),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _codeController,
+              decoration: InputDecoration(
+                hintText: "Clinic Code",
+                filled: true,
+                fillColor: const Color(0xFFF9FAFB),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide.none,
+                ),
+                prefixIcon: const Icon(Icons.qr_code, color: Color(0xFF606C38)),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF606C38),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: _isLinking ? null : _submitClinicCode,
+            child: _isLinking 
+              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+              : const Text("Connect", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showToast(String msg, Color bg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg), backgroundColor: bg, behavior: SnackBarBehavior.floating),
+    );
+  }
+
+  // --- UI BUILD ---
   @override
   Widget build(BuildContext context) {
-    // Enhanced Green Palette
-    const Color forestDark = Color(0xFF283618); // Primary
-    const Color forestMed = Color(0xFF606C38);  // Secondary
-    const Color mossGreen = Color(0xFFADC178); // Accents
-    const Color paleGreen = Color(0xFFDDE5B6); // Card Backgrounds
-    const Color softWhite = Color(0xFFF8F9FA);
-
     return Scaffold(
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        elevation: 0,
+        // CHANGED: Added drop shadow (elevation + shadowColor)
+        elevation: 4,
+        shadowColor: Colors.black.withOpacity(0.05),
+        surfaceTintColor: Colors.white, // Keeps the background white
         automaticallyImplyLeading: false,
         title: Row(
           children: [
             _buildLogo(size: 32),
             const SizedBox(width: 10),
-            const Text('TEREA', 
+            Text('TEREA', 
               style: TextStyle(fontWeight: FontWeight.w900, color: forestDark, letterSpacing: 1.1)
             )
           ],
@@ -836,7 +1084,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 radius: 18,
                 backgroundColor: paleGreen,
                 backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
-                child: _avatarUrl == null ? const Icon(Icons.person, size: 20, color: forestDark) : null,
+                child: _avatarUrl == null ? Icon(Icons.person, size: 20, color: forestDark) : null,
               ),
             ),
           )
@@ -849,7 +1097,7 @@ class _DashboardPageState extends State<DashboardPage> {
           Positioned(bottom: 100, left: -50, child: _buildBlob(250, forestMed)),
           
           _isLoading 
-            ? const Center(child: CircularProgressIndicator(color: forestMed))
+            ? Center(child: CircularProgressIndicator(color: forestMed))
             : RefreshIndicator(
                 onRefresh: _fetchUserData,
                 color: forestMed,
@@ -861,18 +1109,28 @@ class _DashboardPageState extends State<DashboardPage> {
                     children: [
                       Text(
                         'Hello, $_username', 
-                        style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: forestDark, letterSpacing: -0.5)
+                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: forestDark, letterSpacing: -0.5)
                       ),
-                      const Text(
+                      Text(
                         'How are you feeling today?', 
                         style: TextStyle(color: forestMed, fontSize: 16, fontWeight: FontWeight.w600)
                       ),
                       const SizedBox(height: 25),
+
+                      // --- NEW: CONNECTION STATUS CARDS ---
+                      if (_connectionStatus == null) ...[
+                        _buildConnectCard(),
+                        const SizedBox(height: 20),
+                      ] else if (_connectionStatus == 'pending') ...[
+                        _buildPendingCard(),
+                        const SizedBox(height: 20),
+                      ],
+                      // ------------------------------------
                       
                       _buildTreatmentBanner(),
                       
                       const SizedBox(height: 35),
-                      const Text(
+                      Text(
                         'QUICK ACTIONS', 
                         style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: forestMed, letterSpacing: 1.5)
                       ),
@@ -903,42 +1161,150 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildTreatmentBanner() {
-    Color bannerColor = const Color(0xFF606C38);
-    if (_riskLevel.toLowerCase().contains("high")) bannerColor = const Color(0xFFD90429);
-    if (_riskLevel.toLowerCase().contains("medium")) bannerColor = const Color(0xFFF9C74F);
-    if (_riskLevel.toLowerCase().contains("low")) bannerColor = const Color(0xFF43AA8B);
-
+  // --- NEW: WIDGETS FOR CONNECTION ---
+  Widget _buildConnectCard() {
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: bannerColor,
+        color: const Color(0xFF283618), // Dark Forest
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF283618).withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+                child: const Icon(Icons.link_rounded, color: Colors.white, size: 24),
+              ),
+              const SizedBox(width: 12),
+              const Text("Verified Treatment", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Text(
+            "Link with your Carmona doctor to unlock your full Medication Diary.",
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          const SizedBox(height: 15),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: _showClinicCodeDialog,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.white,
+                foregroundColor: const Color(0xFF283618),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              child: const Text("Enter Clinic Code", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPendingCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF9C74F), // Amber/Yellow
+        borderRadius: BorderRadius.circular(24),
+      ),
+      child: Row(
+        children: const [
+          Icon(Icons.hourglass_top_rounded, color: Color(0xFF283618), size: 30),
+          SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text("Approval Pending", style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold, fontSize: 15)),
+                Text("Waiting for your doctor to verify your request.", style: TextStyle(color: Color(0xFF283618), fontSize: 12)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- UPDATED TREATMENT BANNER ---
+  Widget _buildTreatmentBanner() {
+    // 1. Determine if Not Yet Assessed
+    bool isNotAssessed = _riskLevel == "Not yet assessed";
+    String displayText = isNotAssessed ? "Not Yet Tested" : _riskLevel;
+
+    // 2. Set Colors based on State
+    Color bgColor = const Color(0xFF606C38); // Default
+    if (_riskLevel.toLowerCase().contains("high")) bgColor = const Color.fromARGB(222, 203, 5, 38);
+    else if (_riskLevel.toLowerCase().contains("medium")) bgColor = const Color(0xFFF9C74F);
+    else if (_riskLevel.toLowerCase().contains("low")) bgColor = const Color(0xFF43AA8B);
+
+    // 3. Define Decoration (Gradient for Not Assessed, Solid for Risks)
+    BoxDecoration boxDecoration;
+    if (isNotAssessed) {
+      boxDecoration = BoxDecoration(
+        // Light Green Gradient
+        gradient: LinearGradient(
+          colors: [paleGreen, Colors.white], // Light green to white gradience
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: bannerColor.withOpacity(0.4), 
+            color: paleGreen.withOpacity(0.5), 
             blurRadius: 20, 
             offset: const Offset(0, 10)
           )
         ],
-      ),
+      );
+    } else {
+      boxDecoration = BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: bgColor.withOpacity(0.4), 
+            blurRadius: 20, 
+            offset: const Offset(0, 10)
+          )
+        ],
+      );
+    }
+
+    // 4. Text Colors
+    Color titleColor = isNotAssessed ? forestDark : Colors.white;
+    Color subtitleColor = isNotAssessed ? forestDark.withOpacity(0.7) : Colors.white70;
+    Color iconColor = isNotAssessed ? forestDark : Colors.white;
+    Color iconBgColor = isNotAssessed ? forestDark.withOpacity(0.1) : Colors.white.withOpacity(0.25);
+
+    return Container(
+      padding: const EdgeInsets.all(22),
+      decoration: boxDecoration,
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: Colors.white.withOpacity(0.25), shape: BoxShape.circle),
-            child: const Icon(Icons.monitor_heart_rounded, color: Colors.white, size: 30),
+            decoration: BoxDecoration(color: iconBgColor, shape: BoxShape.circle),
+            child: Icon(Icons.monitor_heart_rounded, color: iconColor, size: 30),
           ),
           const SizedBox(width: 15),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Treatment Status', 
-                  style: TextStyle(color: Colors.white70, fontWeight: FontWeight.bold, fontSize: 13)
+                Text('Treatment Status', 
+                  style: TextStyle(color: subtitleColor, fontWeight: FontWeight.bold, fontSize: 13)
                 ),
-                Text(_riskLevel, 
-                  style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w900)
+                Text(displayText, 
+                  style: TextStyle(color: titleColor, fontSize: 20, fontWeight: FontWeight.w900)
                 ),
               ],
             ),
@@ -978,14 +1344,14 @@ class _DashboardPageState extends State<DashboardPage> {
                     color: Colors.white.withOpacity(0.6), 
                     shape: BoxShape.circle,
                     boxShadow: [
-                       BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)
+                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)
                     ]
                   ),
                   child: Icon(icon, color: iconColor, size: 26),
                 ),
                 const SizedBox(height: 15),
                 Text(title, 
-                  style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: Color(0xFF283618))
+                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: forestDark)
                 ),
                 const SizedBox(height: 4),
                 Text(subtitle, 
@@ -1008,7 +1374,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildLogo({required double size}) {
-    return Icon(Icons.eco_rounded, color: const Color(0xFF283618), size: size);
+    return Icon(Icons.eco_rounded, color: forestDark, size: size);
   }
 
   Widget _buildBottomNav(int index, BuildContext context) {
@@ -1021,11 +1387,10 @@ class _DashboardPageState extends State<DashboardPage> {
       child: BottomNavigationBar(
         currentIndex: index,
         onTap: (int tappedIndex) {
-          if (tappedIndex == index) return; // Already on this page
+          if (tappedIndex == index) return; 
           
           switch (tappedIndex) {
             case 0:
-              // Home is usually the current page, but can be reset here
               Navigator.pushReplacementNamed(context, '/dashboard');
               break;
             case 1:
@@ -1039,7 +1404,7 @@ class _DashboardPageState extends State<DashboardPage> {
               break;
           }
         },
-        selectedItemColor: const Color(0xFF283618),
+        selectedItemColor: forestDark,
         unselectedItemColor: Colors.grey.shade500,
         type: BottomNavigationBarType.fixed,
         backgroundColor: Colors.white,
@@ -1067,12 +1432,16 @@ class AssessmentPage extends StatefulWidget {
 class _AssessmentPageState extends State<AssessmentPage> {
   int currentIndex = 0;
   int riskScore = 0;
+
+  // NEW: Track if a critical symptom is present
+  bool hasRedFlag = false;
+
   String? selected;
   bool _showError = false;
 
   final List<Map<String, dynamic>> questions = [
     {"q": "Do you have a persistent cough lasting more than 2 weeks?", "weight": 3},
-    {"q": "Have you noticed blood in your phlegm or mucus?", "weight": 5},
+    {"q": "Have you noticed blood in your phlegm or mucus?", "weight": 5}, // Index 1: RED FLAG
     {"q": "Have you experienced unexplained weight loss recently?", "weight": 2},
     {"q": "Do you suffer from frequent night sweats?", "weight": 2},
     {"q": "Do you have persistent chest pain or pain when breathing?", "weight": 2},
@@ -1085,14 +1454,74 @@ class _AssessmentPageState extends State<AssessmentPage> {
     {"q": "Do you smoke or have a history of heavy tobacco use?", "weight": 1},
   ];
 
+  // Theme Colors
+  final Color forestDark = const Color(0xFF283618);
+  final Color forestMed = const Color(0xFF606C38);
+  final Color mossGreen = const Color(0xFFADC178);
+  final Color paleGreen = const Color(0xFFDDE5B6);
+
+  @override
+  void initState() {
+    super.initState();
+    // SHOW POP-UP ON LOAD
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _showStartDialog();
+    });
+  }
+
+  Future<void> _showStartDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // User must tap button!
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Start Assessment', style: TextStyle(color: forestDark, fontWeight: FontWeight.bold)),
+          content: const Text(
+            'This assessment will ask you a series of questions to determine your risk level for Tuberculosis. Please answer honestly.',
+            style: TextStyle(color: Colors.black87),
+          ),
+          actions: <Widget>[
+             TextButton(
+              child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog
+                Navigator.of(context).pop(); // Go back to Home
+              },
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: forestMed,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Start Now', style: TextStyle(color: Colors.white)),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close dialog and start
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _handleNext() {
     if (selected == null) {
       setState(() => _showError = true);
       return;
     }
+
+    // LOGIC UPDATE: Accumulate score and check for Red Flags
     if (selected == "Yes") {
       riskScore += (questions[currentIndex]['weight'] as int);
+
+      // If the current question is "Blood in phlegm" (Index 1), mark as Red Flag
+      if (currentIndex == 1) {
+        hasRedFlag = true;
+      }
     }
+
     if (currentIndex < questions.length - 1) {
       setState(() {
         currentIndex++;
@@ -1100,14 +1529,58 @@ class _AssessmentPageState extends State<AssessmentPage> {
         _showError = false;
       });
     } else {
-      _calculateAndNavigate();
+      // UX UPDATE: Show confirmation dialog before calculating
+      _showConfirmationDialog();
     }
+  }
+
+  Future<void> _showConfirmationDialog() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // User must tap button!
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Submit Assessment?', style: TextStyle(color: forestDark, fontWeight: FontWeight.bold)),
+          content: const Text(
+            'Are you sure your answers are accurate? This will be used to determine your risk level.',
+            style: TextStyle(color: Colors.black87),
+          ),
+          actions: <Widget>[
+            TextButton(
+              child: Text('Review', style: TextStyle(color: forestMed)),
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+            ),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: forestMed,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+              child: const Text('Submit', style: TextStyle(color: Colors.white)),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _calculateAndNavigate(); // Proceed to calculation
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _calculateAndNavigate() async {
     String finalRisk = "Low Risk";
-    if (riskScore >= 12) finalRisk = "High Risk";
-    else if (riskScore >= 6) finalRisk = "Medium Risk";
+
+    // LOGIC UPDATE: Automatic High Risk if Red Flag is present
+    // Otherwise, use the score threshold
+    if (hasRedFlag || riskScore >= 12) {
+      finalRisk = "High Risk";
+    } else if (riskScore >= 6) {
+      finalRisk = "Medium Risk";
+    }
 
     try {
       final user = Supabase.instance.client.auth.currentUser;
@@ -1122,15 +1595,10 @@ class _AssessmentPageState extends State<AssessmentPage> {
     }
 
     if (mounted) {
-      // Navigates to the modern result page and passes the score
+      // Navigates to the result page
       Navigator.pushReplacementNamed(context, '/result', arguments: riskScore);
     }
   }
-
-  final Color forestDark = const Color(0xFF283618);
-  final Color forestMed = const Color(0xFF606C38);
-  final Color mossGreen = const Color(0xFFADC178);
-  final Color paleGreen = const Color(0xFFDDE5B6);
 
   @override
   Widget build(BuildContext context) {
@@ -1139,21 +1607,41 @@ class _AssessmentPageState extends State<AssessmentPage> {
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(25, 60, 25, 30),
+            padding: const EdgeInsets.fromLTRB(25, 50, 25, 30), // Adjusted top padding
             decoration: BoxDecoration(
               color: forestDark,
               borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
             ),
             child: Column(
               children: [
+                // Header Row with Return Button
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
+                    // Return Button
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
+                      onPressed: () => Navigator.pop(context), // Go back to dashboard
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                     const Text('TB Risk Assessment', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    Text('Step ${currentIndex + 1}/${questions.length}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                    // Empty SizedBox to balance the row visually
+                    const SizedBox(width: 20),
                   ],
                 ),
+                
                 const SizedBox(height: 20),
+                
+                Row(
+                   mainAxisAlignment: MainAxisAlignment.end,
+                   children: [
+                      Text('Step ${currentIndex + 1}/${questions.length}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
+                   ],
+                ),
+                
+                const SizedBox(height: 8),
+
                 LinearProgressIndicator(
                   value: (currentIndex + 1) / questions.length,
                   color: mossGreen,
@@ -1221,7 +1709,7 @@ class _AssessmentPageState extends State<AssessmentPage> {
   }
 }
 
-// --- 6. MEDS PAGE (CRUD + MULTI-VIEW CALENDAR) ---
+// --- 6. MEDS PAGE (CRUD + MULTI-VIEW CALENDAR + DIARY LOCK) ---
 class MedsPage extends StatefulWidget {
   const MedsPage({super.key});
 
@@ -1236,7 +1724,10 @@ class _MedsPageState extends State<MedsPage> {
   String _viewType = 'Week';
   int _selectedIndex = 2; // Defaulting to "Meds" tab
 
-  // Define the Theme Colors based on your screenshots
+  // NEW: Track Connection Status ('active', 'pending', or null)
+  String? _connectionStatus;
+
+  // Define the Theme Colors
   final Color primaryGreen = const Color(0xFF2D3B1E); // Dark Forest
   final Color accentGreen = const Color(0xFF606C38);  // Olive
   final Color lightBg = const Color(0xFFF9F9F7);      // Off-white background
@@ -1245,30 +1736,87 @@ class _MedsPageState extends State<MedsPage> {
   @override
   void initState() {
     super.initState();
-    _fetchMeds();
+    _fetchData();
   }
 
-  // --- DATA FETCHING ---
-  Future<void> _fetchMeds() async {
+  // --- DATA FETCHING (Updated to check Connection) ---
+  Future<void> _fetchData() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
-      final data = await Supabase.instance.client
+      // 1. Check Connection Status
+      final connectionData = await Supabase.instance.client
+          .from('connections')
+          .select('status')
+          .eq('patient_id', user.id)
+          .maybeSingle();
+
+      // 2. Fetch Meds
+      final medsData = await Supabase.instance.client
           .from('medications')
           .select()
           .eq('user_id', user.id);
 
       if (mounted) {
         setState(() {
-          myMeds = data as List<dynamic>;
+          _connectionStatus = connectionData != null ? connectionData['status'] : null;
+          myMeds = medsData as List<dynamic>;
           _isLoading = false;
         });
       }
     } catch (e) {
-      debugPrint("Error fetching meds: $e");
+      debugPrint("Error fetching data: $e");
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  // --- NEW: LOCK LOGIC HANDLER ---
+  void _handleAddNewMed() {
+    // Only allow adding meds if status is 'active'
+    if (_connectionStatus == 'active') {
+      _showMedDialog();
+    } else {
+      _showLockDialog();
+    }
+  }
+
+  void _showLockDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: surfaceWhite,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: Row(
+          children: [
+            Icon(Icons.lock_outline_rounded, color: primaryGreen),
+            const SizedBox(width: 10),
+            Text("Diary Locked", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
+          ],
+        ),
+        content: const Text(
+          "To ensure your safety, the Medication Diary is locked until you link with your doctor.\n\nPlease go to the Dashboard and enter the Clinic Code provided by your healthcare provider in Carmona.",
+          style: TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Cancel", style: TextStyle(color: Colors.grey[600])),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentGreen,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/dashboard'); // Redirect to enter code
+            },
+            child: const Text("Go to Dashboard", style: TextStyle(color: Colors.white)),
+          )
+        ],
+      ),
+    );
   }
 
   // --- CRUD OPERATIONS ---
@@ -1299,7 +1847,7 @@ class _MedsPageState extends State<MedsPage> {
       } else {
         await Supabase.instance.client.from('medications').update(medData).eq('id', medId);
       }
-      _fetchMeds();
+      _fetchData();
     } catch (e) {
       debugPrint("Error saving med: $e");
     }
@@ -1308,7 +1856,7 @@ class _MedsPageState extends State<MedsPage> {
   Future<void> _deleteMed(String medId) async {
     try {
       await Supabase.instance.client.from('medications').delete().eq('id', medId);
-      _fetchMeds();
+      _fetchData();
     } catch (e) {
       debugPrint("Error deleting med: $e");
     }
@@ -1320,7 +1868,7 @@ class _MedsPageState extends State<MedsPage> {
           .from('medications')
           .update({'is_taken': !currentValue})
           .eq('id', medId);
-      _fetchMeds();
+      _fetchData();
     } catch (e) {
       debugPrint("Error toggling med: $e");
     }
@@ -1446,7 +1994,6 @@ class _MedsPageState extends State<MedsPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        // Added Return Button
         leading: IconButton(
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen),
           onPressed: () => Navigator.of(context).pop(),
@@ -1492,13 +2039,23 @@ class _MedsPageState extends State<MedsPage> {
             ),
       floatingActionButton: FloatingActionButton(
         backgroundColor: primaryGreen,
-        onPressed: () => _showMedDialog(),
+        // CHANGED: Use the handler instead of showing dialog directly
+        onPressed: _handleAddNewMed, 
         child: const Icon(Icons.add, color: Colors.white),
       ),
-      // Added Bottom Navigation Bar
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _selectedIndex,
-        onTap: (index) => setState(() => _selectedIndex = index),
+        onTap: (index) {
+          if (index == _selectedIndex) return;
+          switch (index) {
+             case 0: Navigator.pushReplacementNamed(context, '/dashboard'); break;
+             case 1: Navigator.pushNamed(context, '/assess'); break;
+             // case 2 is current
+             case 3: Navigator.pushNamed(context, '/followup'); break;
+             case 4: Navigator.pushNamed(context, '/chat'); break;
+          }
+          setState(() => _selectedIndex = index);
+        },
         type: BottomNavigationBarType.fixed,
         backgroundColor: surfaceWhite,
         selectedItemColor: accentGreen,
@@ -1701,7 +2258,8 @@ class _MedsPageState extends State<MedsPage> {
     );
   }
 }
-//FOLLOW UP TOHHH//
+
+// --- 8. FOLLOW-UP PAGE (SHARED CALENDAR) ---
 class FollowUpPage extends StatefulWidget {
   const FollowUpPage({super.key});
 
@@ -1718,6 +2276,9 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   List<Map<String, dynamic>> _doctorNotes = [];
   List<Map<String, dynamic>> _appointments = [];
+  
+  // NEW: Store linked doctor info
+  String? _linkedDoctorId;
 
   // Theme Palette
   final Color kPrimaryGreen = const Color(0xFF283618);
@@ -1734,6 +2295,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   Future<void> _loadAllData() async {
     try {
+      await _fetchLinkedDoctor(); // Get the doctor ID first
       await Future.wait([
         _fetchStreak(),
         _fetchNotes(),
@@ -1746,10 +2308,33 @@ class _FollowUpPageState extends State<FollowUpPage> {
     }
   }
 
+  // NEW: Fetch Linked Doctor ID
+  Future<void> _fetchLinkedDoctor() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+      
+      final data = await _supabase
+          .from('connections')
+          .select('doctor_id')
+          .eq('patient_id', user.id)
+          .eq('status', 'active')
+          .maybeSingle();
+
+      if (data != null) {
+        _linkedDoctorId = data['doctor_id'];
+      }
+    } catch (e) {
+      debugPrint('Error fetching linked doctor: $e');
+    }
+  }
+
   Future<void> _fetchStreak() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
       if (userId == null) return;
+      // Using a simpler query if RPC isn't set up yet, or keep RPC if you have it
+      // For now, assuming RPC exists as per your code
       final response = await _supabase.rpc('get_medication_streak', params: {'p_user_id': userId});
       if (mounted) setState(() => _streakDays = response as int);
     } catch (e) {
@@ -1802,7 +2387,15 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   Future<void> _fetchAppointments() async {
     try {
-      final data = await _supabase.from('appointments').select().order('appointment_date', ascending: true);
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      final data = await _supabase
+          .from('appointments')
+          .select()
+          .eq('user_id', user.id) // Filter by current user
+          .order('appointment_date', ascending: true);
+          
       if (mounted) setState(() => _appointments = List<Map<String, dynamic>>.from(data));
     } catch (e) {
       debugPrint('Appointments Fetch Error: $e');
@@ -1891,13 +2484,21 @@ class _FollowUpPageState extends State<FollowUpPage> {
                       setModalState(() => isSaving = true);
                       try {
                         final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00';
-                        await _supabase.from('appointments').insert({
+                        
+                        // NEW: Include doctor_id if linked
+                        final Map<String, dynamic> appointmentData = {
                           'user_id': _supabase.auth.currentUser!.id,
                           'doctor_name': docController.text,
                           'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!),
                           'appointment_time': timeString,
                           'location': locController.text,
-                        });
+                        };
+
+                        if (_linkedDoctorId != null) {
+                          appointmentData['doctor_id'] = _linkedDoctorId; // Link appointment to doctor
+                        }
+
+                        await _supabase.from('appointments').insert(appointmentData);
                         await _fetchAppointments();
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
@@ -2570,6 +3171,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 }
+
 // --- 10. RISK RESULT PAGE ---
 class RiskResultPage extends StatefulWidget {
   const RiskResultPage({super.key});
@@ -2586,8 +3188,15 @@ class _RiskResultPageState extends State<RiskResultPage> {
   final Color surfaceWhite = Colors.white;
 
   final _supabase = Supabase.instance.client;
+  bool _hasSaved = false; // Prevent double saving
+
+  @override
+  void initState() {
+    super.initState();
+  }
 
   Future<void> _saveToHistory(int score, String risk) async {
+    if (_hasSaved) return; // Prevent duplicates in this session
     try {
       final user = _supabase.auth.currentUser;
       if (user != null) {
@@ -2595,6 +3204,9 @@ class _RiskResultPageState extends State<RiskResultPage> {
           'user_id': user.id,
           'score': score,
           'risk_level': risk,
+        });
+        setState(() {
+          _hasSaved = true;
         });
       }
     } catch (e) {
@@ -2615,6 +3227,9 @@ class _RiskResultPageState extends State<RiskResultPage> {
             pw.Text("Result: $label"),
             pw.Text("Score: $score"),
             pw.Text("Date: ${DateTime.now().toString().split(' ')[0]}"),
+            pw.SizedBox(height: 30),
+            pw.Text("Note: This is a screening tool, not a clinical diagnosis.",
+                style: const pw.TextStyle(fontSize: 10)),
           ],
         ),
       ),
@@ -2622,13 +3237,39 @@ class _RiskResultPageState extends State<RiskResultPage> {
     await Printing.layoutPdf(onLayout: (format) async => pdf.save());
   }
 
+  // Helper for dynamic recommendations
+  Map<String, String> _getRecommendation(String risk) {
+    switch (risk) {
+      case "HIGH RISK":
+        return {
+          "title": "Immediate Action Required",
+          "desc": "Please visit your nearest health center for a GeneXpert/Sputum test immediately."
+        };
+      case "MEDIUM RISK":
+        return {
+          "title": "Consultation Advised",
+          "desc": "Schedule a check-up with a doctor to discuss your persistent symptoms."
+        };
+      default:
+        return {
+          "title": "Stay Vigilant",
+          "desc": "Continue to monitor your health and maintain a healthy lifestyle."
+        };
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final int score = (ModalRoute.of(context)!.settings.arguments as int? ?? 0);
     String riskLabel = score >= 12 ? "HIGH RISK" : (score >= 6 ? "MEDIUM RISK" : "LOW RISK");
     Color riskColor = score >= 12
-        ? const Color(0xFFD9534F)
-        : (score >= 6 ? const Color(0xFFBC6C25) : const Color(0xFF606C38));
+        ? const Color(0xFFD9534F) // Red for High
+        : (score >= 6 ? const Color(0xFFBC6C25) : const Color(0xFF606C38)); // Orange for Med, Green for Low
+
+    // Define Logic Flags based on Risk
+    bool showFacilitiesBtn = (riskLabel == "HIGH RISK" || riskLabel == "MEDIUM RISK");
+
+    final rec = _getRecommendation(riskLabel);
 
     return Scaffold(
       backgroundColor: lightBg,
@@ -2640,7 +3281,7 @@ class _RiskResultPageState extends State<RiskResultPage> {
               painter: BlobPainter(color: accentGreen.withOpacity(0.05)),
             ),
           ),
-          
+
           SafeArea(
             child: SingleChildScrollView(
               padding: const EdgeInsets.symmetric(horizontal: 25, vertical: 20),
@@ -2706,15 +3347,37 @@ class _RiskResultPageState extends State<RiskResultPage> {
                                   fontSize: 15)),
                         ),
                         const SizedBox(height: 25),
+                        
+                        // Suggestion Block
+                        Container(
+                          padding: const EdgeInsets.all(15),
+                          decoration: BoxDecoration(
+                            color: riskColor.withOpacity(0.05),
+                            borderRadius: BorderRadius.circular(15),
+                            border: Border.all(color: riskColor.withOpacity(0.2)),
+                          ),
+                          child: Column(
+                            children: [
+                              Text(rec["title"]!, 
+                                  style: TextStyle(fontWeight: FontWeight.bold, color: riskColor)),
+                              const SizedBox(height: 5),
+                              Text(rec["desc"]!, 
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(fontSize: 13, color: primaryGreen.withOpacity(0.8))),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 25),
                         Divider(color: Colors.grey.withOpacity(0.2)),
                         const SizedBox(height: 20),
                         Text(
-                          "This assessment is based on your reported symptoms. Please consult a qualified healthcare professional for a formal medical diagnosis and further testing.",
+                          "This assessment is based on your reported symptoms. Please consult a qualified healthcare professional for a formal medical diagnosis.",
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               color: Colors.grey[600],
                               height: 1.5,
-                              fontSize: 13,
+                              fontSize: 12,
                               fontStyle: FontStyle.italic),
                         ),
                       ],
@@ -2736,25 +3399,30 @@ class _RiskResultPageState extends State<RiskResultPage> {
                   ),
                   const SizedBox(height: 30),
 
-                  // Main Action: Facilities
-                  _primaryBtn("View Nearby Facilities", () async {
-                    await _saveToHistory(score, riskLabel);
-                    Navigator.pushNamed(context, '/facilities');
-                  }),
-                  const SizedBox(height: 15),
-
-                  // Secondary Action: Retake
-                  _outlinedBtn("Retake Assessment", () {
-                    Navigator.pushReplacementNamed(context, '/assess');
-                  }, isSecondary: true),
+                  // --- CONDITIONAL BUTTON LOGIC ---
                   
+                  // 1. View Nearby Facilities (Only for High/Medium Risk)
+                  if (showFacilitiesBtn) ...[
+                    _primaryBtn("View Nearby Facilities", () async {
+                      await _saveToHistory(score, riskLabel);
+                      Navigator.pushNamed(context, '/facilities');
+                    }),
+                    const SizedBox(height: 15),
+                  ],
+
+                  // 2. Retake Assessment (Visible for ALL risks)
+                  _primaryBtn("Retake Assessment", () {
+                    Navigator.pushReplacementNamed(context, '/assess');
+                  }),
+
                   const SizedBox(height: 15),
 
-                  // Final Action: Home
-                  _outlinedBtn("Return to Dashboard", () async {
+                  // 3. Return to Dashboard (Visible for ALL risks)
+                  _primaryBtn("Return to Dashboard", () async {
                     await _saveToHistory(score, riskLabel);
                     Navigator.pushNamedAndRemoveUntil(context, '/home', (r) => false);
-                  }, isSecondary: false),
+                  }),
+
                   const SizedBox(height: 40),
                 ],
               ),
@@ -2790,6 +3458,7 @@ class _RiskResultPageState extends State<RiskResultPage> {
     );
   }
 
+  // Unified Button Style: Gradient Green Background, White Text
   Widget _primaryBtn(String text, VoidCallback onTap) {
     return Container(
       width: double.infinity,
@@ -2821,25 +3490,6 @@ class _RiskResultPageState extends State<RiskResultPage> {
       ),
     );
   }
-
-  Widget _outlinedBtn(String text, VoidCallback onTap, {required bool isSecondary}) {
-    return SizedBox(
-      width: double.infinity,
-      height: 60,
-      child: OutlinedButton(
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: isSecondary ? accentGreen : Colors.grey.shade300, width: 2),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        ),
-        onPressed: onTap,
-        child: Text(text,
-            style: TextStyle(
-                color: isSecondary ? accentGreen : Colors.grey[600],
-                fontWeight: FontWeight.bold,
-                fontSize: 16)),
-      ),
-    );
-  }
 }
 
 // Custom Painter for Background Blobs
@@ -2853,10 +3503,10 @@ class BlobPainter extends CustomPainter {
 
     // Top Right Blob
     canvas.drawCircle(Offset(size.width * 0.9, size.height * 0.1), 150, paint);
-    
+
     // Bottom Left Blob
     canvas.drawCircle(Offset(size.width * 0.1, size.height * 0.8), 200, paint);
-    
+
     // Small Center Blob
     canvas.drawCircle(Offset(size.width * 0.8, size.height * 0.5), 80, paint);
   }
