@@ -887,29 +887,62 @@ class _DashboardPageState extends State<DashboardPage> {
   String _riskLevel = "Not yet assessed";
   bool _isLoading = true;
   
-  // NEW: Connection Status Tracking
-  // null = no connection, 'pending' = waiting, 'active' = linked
+  // CONNECTION TRACKING
+  // null = no connection, 'pending' = waiting, 'active' = Verified
   String? _connectionStatus; 
+  String? _doctorName; 
+  
   final _codeController = TextEditingController();
   bool _isLinking = false;
 
-  // Theme Palette (Moved here for access throughout the class)
-  final Color forestDark = const Color(0xFF283618); // Primary
-  final Color forestMed = const Color(0xFF606C38);  // Secondary
-  final Color mossGreen = const Color(0xFFADC178); // Accents
-  final Color paleGreen = const Color(0xFFDDE5B6); // Card Backgrounds
+  // Theme Palette
+  final Color forestDark = const Color(0xFF283618); 
+  final Color forestMed = const Color(0xFF606C38);  
+  final Color mossGreen = const Color(0xFFADC178); 
+  final Color paleGreen = const Color(0xFFDDE5B6); 
   final Color softWhite = const Color(0xFFF8F9FA);
 
   @override
   void initState() {
     super.initState();
     _fetchUserData();
+    _setupRealtimeListener();
   }
 
   @override
   void dispose() {
     _codeController.dispose();
     super.dispose();
+  }
+
+  // UPDATED: Listen to BOTH 'connections' (for Verified status) and 'profiles' (for Risk Level)
+  void _setupRealtimeListener() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    // 1. Connection Updates
+    _supabase
+      .channel('patient_connections')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'connections',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+        callback: (payload) => _fetchUserData(),
+      )
+      .subscribe();
+
+    // 2. Profile Updates (Risk Level changes)
+    _supabase
+      .channel('patient_profile')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.update,
+        schema: 'public',
+        table: 'profiles',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: user.id),
+        callback: (payload) => _fetchUserData(),
+      )
+      .subscribe();
   }
 
   Future<void> _fetchUserData() async {
@@ -923,10 +956,10 @@ class _DashboardPageState extends State<DashboardPage> {
             .eq('id', user.id)
             .single();
 
-        // 2. Fetch Connection Status
+        // 2. Fetch Connection Status & Doctor Name
         final connectionData = await _supabase
             .from('connections')
-            .select('status')
+            .select('status, profiles!fk_doctor(full_name)') 
             .eq('patient_id', user.id)
             .maybeSingle();
 
@@ -935,7 +968,16 @@ class _DashboardPageState extends State<DashboardPage> {
             _username = profileData['full_name'] ?? "Patient";
             _avatarUrl = profileData['avatar_url'];
             _riskLevel = profileData['risk_level'] ?? "Not yet assessed";
-            _connectionStatus = connectionData != null ? connectionData['status'] : null;
+            
+            if (connectionData != null) {
+              _connectionStatus = connectionData['status'];
+              if (connectionData['profiles'] != null) {
+                _doctorName = connectionData['profiles']['full_name'];
+              }
+            } else {
+              _connectionStatus = null;
+            }
+            
             _isLoading = false;
           });
         }
@@ -946,7 +988,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
-  // --- NEW: CLINIC CODE LOGIC ---
+  // --- UPDATED CLINIC CODE LOGIC (Prevents Duplicates) ---
   Future<void> _submitClinicCode() async {
     if (_codeController.text.trim().isEmpty) return;
 
@@ -969,14 +1011,28 @@ class _DashboardPageState extends State<DashboardPage> {
         return;
       }
 
-      // 2. Create Connection Request
+      // 2. CHECK FOR EXISTING REQUEST (The Fix for Duplicates)
+      final existing = await _supabase
+          .from('connections')
+          .select()
+          .eq('patient_id', user!.id)
+          .eq('doctor_id', doctor['id'])
+          .maybeSingle();
+
+      if (existing != null) {
+        _showToast("You are already connected or pending with this doctor.", Colors.orange);
+        setState(() => _isLinking = false);
+        return;
+      }
+
+      // 3. Create Connection Request
       await _supabase.from('connections').insert({
-        'patient_id': user!.id,
+        'patient_id': user.id,
         'doctor_id': doctor['id'],
-        'status': 'pending', // Pending Doctor Approval
+        'status': 'pending', 
       });
 
-      // 3. Update UI
+      // 4. Update UI
       if (mounted) {
         setState(() {
           _connectionStatus = 'pending';
@@ -988,7 +1044,11 @@ class _DashboardPageState extends State<DashboardPage> {
 
     } catch (e) {
       debugPrint("Linking Error: $e");
-      _showToast("Error linking to clinic: $e", Colors.redAccent);
+      if (e.toString().contains("duplicate")) {
+         _showToast("You have already sent a request.", Colors.orange);
+      } else {
+         _showToast("Error linking to clinic: $e", Colors.redAccent);
+      }
       setState(() => _isLinking = false);
     }
   }
@@ -1055,10 +1115,9 @@ class _DashboardPageState extends State<DashboardPage> {
       backgroundColor: Colors.white,
       appBar: AppBar(
         backgroundColor: Colors.white,
-        // CHANGED: Added drop shadow (elevation + shadowColor)
         elevation: 4,
         shadowColor: Colors.black.withOpacity(0.05),
-        surfaceTintColor: Colors.white, // Keeps the background white
+        surfaceTintColor: Colors.white, 
         automaticallyImplyLeading: false,
         title: Row(
           children: [
@@ -1092,7 +1151,7 @@ class _DashboardPageState extends State<DashboardPage> {
       ),
       body: Stack(
         children: [
-          // Background Blobs for depth
+          // Background Blobs
           Positioned(top: -50, right: -30, child: _buildBlob(200, mossGreen)),
           Positioned(bottom: 100, left: -50, child: _buildBlob(250, forestMed)),
           
@@ -1117,15 +1176,18 @@ class _DashboardPageState extends State<DashboardPage> {
                       ),
                       const SizedBox(height: 25),
 
-                      // --- NEW: CONNECTION STATUS CARDS ---
+                      // --- CONNECTION STATUS LOGIC ---
                       if (_connectionStatus == null) ...[
                         _buildConnectCard(),
                         const SizedBox(height: 20),
                       ] else if (_connectionStatus == 'pending') ...[
                         _buildPendingCard(),
                         const SizedBox(height: 20),
+                      ] else if (_connectionStatus == 'active') ...[
+                        _buildVerifiedCard(),
+                        const SizedBox(height: 20),
                       ],
-                      // ------------------------------------
+                      // -------------------------------
                       
                       _buildTreatmentBanner(),
                       
@@ -1161,7 +1223,9 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // --- NEW: WIDGETS FOR CONNECTION ---
+  // --- WIDGETS ---
+  
+  // 1. NO CONNECTION
   Widget _buildConnectCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -1209,12 +1273,16 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // 2. PENDING
   Widget _buildPendingCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: const Color(0xFFF9C74F), // Amber/Yellow
         borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: Colors.orange.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))
+        ],
       ),
       child: Row(
         children: const [
@@ -1234,25 +1302,60 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // --- UPDATED TREATMENT BANNER ---
+  // 3. VERIFIED / ACTIVE
+  Widget _buildVerifiedCard() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: const Color(0xFF606C38), // Forest Medium (Success Green)
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(color: const Color(0xFF606C38).withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 6))
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
+            child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 28),
+          ),
+          const SizedBox(width: 15),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text("Verified Patient", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                const SizedBox(height: 4),
+                Text(
+                  _doctorName != null 
+                    ? "You are under the care of $_doctorName."
+                    : "You are officially linked to the clinic.", 
+                  style: const TextStyle(color: Colors.white70, fontSize: 12)
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // --- TREATMENT BANNER ---
   Widget _buildTreatmentBanner() {
-    // 1. Determine if Not Yet Assessed
     bool isNotAssessed = _riskLevel == "Not yet assessed";
     String displayText = isNotAssessed ? "Not Yet Tested" : _riskLevel;
 
-    // 2. Set Colors based on State
-    Color bgColor = const Color(0xFF606C38); // Default
+    Color bgColor = const Color(0xFF606C38);
     if (_riskLevel.toLowerCase().contains("high")) bgColor = const Color.fromARGB(222, 203, 5, 38);
     else if (_riskLevel.toLowerCase().contains("medium")) bgColor = const Color(0xFFF9C74F);
     else if (_riskLevel.toLowerCase().contains("low")) bgColor = const Color(0xFF43AA8B);
 
-    // 3. Define Decoration (Gradient for Not Assessed, Solid for Risks)
     BoxDecoration boxDecoration;
     if (isNotAssessed) {
       boxDecoration = BoxDecoration(
-        // Light Green Gradient
         gradient: LinearGradient(
-          colors: [paleGreen, Colors.white], // Light green to white gradience
+          colors: [paleGreen, Colors.white],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -1279,7 +1382,6 @@ class _DashboardPageState extends State<DashboardPage> {
       );
     }
 
-    // 4. Text Colors
     Color titleColor = isNotAssessed ? forestDark : Colors.white;
     Color subtitleColor = isNotAssessed ? forestDark.withOpacity(0.7) : Colors.white70;
     Color iconColor = isNotAssessed ? forestDark : Colors.white;
@@ -2259,8 +2361,6 @@ class _MedsPageState extends State<MedsPage> {
   }
 }
 
-// --- 8. FOLLOW-UP PAGE (SHARED CALENDAR) ---
-
 class FollowUpPage extends StatefulWidget {
   const FollowUpPage({super.key});
 
@@ -2273,16 +2373,20 @@ class _FollowUpPageState extends State<FollowUpPage> {
   bool _isLoading = true;
 
   // CONNECTION STATE
-  String? _connectionStatus; // 'active', 'pending', or null
+  String? _connectionStatus;
   String? _linkedDoctorId;
   String? _doctorName;
+  DateTime? _treatmentStartDate; 
 
   // DATA
   int _streakDays = 0;
   List<Map<String, dynamic>> _doctorNotes = [];
   List<Map<String, dynamic>> _appointments = [];
   
+  // CRUD INPUTS
   final TextEditingController _noteController = TextEditingController();
+  String _selectedCategory = 'Question'; 
+  final List<String> _categories = ['Question', 'Symptom', 'Side Effect', 'Other'];
 
   // THEME PALETTE
   final Color kPrimaryGreen = const Color(0xFF283618);
@@ -2295,44 +2399,88 @@ class _FollowUpPageState extends State<FollowUpPage> {
   void initState() {
     super.initState();
     _checkConnectionAndLoad();
+    _setupRealtimeListener();
   }
 
-  // 1. CHECK IF USER IS LINKED TO DOCTOR
+  @override
+  void dispose() {
+    _noteController.dispose();
+    super.dispose();
+  }
+
+  // --- REAL-TIME LISTENER ---
+  void _setupRealtimeListener() {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return;
+
+    _supabase
+      .channel('followup_sync')
+      // 1. Listen for Connection Status Changes (Approvals)
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'connections',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+        callback: (payload) => _checkConnectionAndLoad(),
+      )
+      // 2. Listen for Appointment Updates (Doctor marks as done)
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'appointments',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: user.id),
+        callback: (payload) => _fetchAppointments(), // Refresh list instantly
+      )
+      .subscribe();
+  }
+
+  // --- INIT DATA ---
   Future<void> _checkConnectionAndLoad() async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      // Check Connection Status
       final connectionData = await _supabase
           .from('connections')
-          .select('status, doctor_id, profiles:doctor_id(full_name)')
+          .select('status, created_at, doctor_id, profiles!fk_doctor(full_name)')
           .eq('patient_id', user.id)
           .maybeSingle();
+
+      // Fetch Profile for Start Date
+      final profileData = await _supabase
+          .from('profiles')
+          .select('treatment_start_date')
+          .eq('id', user.id)
+          .single();
 
       if (mounted) {
         setState(() {
           if (connectionData != null) {
             _connectionStatus = connectionData['status'];
             _linkedDoctorId = connectionData['doctor_id'];
-            // Safe access to nested profile data
+            
+            // Priority: Explicit Start Date > Connection Date > Today
+            if (profileData['treatment_start_date'] != null) {
+               _treatmentStartDate = DateTime.parse(profileData['treatment_start_date']);
+            } else {
+               _treatmentStartDate = DateTime.parse(connectionData['created_at']);
+            }
+            
             final doctorProfile = connectionData['profiles'] as Map<String, dynamic>?;
             _doctorName = doctorProfile?['full_name'];
           } else {
-            _connectionStatus = null; // No connection request sent
+            _connectionStatus = null;
           }
         });
       }
 
-      // Only load data if ACTIVE (Unlocked)
       if (_connectionStatus == 'active') {
         await Future.wait([
           _fetchStreak(),
-          _fetchNotes(),
+          _fetchNotes(), 
           _fetchAppointments(),
         ]);
       }
-
     } catch (e) {
       debugPrint('Init Error: $e');
     } finally {
@@ -2351,17 +2499,21 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   Future<void> _fetchNotes() async {
     try {
-      final data = await _supabase.from('doctor_notes').select().order('created_at', ascending: false);
+      final data = await _supabase.from('doctor_notes')
+          .select()
+          .eq('user_id', _supabase.auth.currentUser!.id)
+          .eq('is_checked', false) 
+          .order('created_at', ascending: false);
       if (mounted) setState(() => _doctorNotes = List<Map<String, dynamic>>.from(data));
     } catch (e) { debugPrint('Notes Error: $e'); }
   }
 
   Future<void> _fetchAppointments() async {
     try {
-      final data = await _supabase
-          .from('appointments')
+      final data = await _supabase.from('appointments')
           .select()
           .eq('user_id', _supabase.auth.currentUser!.id)
+          .neq('status', 'completed') // Filter out completed appointments
           .order('appointment_date', ascending: true);
       if (mounted) setState(() => _appointments = List<Map<String, dynamic>>.from(data));
     } catch (e) { debugPrint('Appt Error: $e'); }
@@ -2369,24 +2521,84 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   // --- CRUD OPERATIONS ---
   
-  // NOTES CRUD
   Future<void> _addNote() async {
     if (_noteController.text.isEmpty) return;
     final text = _noteController.text;
+    final category = _selectedCategory;
+    
     _noteController.clear();
+    setState(() => _selectedCategory = 'Question'); // Reset
+
     try {
       await _supabase.from('doctor_notes').insert({
         'note_text': text,
-        'user_id': _supabase.auth.currentUser!.id
+        'category': category, 
+        'user_id': _supabase.auth.currentUser!.id,
+        'is_checked': false
       });
       _fetchNotes();
     } catch (e) { debugPrint('Add Note Error: $e'); }
   }
 
-  Future<void> _toggleNote(int index, bool currentVal) async {
-    final noteId = _doctorNotes[index]['id'];
-    setState(() => _doctorNotes[index]['is_checked'] = !currentVal);
-    await _supabase.from('doctor_notes').update({'is_checked': !currentVal}).eq('id', noteId);
+  Future<void> _editNoteDialog(Map<String, dynamic> note) async {
+    final editController = TextEditingController(text: note['note_text']);
+    String editCategory = note['category'] ?? 'Question';
+
+    await showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text("Edit Note", style: TextStyle(color: kPrimaryGreen, fontWeight: FontWeight.bold)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Wrap(
+                spacing: 8,
+                children: _categories.map((cat) {
+                  final isSelected = editCategory == cat;
+                  return ChoiceChip(
+                    label: Text(cat),
+                    selected: isSelected,
+                    selectedColor: kSecondaryGreen,
+                    labelStyle: TextStyle(color: isSelected ? Colors.white : kPrimaryGreen, fontSize: 12),
+                    onSelected: (val) => setDialogState(() => editCategory = cat),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 15),
+              TextField(
+                controller: editController,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: "Update your note...",
+                  filled: true,
+                  fillColor: kSoftGrey,
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              onPressed: () async {
+                if (editController.text.isNotEmpty) {
+                  await _supabase.from('doctor_notes').update({
+                    'note_text': editController.text,
+                    'category': editCategory
+                  }).eq('id', note['id']);
+                  _fetchNotes();
+                  if (context.mounted) Navigator.pop(context);
+                }
+              }, 
+              child: const Text("Save Changes", style: TextStyle(color: Colors.white))
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteNote(String id) async {
@@ -2394,272 +2606,67 @@ class _FollowUpPageState extends State<FollowUpPage> {
     _fetchNotes();
   }
 
-  // APPOINTMENT CRUD (Delete & Upsert logic handled in modal)
+  Future<void> _toggleNote(int index) async {
+    setState(() {
+      _doctorNotes[index]['is_checked'] = true;
+    });
+
+    await Future.delayed(const Duration(milliseconds: 500));
+
+    final noteId = _doctorNotes[index]['id'];
+    await _supabase.from('doctor_notes').update({'is_checked': true}).eq('id', noteId);
+
+    if (mounted) {
+      setState(() {
+        _doctorNotes.removeAt(index);
+      });
+    }
+  }
+
   Future<void> _deleteAppointment(String id) async {
     await _supabase.from('appointments').delete().eq('id', id);
     _fetchAppointments();
   }
 
-  // --- MODALS ---
-
-  // Unified Modal for CREATE and UPDATE
-  void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) {
-    final isEditing = apptToEdit != null;
-    
-    // Pre-fill if editing, otherwise use defaults
-    final docController = TextEditingController(text: isEditing ? apptToEdit['doctor_name'] : (_doctorName ?? ""));
-    final locController = TextEditingController(text: isEditing ? apptToEdit['location'] : "");
-    
-    DateTime? selectedDate = isEditing ? DateTime.parse(apptToEdit['appointment_date']) : null;
-    TimeOfDay? selectedTime;
-    
-    if (isEditing) {
-      // Parse "HH:mm:ss" to TimeOfDay
-      final parts = apptToEdit['appointment_time'].toString().split(':');
-      selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-    }
-
-    bool isSaving = false;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: kWhite,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 25, right: 25, top: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
-              const SizedBox(height: 25),
-              Text(isEditing ? "Edit Visit" : "Schedule Visit", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)),
-              const SizedBox(height: 20),
-              
-              if (_doctorName != null && !isEditing)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 15),
-                  child: Row(children: [
-                    Icon(Icons.link, size: 16, color: kSecondaryGreen),
-                    const SizedBox(width: 5),
-                    Text("Linked to Dr. $_doctorName", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.bold))
-                  ]),
-                ),
-
-              _buildModernField(docController, "Doctor or Clinic Name", Icons.medical_services_outlined),
-              const SizedBox(height: 15),
-              _buildModernField(locController, "Location", Icons.location_on_outlined),
-              const SizedBox(height: 20),
-              Row(
-                children: [
-                  Expanded(
-                    child: _buildPickerTile(
-                      label: selectedDate == null ? "Select Date" : DateFormat('MMM dd, yyyy').format(selectedDate!),
-                      icon: Icons.calendar_month_rounded,
-                      onTap: () async {
-                        final picked = await showDatePicker(
-                          context: context,
-                          initialDate: selectedDate ?? DateTime.now(),
-                          firstDate: DateTime.now(),
-                          lastDate: DateTime(2030),
-                        );
-                        if (picked != null) setModalState(() => selectedDate = picked);
-                      },
-                    ),
-                  ),
-                  const SizedBox(width: 15),
-                  Expanded(
-                    child: _buildPickerTile(
-                      label: selectedTime == null ? "Select Time" : selectedTime!.format(context),
-                      icon: Icons.access_time_rounded,
-                      onTap: () async {
-                        final picked = await showTimePicker(context: context, initialTime: selectedTime ?? TimeOfDay.now());
-                        if (picked != null) setModalState(() => selectedTime = picked);
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 30),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: kPrimaryGreen,
-                    padding: const EdgeInsets.symmetric(vertical: 18),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  ),
-                  onPressed: isSaving ? null : () async {
-                    if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) {
-                      setModalState(() => isSaving = true);
-                      try {
-                        final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00';
-                        final Map<String, dynamic> appointmentData = {
-                          'user_id': _supabase.auth.currentUser!.id,
-                          'doctor_name': docController.text,
-                          'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!),
-                          'appointment_time': timeString,
-                          'location': locController.text,
-                        };
-                        
-                        if (_linkedDoctorId != null) appointmentData['doctor_id'] = _linkedDoctorId;
-
-                        if (isEditing) {
-                          // UPDATE
-                          await _supabase.from('appointments').update(appointmentData).eq('id', apptToEdit['id']);
-                        } else {
-                          // CREATE
-                          await _supabase.from('appointments').insert(appointmentData);
-                        }
-
-                        await _fetchAppointments();
-                        if (context.mounted) Navigator.pop(context);
-                      } catch (e) {
-                        setModalState(() => isSaving = false);
-                      }
-                    }
-                  },
-                  child: isSaving 
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                    : Text(isEditing ? "Update Appointment" : "Confirm Appointment", style: TextStyle(color: kWhite, fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(height: 40),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  // --- MAIN BUILD ---
+  // --- UI BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kWhite,
       appBar: AppBar(
-        backgroundColor: kWhite,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: kPrimaryGreen, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        backgroundColor: kWhite, elevation: 0, centerTitle: true,
+        leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: kPrimaryGreen, size: 20), onPressed: () => Navigator.of(context).pop()),
         title: Text('Follow-up Care', style: TextStyle(fontWeight: FontWeight.w900, color: kPrimaryGreen, fontSize: 20)),
       ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: kSecondaryGreen))
-          : _connectionStatus == 'active' 
-              ? _buildUnlockedContent() // Full Features
-              : _buildLockedState(),    // Journey Roadmap
+      body: _isLoading 
+        ? Center(child: CircularProgressIndicator(color: kSecondaryGreen)) 
+        : _connectionStatus == 'active' 
+            ? _buildUnlockedContent() 
+            : _buildLockedState(),
     );
   }
 
-  // --- LOCKED STATE (The Journey Roadmap) ---
-  Widget _buildLockedState() {
-    bool isPending = _connectionStatus == 'pending';
-
-    return Padding(
-      padding: const EdgeInsets.all(30),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: kCreamAccent, shape: BoxShape.circle),
-            child: Icon(isPending ? Icons.hourglass_top_rounded : Icons.lock_outline_rounded, size: 50, color: kPrimaryGreen),
-          ),
-          const SizedBox(height: 30),
-          Text(
-            isPending ? "Waiting for Approval" : "Feature Locked",
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            isPending 
-              ? "Your request is being reviewed by the clinic. You'll be notified soon."
-              : "Link with your doctor to coordinate visits and unlock your care plan.",
-            textAlign: TextAlign.center,
-            style: const TextStyle(color: Colors.grey, fontSize: 14),
-          ),
-          const SizedBox(height: 40),
-          
-          // JOURNEY ROADMAP CARD
-          Container(
-            padding: const EdgeInsets.all(25),
-            decoration: BoxDecoration(
-              color: kSoftGrey,
-              borderRadius: BorderRadius.circular(25),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("YOUR TREATMENT JOURNEY", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: kSecondaryGreen, letterSpacing: 1.2)),
-                const SizedBox(height: 25),
-                _buildStep("Account Created", true),
-                _buildStep("Risk Assessment", true),
-                _buildStep("Link to Clinic", isPending), // Active if pending
-                _buildStep("Unlock Follow-up & Diary", false, isLast: true),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 30),
-          if (!isPending)
-            ElevatedButton(
-              onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: kPrimaryGreen,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)
-              ),
-              child: const Text("Go to Dashboard to Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStep(String title, bool isActive, {bool isLast = false}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Column(
-          children: [
-            Icon(isActive ? Icons.check_circle : Icons.circle_outlined, color: isActive ? kPrimaryGreen : Colors.grey, size: 22),
-            if (!isLast) Container(height: 30, width: 2, color: isActive ? kPrimaryGreen : Colors.grey.withOpacity(0.3)),
-          ],
-        ),
-        const SizedBox(width: 15),
-        Text(title, style: TextStyle(
-          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
-          color: isActive ? kPrimaryGreen : Colors.grey,
-          fontSize: 15
-        )),
-      ],
-    );
-  }
-
-  // --- UNLOCKED CONTENT (Full Features) ---
   Widget _buildUnlockedContent() {
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('YOUR PROGRESS', style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-          const SizedBox(height: 12),
+          // 1. RECOVERY ROADMAP
+          _buildRecoveryRoadmap(), 
+          const SizedBox(height: 25),
+
+          // 2. STREAK CARD
           _buildStreakCard(),
           const SizedBox(height: 35),
           
+          // 3. APPOINTMENTS
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text("Upcoming Visits", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
               GestureDetector(
-                onTap: () => _showAppointmentModal(), // ADD NEW
+                onTap: () => _showAppointmentModal(),
                 child: Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(color: kSecondaryGreen, shape: BoxShape.circle, boxShadow: [BoxShadow(color: kSecondaryGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]),
@@ -2669,39 +2676,41 @@ class _FollowUpPageState extends State<FollowUpPage> {
             ],
           ),
           const SizedBox(height: 15),
-          
           if (_appointments.isEmpty) _buildEmptyState("No scheduled visits yet."),
-
           ..._appointments.map((appt) => _buildDismissibleWrapper(
-            id: appt['id'].toString(),
-            onDismiss: () => _deleteAppointment(appt['id'].toString()),
+            id: appt['id'].toString(), 
+            onDismiss: () => _deleteAppointment(appt['id'].toString()), 
             child: GestureDetector(
-              // TAP TO EDIT (UPDATE FEATURE)
               onTap: () => _showAppointmentModal(apptToEdit: appt),
-              child: _buildAppointmentCard(appt['doctor_name'], appt['appointment_date'], appt['appointment_time'], appt['location'] ?? ""),
-            ),
+              child: _buildAppointmentCard(appt['doctor_name'] ?? "Doctor", appt['appointment_date'], appt['appointment_time'] ?? "00:00", appt['location'] ?? "")
+            )
           )),
           
           const SizedBox(height: 40),
-          Row(
-            children: [
-              Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-              const Spacer(),
-              if (_doctorName != null) 
-                 Text("Shared with Dr. $_doctorName", style: TextStyle(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic)),
-            ],
-          ),
+          
+          // 4. DOCTOR NOTES
+          Row(children: [
+             Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+             const Spacer(),
+             if (_doctorName != null) Text("Shared with Dr. $_doctorName", style: TextStyle(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic)),
+          ]),
           const SizedBox(height: 15),
           
-          _buildNoteInput(),
+          _buildNoteInputArea(), 
           const SizedBox(height: 25),
+          
+          if (_doctorNotes.isEmpty) 
+             _buildEmptyState("No notes added yet."),
+
           ListView.builder(
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
+            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
             itemCount: _doctorNotes.length,
             itemBuilder: (context, index) {
               final note = _doctorNotes[index];
-              return _buildNoteTile(note, index);
+              return InkWell(
+                onLongPress: () => _editNoteDialog(note), 
+                child: _buildNoteTile(note, index),
+              );
             },
           ),
           const SizedBox(height: 100),
@@ -2710,134 +2719,142 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  // --- UI COMPONENTS ---
-  Widget _buildStreakCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [kSecondaryGreen, kPrimaryGreen], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(30),
-        boxShadow: [BoxShadow(color: kPrimaryGreen.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]
-      ),
-      child: Stack(
-        children: [
-          Positioned(right: -10, top: -10, child: Icon(Icons.favorite, color: Colors.white10, size: 100)),
-          Row(
-            children: [
-              Container(
-                height: 60, width: 60,
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-                child: const Icon(Icons.bolt_rounded, color: Colors.orangeAccent, size: 35),
-              ),
-              const SizedBox(width: 20),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('$_streakDays Day Streak', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26)),
-                  const Text('You are doing great! Keep going.', style: TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.w500)),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  // --- WIDGETS ---
+  Widget _buildRecoveryRoadmap() {
+    int daysPassed = 0;
+    if (_treatmentStartDate != null) {
+      daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays;
+    }
+    double progress = (daysPassed / 180).clamp(0.0, 1.0); 
+    int month = (daysPassed / 30).ceil();
+    if (month == 0) month = 1;
+    if (month > 6) month = 6;
 
-  Widget _buildAppointmentCard(String title, String date, String time, String loc) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 15),
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: kWhite,
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: kSoftGrey, width: 2),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))]
-      ),
-      child: Row(
+      decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15),
-            decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(15)),
-            child: Column(
-              children: [
-                Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)),
-                Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen)),
-              ],
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+               Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)),
+               Text("Started: ${_treatmentStartDate != null ? DateFormat('MMM dd').format(_treatmentStartDate!) : 'Pending'}", style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
+             ]),
+             Container(
+               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+               decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(10)),
+               child: Text("Month $month of 6", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kSecondaryGreen)),
+             ),
+          ]),
+          const SizedBox(height: 15),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: LinearProgressIndicator(
+              value: progress, 
+              minHeight: 12, 
+              backgroundColor: kSoftGrey, 
+              color: kSecondaryGreen
             ),
           ),
-          const SizedBox(width: 20),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kPrimaryGreen)),
-                const SizedBox(height: 5),
-                Row(
-                  children: [
-                    Icon(Icons.access_time_filled, size: 14, color: kSecondaryGreen),
-                    const SizedBox(width: 5),
-                    Text(time.substring(0, 5), style: const TextStyle(color: Colors.grey, fontWeight: FontWeight.w600, fontSize: 13)),
-                    const SizedBox(width: 15),
-                    Icon(Icons.location_on, size: 14, color: kSecondaryGreen),
-                    const SizedBox(width: 5),
-                    Expanded(child: Text(loc, overflow: TextOverflow.ellipsis, style: const TextStyle(color: Colors.grey, fontSize: 13))),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.edit_rounded, size: 18, color: Colors.grey[300]), // Visual hint for "Edit"
+          const SizedBox(height: 10),
+          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+            Text("${(progress * 100).toInt()}% Complete", style: TextStyle(fontSize: 12, color: kPrimaryGreen, fontWeight: FontWeight.bold)),
+            Text("${180 - daysPassed} days left", style: const TextStyle(fontSize: 11, color: Colors.grey)),
+          ]),
         ],
       ),
     );
   }
 
-  Widget _buildNoteInput() {
-    return Container(
-      decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(20)),
-      child: TextField(
-        controller: _noteController,
-        decoration: InputDecoration(
-          hintText: "Add a question for your doctor...",
-          hintStyle: const TextStyle(color: Colors.black26, fontSize: 14),
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-          suffixIcon: IconButton(
-            icon: CircleAvatar(backgroundColor: kPrimaryGreen, child: const Icon(Icons.add, color: Colors.white, size: 20)),
-            onPressed: _addNote,
+  Widget _buildNoteInputArea() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _categories.map((cat) {
+              final isSelected = _selectedCategory == cat;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ChoiceChip(
+                  label: Text(cat),
+                  selected: isSelected,
+                  selectedColor: kPrimaryGreen,
+                  backgroundColor: kSoftGrey,
+                  labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontSize: 12, fontWeight: FontWeight.bold),
+                  onSelected: (val) => setState(() => _selectedCategory = cat),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
+                ),
+              );
+            }).toList(),
           ),
         ),
-      ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(20)),
+          child: TextField(
+            controller: _noteController,
+            decoration: InputDecoration(
+              hintText: "Add a $_selectedCategory...",
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
+              suffixIcon: IconButton(
+                icon: CircleAvatar(backgroundColor: kPrimaryGreen, child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20)),
+                onPressed: _addNote,
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _buildNoteTile(Map<String, dynamic> note, int index) {
     bool isChecked = note['is_checked'] ?? false;
+    String category = note['category'] ?? 'Question';
+
+    Color catColor = Colors.grey;
+    if (category == 'Symptom') catColor = const Color(0xFFE76F51); 
+    if (category == 'Question') catColor = const Color(0xFF2A9D8F); 
+    if (category == 'Side Effect') catColor = const Color(0xFFE9C46A); 
+
     return AnimatedOpacity(
-      duration: const Duration(milliseconds: 300),
-      opacity: isChecked ? 0.6 : 1.0,
+      opacity: isChecked ? 0.0 : 1.0,
+      duration: const Duration(milliseconds: 500),
       child: _buildDismissibleWrapper(
-        id: note['id'].toString(),
+        id: note['id'].toString(), 
         onDismiss: () => _deleteNote(note['id'].toString()),
         child: Container(
           margin: const EdgeInsets.only(bottom: 10),
           decoration: BoxDecoration(
-            color: isChecked ? kSoftGrey.withOpacity(0.5) : kWhite,
+            color: kWhite,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: isChecked ? Colors.transparent : kSoftGrey, width: 1),
+            border: Border.all(color: kSoftGrey, width: 1),
           ),
           child: CheckboxListTile(
             activeColor: kSecondaryGreen,
             checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            title: Text(note['note_text'], style: TextStyle(
-              decoration: isChecked ? TextDecoration.lineThrough : null,
-              color: isChecked ? Colors.grey : kPrimaryGreen,
-              fontWeight: isChecked ? FontWeight.normal : FontWeight.w600,
-              fontSize: 15
-            )),
             value: isChecked,
-            onChanged: (bool? value) => _toggleNote(index, isChecked),
+            onChanged: (bool? value) => _toggleNote(index),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(color: catColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+                  child: Text(category, style: TextStyle(color: catColor, fontSize: 10, fontWeight: FontWeight.bold)),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(note['note_text'], style: TextStyle(
+                    color: kPrimaryGreen,
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15
+                  )),
+                ),
+              ],
+            ),
             controlAffinity: ListTileControlAffinity.leading,
           ),
         ),
@@ -2845,63 +2862,197 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  Widget _buildModernField(TextEditingController controller, String label, IconData icon) {
-    return TextField(
-      controller: controller,
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: kSecondaryGreen),
-        labelText: label,
-        labelStyle: const TextStyle(color: Colors.grey, fontSize: 14),
-        filled: true,
-        fillColor: kSoftGrey,
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none),
+  Widget _buildLockedState() {
+    bool isPending = _connectionStatus == 'pending';
+    return Padding(
+      padding: const EdgeInsets.all(30),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kCreamAccent, shape: BoxShape.circle), child: Icon(isPending ? Icons.hourglass_top_rounded : Icons.lock_outline_rounded, size: 50, color: kPrimaryGreen)),
+          const SizedBox(height: 30),
+          Text(isPending ? "Waiting for Approval" : "Feature Locked", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)),
+          const SizedBox(height: 10),
+          Text(isPending ? "Your request is being reviewed by the clinic." : "Link with your doctor to coordinate visits.", textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+          const SizedBox(height: 40),
+          Container(
+            padding: const EdgeInsets.all(25), decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(25)),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text("YOUR TREATMENT JOURNEY", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: kSecondaryGreen, letterSpacing: 1.2)),
+              const SizedBox(height: 25),
+              _buildStep("Account Created", true), _buildStep("Risk Assessment", true), _buildStep("Link to Clinic", isPending), _buildStep("Unlock Follow-up & Diary", false, isLast: true),
+            ]),
+          ),
+          const SizedBox(height: 30),
+          if (!isPending) ElevatedButton(onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'), style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), child: const Text("Go to Dashboard to Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+        ],
       ),
     );
   }
 
-  Widget _buildPickerTile({required String label, required IconData icon, required VoidCallback onTap}) {
-    return InkWell(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(15),
-        decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(18)),
-        child: Column(
-          children: [
-            Icon(icon, color: kSecondaryGreen),
-            const SizedBox(height: 8),
-            Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimaryGreen)),
-          ],
-        ),
-      ),
+  Widget _buildStep(String title, bool isActive, {bool isLast = false}) {
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Column(children: [Icon(isActive ? Icons.check_circle : Icons.circle_outlined, color: isActive ? kPrimaryGreen : Colors.grey, size: 22), if (!isLast) Container(height: 30, width: 2, color: isActive ? kPrimaryGreen : Colors.grey.withOpacity(0.3))]),
+      const SizedBox(width: 15), Text(title, style: TextStyle(fontWeight: isActive ? FontWeight.bold : FontWeight.normal, color: isActive ? kPrimaryGreen : Colors.grey, fontSize: 15)),
+    ]);
+  }
+
+  Widget _buildStreakCard() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(gradient: LinearGradient(colors: [kSecondaryGreen, kPrimaryGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: kPrimaryGreen.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]),
+      child: Stack(children: [
+        Positioned(right: -10, top: -10, child: Icon(Icons.favorite, color: Colors.white10, size: 100)),
+        Row(children: [Container(height: 60, width: 60, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.bolt_rounded, color: Colors.orangeAccent, size: 35)), const SizedBox(width: 20), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('$_streakDays Day Streak', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26)), const Text('Keep going!', style: TextStyle(color: Colors.white70, fontSize: 14))])]),
+      ]),
+    );
+  }
+
+  Widget _buildAppointmentCard(String title, String date, String time, String loc) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15), padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))]),
+      child: Row(children: [
+        Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(15)), child: Column(children: [Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)), Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen))])),
+        const SizedBox(width: 20),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kPrimaryGreen)), Text("$date • $time • $loc", style: const TextStyle(color: Colors.grey, fontSize: 12))])),
+      ]),
     );
   }
 
   Widget _buildDismissibleWrapper({required String id, required VoidCallback onDismiss, required Widget child}) {
-    return Dismissible(
-      key: Key(id),
-      direction: DismissDirection.endToStart,
-      onDismissed: (dir) => onDismiss(),
-      background: Container(
-        margin: const EdgeInsets.symmetric(vertical: 5),
-        decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)),
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 25),
-        child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 30),
-      ),
-      child: child,
-    );
+    return Dismissible(key: Key(id), direction: DismissDirection.endToStart, onDismissed: (dir) => onDismiss(), background: Container(margin: const EdgeInsets.symmetric(vertical: 5), decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 25), child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 30)), child: child);
   }
 
-  Widget _buildEmptyState(String msg) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 20),
-        child: Text(msg, style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)),
+  Widget _buildEmptyState(String msg) { return Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Text(msg, style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)))); }
+
+  // --- MODAL LOGIC (FIXED) ---
+  void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) { 
+    final isEditing = apptToEdit != null;
+    final docController = TextEditingController(text: isEditing ? apptToEdit['doctor_name'] : (_doctorName ?? ""));
+    final locController = TextEditingController(text: isEditing ? apptToEdit['location'] : "");
+    DateTime? selectedDate = isEditing ? DateTime.parse(apptToEdit['appointment_date']) : null;
+    TimeOfDay? selectedTime;
+    
+    if (isEditing) {
+      final parts = apptToEdit['appointment_time'].toString().split(':');
+      selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+    }
+    
+    bool isSaving = false;
+
+    showModalBottomSheet(
+      context: context, 
+      isScrollControlled: true, 
+      backgroundColor: kWhite,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 25, right: 25, top: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, 
+            crossAxisAlignment: CrossAxisAlignment.start, 
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
+              const SizedBox(height: 25), 
+              Text(isEditing ? "Edit Visit" : "Schedule Visit", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
+              const SizedBox(height: 20),
+              
+              if (_doctorName != null && !isEditing) 
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 15), 
+                  child: Row(children: [
+                    Icon(Icons.link, size: 16, color: kSecondaryGreen), 
+                    const SizedBox(width: 5), 
+                    Text("Linked to Dr. $_doctorName", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.bold))
+                  ])
+                ),
+
+              _buildModernField(docController, "Doctor or Clinic Name", Icons.medical_services_outlined), 
+              const SizedBox(height: 15), 
+              _buildModernField(locController, "Location", Icons.location_on_outlined), 
+              const SizedBox(height: 20),
+              
+              Row(children: [
+                Expanded(child: _buildPickerTile(
+                  label: selectedDate == null ? "Select Date" : DateFormat('MMM dd, yyyy').format(selectedDate!), 
+                  icon: Icons.calendar_month_rounded, 
+                  onTap: () async { 
+                    final picked = await showDatePicker(context: context, initialDate: selectedDate ?? DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030)); 
+                    if (picked != null) setModalState(() => selectedDate = picked); 
+                  }
+                )), 
+                const SizedBox(width: 15), 
+                Expanded(child: _buildPickerTile(
+                  label: selectedTime == null ? "Select Time" : selectedTime!.format(context), 
+                  icon: Icons.access_time_rounded, 
+                  onTap: () async { 
+                    final picked = await showTimePicker(context: context, initialTime: selectedTime ?? TimeOfDay.now()); 
+                    if (picked != null) setModalState(() => selectedTime = picked); 
+                  }
+                ))
+              ]),
+              
+              const SizedBox(height: 30), 
+              
+              SizedBox(
+                width: double.infinity, 
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))), 
+                  onPressed: isSaving ? null : () async { 
+                    if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) { 
+                      setModalState(() => isSaving = true); 
+                      try { 
+                        final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00'; 
+                        
+                        final Map<String, dynamic> appointmentData = {
+                          'user_id': _supabase.auth.currentUser!.id, 
+                          'doctor_name': docController.text, 
+                          'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!), 
+                          'appointment_time': timeString, 
+                          'location': locController.text,
+                          'status': 'scheduled' // Explicitly sending status
+                        }; 
+                        
+                        if (_linkedDoctorId != null) appointmentData['doctor_id'] = _linkedDoctorId; 
+                        
+                        if (isEditing) { 
+                          await _supabase.from('appointments').update(appointmentData).eq('id', apptToEdit['id']); 
+                        } else { 
+                          await _supabase.from('appointments').insert(appointmentData); 
+                        } 
+                        
+                        await _fetchAppointments(); 
+                        if (context.mounted) Navigator.pop(context); 
+                        
+                      } catch (e) { 
+                        setModalState(() => isSaving = false); 
+                        debugPrint("Appointment Error: $e"); 
+                        // Show Error Toast
+                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                          content: Text("Error: ${e.toString().contains('policy') ? 'Permission denied. Run SQL script.' : 'Failed to save.'}"),
+                          backgroundColor: Colors.redAccent,
+                        ));
+                      } 
+                    } else {
+                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields"), backgroundColor: Colors.orange));
+                    }
+                  }, 
+                  child: isSaving 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                    : Text(isEditing ? "Update Appointment" : "Confirm Appointment", style: TextStyle(color: kWhite, fontSize: 16, fontWeight: FontWeight.bold))
+                )
+              ),
+              const SizedBox(height: 40),
+          ]),
+        ),
       ),
     );
   }
+  
+  Widget _buildModernField(TextEditingController controller, String label, IconData icon) { return TextField(controller: controller, decoration: InputDecoration(prefixIcon: Icon(icon, color: kSecondaryGreen), labelText: label, labelStyle: const TextStyle(color: Colors.grey, fontSize: 14), filled: true, fillColor: kSoftGrey, border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none))); }
+  Widget _buildPickerTile({required String label, required IconData icon, required VoidCallback onTap}) { return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(18)), child: Column(children: [Icon(icon, color: kSecondaryGreen), const SizedBox(height: 8), Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimaryGreen))]))); }
 }
-
 
 // --- 8. CHATBOT PAGE ---
 class ChatPage extends StatefulWidget {
