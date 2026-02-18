@@ -2260,6 +2260,7 @@ class _MedsPageState extends State<MedsPage> {
 }
 
 // --- 8. FOLLOW-UP PAGE (SHARED CALENDAR) ---
+
 class FollowUpPage extends StatefulWidget {
   const FollowUpPage({super.key});
 
@@ -2269,18 +2270,21 @@ class FollowUpPage extends StatefulWidget {
 
 class _FollowUpPageState extends State<FollowUpPage> {
   final _supabase = Supabase.instance.client;
-  int _streakDays = 0;
   bool _isLoading = true;
 
-  final TextEditingController _noteController = TextEditingController();
+  // CONNECTION STATE
+  String? _connectionStatus; // 'active', 'pending', or null
+  String? _linkedDoctorId;
+  String? _doctorName;
 
+  // DATA
+  int _streakDays = 0;
   List<Map<String, dynamic>> _doctorNotes = [];
   List<Map<String, dynamic>> _appointments = [];
   
-  // NEW: Store linked doctor info
-  String? _linkedDoctorId;
+  final TextEditingController _noteController = TextEditingController();
 
-  // Theme Palette
+  // THEME PALETTE
   final Color kPrimaryGreen = const Color(0xFF283618);
   final Color kSecondaryGreen = const Color(0xFF606C38);
   final Color kCreamAccent = const Color(0xFFFEFAE0);
@@ -2290,67 +2294,82 @@ class _FollowUpPageState extends State<FollowUpPage> {
   @override
   void initState() {
     super.initState();
-    _loadAllData();
+    _checkConnectionAndLoad();
   }
 
-  Future<void> _loadAllData() async {
+  // 1. CHECK IF USER IS LINKED TO DOCTOR
+  Future<void> _checkConnectionAndLoad() async {
     try {
-      await _fetchLinkedDoctor(); // Get the doctor ID first
-      await Future.wait([
-        _fetchStreak(),
-        _fetchNotes(),
-        _fetchAppointments(),
-      ]);
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      // Check Connection Status
+      final connectionData = await _supabase
+          .from('connections')
+          .select('status, doctor_id, profiles:doctor_id(full_name)')
+          .eq('patient_id', user.id)
+          .maybeSingle();
+
+      if (mounted) {
+        setState(() {
+          if (connectionData != null) {
+            _connectionStatus = connectionData['status'];
+            _linkedDoctorId = connectionData['doctor_id'];
+            // Safe access to nested profile data
+            final doctorProfile = connectionData['profiles'] as Map<String, dynamic>?;
+            _doctorName = doctorProfile?['full_name'];
+          } else {
+            _connectionStatus = null; // No connection request sent
+          }
+        });
+      }
+
+      // Only load data if ACTIVE (Unlocked)
+      if (_connectionStatus == 'active') {
+        await Future.wait([
+          _fetchStreak(),
+          _fetchNotes(),
+          _fetchAppointments(),
+        ]);
+      }
+
     } catch (e) {
-      debugPrint('Initialization error: $e');
+      debugPrint('Init Error: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  // NEW: Fetch Linked Doctor ID
-  Future<void> _fetchLinkedDoctor() async {
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) return;
-      
-      final data = await _supabase
-          .from('connections')
-          .select('doctor_id')
-          .eq('patient_id', user.id)
-          .eq('status', 'active')
-          .maybeSingle();
-
-      if (data != null) {
-        _linkedDoctorId = data['doctor_id'];
-      }
-    } catch (e) {
-      debugPrint('Error fetching linked doctor: $e');
-    }
-  }
-
+  // --- DATA FETCHING ---
   Future<void> _fetchStreak() async {
     try {
       final userId = _supabase.auth.currentUser?.id;
-      if (userId == null) return;
-      // Using a simpler query if RPC isn't set up yet, or keep RPC if you have it
-      // For now, assuming RPC exists as per your code
       final response = await _supabase.rpc('get_medication_streak', params: {'p_user_id': userId});
       if (mounted) setState(() => _streakDays = response as int);
-    } catch (e) {
-      debugPrint('Streak Error: $e');
-    }
+    } catch (e) { debugPrint('Streak Error: $e'); }
   }
 
   Future<void> _fetchNotes() async {
     try {
       final data = await _supabase.from('doctor_notes').select().order('created_at', ascending: false);
       if (mounted) setState(() => _doctorNotes = List<Map<String, dynamic>>.from(data));
-    } catch (e) {
-      debugPrint('Notes Fetch Error: $e');
-    }
+    } catch (e) { debugPrint('Notes Error: $e'); }
   }
 
+  Future<void> _fetchAppointments() async {
+    try {
+      final data = await _supabase
+          .from('appointments')
+          .select()
+          .eq('user_id', _supabase.auth.currentUser!.id)
+          .order('appointment_date', ascending: true);
+      if (mounted) setState(() => _appointments = List<Map<String, dynamic>>.from(data));
+    } catch (e) { debugPrint('Appt Error: $e'); }
+  }
+
+  // --- CRUD OPERATIONS ---
+  
+  // NOTES CRUD
   Future<void> _addNote() async {
     if (_noteController.text.isEmpty) return;
     final text = _noteController.text;
@@ -2361,61 +2380,45 @@ class _FollowUpPageState extends State<FollowUpPage> {
         'user_id': _supabase.auth.currentUser!.id
       });
       _fetchNotes();
-    } catch (e) {
-      debugPrint('Add Note Error: $e');
-    }
+    } catch (e) { debugPrint('Add Note Error: $e'); }
   }
 
   Future<void> _toggleNote(int index, bool currentVal) async {
     final noteId = _doctorNotes[index]['id'];
     setState(() => _doctorNotes[index]['is_checked'] = !currentVal);
-    try {
-      await _supabase.from('doctor_notes').update({'is_checked': !currentVal}).eq('id', noteId);
-    } catch (e) {
-      debugPrint('Toggle Note Error: $e');
-    }
+    await _supabase.from('doctor_notes').update({'is_checked': !currentVal}).eq('id', noteId);
   }
 
   Future<void> _deleteNote(String id) async {
-    try {
-      await _supabase.from('doctor_notes').delete().eq('id', id);
-      _fetchNotes();
-    } catch (e) {
-      debugPrint('Delete Note Error: $e');
-    }
+    await _supabase.from('doctor_notes').delete().eq('id', id);
+    _fetchNotes();
   }
 
-  Future<void> _fetchAppointments() async {
-    try {
-      final user = _supabase.auth.currentUser;
-      if (user == null) return;
-
-      final data = await _supabase
-          .from('appointments')
-          .select()
-          .eq('user_id', user.id) // Filter by current user
-          .order('appointment_date', ascending: true);
-          
-      if (mounted) setState(() => _appointments = List<Map<String, dynamic>>.from(data));
-    } catch (e) {
-      debugPrint('Appointments Fetch Error: $e');
-    }
-  }
-
+  // APPOINTMENT CRUD (Delete & Upsert logic handled in modal)
   Future<void> _deleteAppointment(String id) async {
-    try {
-      await _supabase.from('appointments').delete().eq('id', id);
-      _fetchAppointments();
-    } catch (e) {
-      debugPrint('Delete Appointment Error: $e');
-    }
+    await _supabase.from('appointments').delete().eq('id', id);
+    _fetchAppointments();
   }
 
-  void _showAddAppointmentModal() {
-    final docController = TextEditingController();
-    final locController = TextEditingController();
-    DateTime? selectedDate;
+  // --- MODALS ---
+
+  // Unified Modal for CREATE and UPDATE
+  void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) {
+    final isEditing = apptToEdit != null;
+    
+    // Pre-fill if editing, otherwise use defaults
+    final docController = TextEditingController(text: isEditing ? apptToEdit['doctor_name'] : (_doctorName ?? ""));
+    final locController = TextEditingController(text: isEditing ? apptToEdit['location'] : "");
+    
+    DateTime? selectedDate = isEditing ? DateTime.parse(apptToEdit['appointment_date']) : null;
     TimeOfDay? selectedTime;
+    
+    if (isEditing) {
+      // Parse "HH:mm:ss" to TimeOfDay
+      final parts = apptToEdit['appointment_time'].toString().split(':');
+      selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
+    }
+
     bool isSaving = false;
 
     showModalBottomSheet(
@@ -2432,8 +2435,19 @@ class _FollowUpPageState extends State<FollowUpPage> {
             children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
               const SizedBox(height: 25),
-              Text("Schedule Visit", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)),
+              Text(isEditing ? "Edit Visit" : "Schedule Visit", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)),
               const SizedBox(height: 20),
+              
+              if (_doctorName != null && !isEditing)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 15),
+                  child: Row(children: [
+                    Icon(Icons.link, size: 16, color: kSecondaryGreen),
+                    const SizedBox(width: 5),
+                    Text("Linked to Dr. $_doctorName", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.bold))
+                  ]),
+                ),
+
               _buildModernField(docController, "Doctor or Clinic Name", Icons.medical_services_outlined),
               const SizedBox(height: 15),
               _buildModernField(locController, "Location", Icons.location_on_outlined),
@@ -2447,7 +2461,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
                       onTap: () async {
                         final picked = await showDatePicker(
                           context: context,
-                          initialDate: DateTime.now(),
+                          initialDate: selectedDate ?? DateTime.now(),
                           firstDate: DateTime.now(),
                           lastDate: DateTime(2030),
                         );
@@ -2461,7 +2475,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
                       label: selectedTime == null ? "Select Time" : selectedTime!.format(context),
                       icon: Icons.access_time_rounded,
                       onTap: () async {
-                        final picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                        final picked = await showTimePicker(context: context, initialTime: selectedTime ?? TimeOfDay.now());
                         if (picked != null) setModalState(() => selectedTime = picked);
                       },
                     ),
@@ -2476,16 +2490,12 @@ class _FollowUpPageState extends State<FollowUpPage> {
                     backgroundColor: kPrimaryGreen,
                     padding: const EdgeInsets.symmetric(vertical: 18),
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                    elevation: 5,
-                    shadowColor: kPrimaryGreen.withOpacity(0.4),
                   ),
                   onPressed: isSaving ? null : () async {
                     if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) {
                       setModalState(() => isSaving = true);
                       try {
                         final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00';
-                        
-                        // NEW: Include doctor_id if linked
                         final Map<String, dynamic> appointmentData = {
                           'user_id': _supabase.auth.currentUser!.id,
                           'doctor_name': docController.text,
@@ -2493,12 +2503,17 @@ class _FollowUpPageState extends State<FollowUpPage> {
                           'appointment_time': timeString,
                           'location': locController.text,
                         };
+                        
+                        if (_linkedDoctorId != null) appointmentData['doctor_id'] = _linkedDoctorId;
 
-                        if (_linkedDoctorId != null) {
-                          appointmentData['doctor_id'] = _linkedDoctorId; // Link appointment to doctor
+                        if (isEditing) {
+                          // UPDATE
+                          await _supabase.from('appointments').update(appointmentData).eq('id', apptToEdit['id']);
+                        } else {
+                          // CREATE
+                          await _supabase.from('appointments').insert(appointmentData);
                         }
 
-                        await _supabase.from('appointments').insert(appointmentData);
                         await _fetchAppointments();
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
@@ -2506,9 +2521,9 @@ class _FollowUpPageState extends State<FollowUpPage> {
                       }
                     }
                   },
-                  child: isSaving
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
-                    : const Text("Confirm Appointment", style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: isSaving 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                    : Text(isEditing ? "Update Appointment" : "Confirm Appointment", style: TextStyle(color: kWhite, fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
               ),
               const SizedBox(height: 40),
@@ -2519,6 +2534,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
+  // --- MAIN BUILD ---
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2534,66 +2550,167 @@ class _FollowUpPageState extends State<FollowUpPage> {
         title: Text('Follow-up Care', style: TextStyle(fontWeight: FontWeight.w900, color: kPrimaryGreen, fontSize: 20)),
       ),
       body: _isLoading
-      ? Center(child: CircularProgressIndicator(color: kSecondaryGreen))
-      : SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('YOUR PROGRESS', style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-            const SizedBox(height: 12),
-            _buildStreakCard(),
-            const SizedBox(height: 35),
-            
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          ? Center(child: CircularProgressIndicator(color: kSecondaryGreen))
+          : _connectionStatus == 'active' 
+              ? _buildUnlockedContent() // Full Features
+              : _buildLockedState(),    // Journey Roadmap
+    );
+  }
+
+  // --- LOCKED STATE (The Journey Roadmap) ---
+  Widget _buildLockedState() {
+    bool isPending = _connectionStatus == 'pending';
+
+    return Padding(
+      padding: const EdgeInsets.all(30),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: kCreamAccent, shape: BoxShape.circle),
+            child: Icon(isPending ? Icons.hourglass_top_rounded : Icons.lock_outline_rounded, size: 50, color: kPrimaryGreen),
+          ),
+          const SizedBox(height: 30),
+          Text(
+            isPending ? "Waiting for Approval" : "Feature Locked",
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen),
+          ),
+          const SizedBox(height: 10),
+          Text(
+            isPending 
+              ? "Your request is being reviewed by the clinic. You'll be notified soon."
+              : "Link with your doctor to coordinate visits and unlock your care plan.",
+            textAlign: TextAlign.center,
+            style: const TextStyle(color: Colors.grey, fontSize: 14),
+          ),
+          const SizedBox(height: 40),
+          
+          // JOURNEY ROADMAP CARD
+          Container(
+            padding: const EdgeInsets.all(25),
+            decoration: BoxDecoration(
+              color: kSoftGrey,
+              borderRadius: BorderRadius.circular(25),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Upcoming Visits", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
-                GestureDetector(
-                  onTap: _showAddAppointmentModal,
-                  child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: kSecondaryGreen, shape: BoxShape.circle, boxShadow: [BoxShadow(color: kSecondaryGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]),
-                    child: const Icon(Icons.add, color: Colors.white, size: 20),
-                  ),
-                ),
+                Text("YOUR TREATMENT JOURNEY", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: kSecondaryGreen, letterSpacing: 1.2)),
+                const SizedBox(height: 25),
+                _buildStep("Account Created", true),
+                _buildStep("Risk Assessment", true),
+                _buildStep("Link to Clinic", isPending), // Active if pending
+                _buildStep("Unlock Follow-up & Diary", false, isLast: true),
               ],
             ),
-            const SizedBox(height: 15),
-            
-            if (_appointments.isEmpty) _buildEmptyState("No scheduled visits yet."),
-
-            ..._appointments.map((appt) => _buildDismissibleWrapper(
-              id: appt['id'].toString(),
-              onDismiss: () => _deleteAppointment(appt['id'].toString()),
-              child: _buildAppointmentCard(appt['doctor_name'], appt['appointment_date'], appt['appointment_time'], appt['location'] ?? ""),
-            )),
-            
-            const SizedBox(height: 40),
-            Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-            const SizedBox(height: 15),
-            
-            _buildNoteInput(),
-            
-            const SizedBox(height: 25),
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _doctorNotes.length,
-              itemBuilder: (context, index) {
-                final note = _doctorNotes[index];
-                return _buildNoteTile(note, index);
-              },
+          ),
+          
+          const SizedBox(height: 30),
+          if (!isPending)
+            ElevatedButton(
+              onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: kPrimaryGreen,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
+                padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)
+              ),
+              child: const Text("Go to Dashboard to Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
-            const SizedBox(height: 100),
-          ],
-        ),
+        ],
       ),
     );
   }
 
-  // --- UI COMPONENT METHODS ---
+  Widget _buildStep(String title, bool isActive, {bool isLast = false}) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Icon(isActive ? Icons.check_circle : Icons.circle_outlined, color: isActive ? kPrimaryGreen : Colors.grey, size: 22),
+            if (!isLast) Container(height: 30, width: 2, color: isActive ? kPrimaryGreen : Colors.grey.withOpacity(0.3)),
+          ],
+        ),
+        const SizedBox(width: 15),
+        Text(title, style: TextStyle(
+          fontWeight: isActive ? FontWeight.bold : FontWeight.normal,
+          color: isActive ? kPrimaryGreen : Colors.grey,
+          fontSize: 15
+        )),
+      ],
+    );
+  }
 
+  // --- UNLOCKED CONTENT (Full Features) ---
+  Widget _buildUnlockedContent() {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('YOUR PROGRESS', style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+          const SizedBox(height: 12),
+          _buildStreakCard(),
+          const SizedBox(height: 35),
+          
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("Upcoming Visits", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
+              GestureDetector(
+                onTap: () => _showAppointmentModal(), // ADD NEW
+                child: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(color: kSecondaryGreen, shape: BoxShape.circle, boxShadow: [BoxShadow(color: kSecondaryGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]),
+                  child: const Icon(Icons.add, color: Colors.white, size: 20),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 15),
+          
+          if (_appointments.isEmpty) _buildEmptyState("No scheduled visits yet."),
+
+          ..._appointments.map((appt) => _buildDismissibleWrapper(
+            id: appt['id'].toString(),
+            onDismiss: () => _deleteAppointment(appt['id'].toString()),
+            child: GestureDetector(
+              // TAP TO EDIT (UPDATE FEATURE)
+              onTap: () => _showAppointmentModal(apptToEdit: appt),
+              child: _buildAppointmentCard(appt['doctor_name'], appt['appointment_date'], appt['appointment_time'], appt['location'] ?? ""),
+            ),
+          )),
+          
+          const SizedBox(height: 40),
+          Row(
+            children: [
+              Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+              const Spacer(),
+              if (_doctorName != null) 
+                 Text("Shared with Dr. $_doctorName", style: TextStyle(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          
+          _buildNoteInput(),
+          const SizedBox(height: 25),
+          ListView.builder(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            itemCount: _doctorNotes.length,
+            itemBuilder: (context, index) {
+              final note = _doctorNotes[index];
+              return _buildNoteTile(note, index);
+            },
+          ),
+          const SizedBox(height: 100),
+        ],
+      ),
+    );
+  }
+
+  // --- UI COMPONENTS ---
   Widget _buildStreakCard() {
     return Container(
       padding: const EdgeInsets.all(24),
@@ -2670,6 +2787,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
               ],
             ),
           ),
+          Icon(Icons.edit_rounded, size: 18, color: Colors.grey[300]), // Visual hint for "Edit"
         ],
       ),
     );
@@ -2677,10 +2795,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   Widget _buildNoteInput() {
     return Container(
-      decoration: BoxDecoration(
-        color: kSoftGrey,
-        borderRadius: BorderRadius.circular(20),
-      ),
+      decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(20)),
       child: TextField(
         controller: _noteController,
         decoration: InputDecoration(
@@ -2729,8 +2844,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
       ),
     );
   }
-
-  // --- HELPERS ---
 
   Widget _buildModernField(TextEditingController controller, String label, IconData icon) {
     return TextField(
@@ -3524,216 +3637,131 @@ class FacilitiesPage extends StatefulWidget {
 }
 
 class _FacilitiesPageState extends State<FacilitiesPage> {
-  // Theme Colors
-  final Color primaryGreen = const Color(0xFF283618); // Dark Forest
-  final Color accentGreen = const Color(0xFF606C38);  // Moss Green
-  final Color lightBg = const Color(0xFFFEFAE0);      // Cream Background
-  final Color surfaceWhite = Colors.white;
-
   static const LatLng _carmonaCenter = LatLng(14.3135, 121.0574);
+  late GoogleMapController mapController;
 
+  // MARKERS: Polished coordinates for Carmona TB Centers
   final Set<Marker> _markers = {
     const Marker(
-      markerId: MarkerId('city_health'),
-      position: LatLng(14.3122, 121.0558),
-      infoWindow: InfoWindow(title: 'City Health Office - Main'),
+      markerId: MarkerId('rhu_dots'),
+      position: LatLng(14.3121, 121.0558),
+      infoWindow: InfoWindow(title: 'Rural Health Unit (RHU)', snippet: 'Primary TB-DOTS Center'),
     ),
     const Marker(
-      markerId: MarkerId('brgy_center'),
-      position: LatLng(14.3050, 121.0600),
-      infoWindow: InfoWindow(title: 'Barangay Health Center A'),
+      markerId: MarkerId('super_health'),
+      position: LatLng(14.3145, 121.0620),
+      infoWindow: InfoWindow(title: 'Super Health Center', snippet: 'Primary Care'),
+    ),
+    const Marker(
+      markerId: MarkerId('hospital_medical'),
+      position: LatLng(14.3015, 121.0485),
+      infoWindow: InfoWindow(title: 'Carmona Hospital & Medical Center', snippet: 'Diagnostics'),
+    ),
+    const Marker(
+      markerId: MarkerId('pagamutang_bayan'),
+      position: LatLng(14.3072, 121.0423),
+      infoWindow: InfoWindow(title: 'Pagamutang Bayan ng Carmona', snippet: 'Public Hospital'),
     ),
   };
 
+  void _onMapCreated(GoogleMapController controller) {
+    mapController = controller;
+  }
+
+  // FIXED: Standard Google Maps URL Scheme for Directions
   Future<void> _launchMaps(double lat, double lng) async {
-    // Note: For web, you often need the direct maps link
-    final String googleMapsUrl = "https://www.google.com/maps/search/?api=1&query=$lat,$lng";
+    final String googleMapsUrl = "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving";
     final Uri url = Uri.parse(googleMapsUrl);
-    if (!await launchUrl(url)) {
-      throw Exception('Could not launch $url');
+
+    try {
+      if (await canLaunchUrl(url)) {
+        await launchUrl(url, mode: LaunchMode.externalApplication);
+      }
+    } catch (e) {
+      debugPrint("Maps Error: $e");
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    const Color forestDark = Color(0xFF283618);
+    const Color forestMed = Color(0xFF606C38);
+    
     return Scaffold(
-      backgroundColor: lightBg,
+      backgroundColor: const Color(0xFFFEFAE0),
       appBar: AppBar(
-        title: Text('Nearby Facilities', 
-          style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold, fontSize: 22)),
+        title: const Text('Nearby Facilities', style: TextStyle(color: forestDark, fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        centerTitle: true,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back, color: primaryGreen),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: forestDark),
           onPressed: () => Navigator.pop(context),
         ),
       ),
       body: Column(
         children: [
-          // Map Section with rounded corners
-          Container(
-            height: 250,
-            margin: const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(25),
-              boxShadow: [
-                BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 10, offset: const Offset(0, 5))
-              ],
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(25),
-              child: GoogleMap(
-                initialCameraPosition: const CameraPosition(target: _carmonaCenter, zoom: 14),
-                markers: _markers,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: true,
-                mapType: MapType.normal, // Ensure this is set to normal
-              ),
+          // MAP SECTION
+          SizedBox(
+            height: 300,
+            child: GoogleMap(
+              onMapCreated: _onMapCreated,
+              initialCameraPosition: const CameraPosition(target: _carmonaCenter, zoom: 14),
+              markers: _markers,
+              myLocationButtonEnabled: true,
+              zoomControlsEnabled: true,
             ),
           ),
           
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            child: Text("Recommended centers for TB testing", 
-              style: TextStyle(fontSize: 14, color: accentGreen, fontWeight: FontWeight.w500, fontStyle: FontStyle.italic)),
+          const Padding(
+            padding: EdgeInsets.all(16.0),
+            child: Text("Official TB Centers and Hospitals in Carmona.", 
+              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: forestDark)),
           ),
-
-          // Facilities List Section
+          
+          // LIST SECTION
           Expanded(
             child: ListView(
               padding: const EdgeInsets.symmetric(horizontal: 15),
               children: [
-                _buildFacilityCard(
-                  'City Health Office - Main', 
-                  'Mabuhay Road, Carmona, Cavite', 
-                  '8:00 AM - 5:00 PM', 
-                  '14.3122', '121.0558', 
-                  '4.8', '1.2 km away'
-                ),
-                _buildFacilityCard(
-                  'Barangay Health Center A', 
-                  'Brgy. Lantic, Carmona, Cavite',
-                  '9:00 AM - 4:00 PM', 
-                  '14.3050', '121.0600', 
-                  '4.5', '2.5 km away'
-                ),
-                const SizedBox(height: 20),
+                _buildFacilityCard('Rural Health Unit (RHU)', 'Primary TB-DOTS Center', 'J.M. Loyola St., Brgy. 4', '14.3121', '121.0558'),
+                _buildFacilityCard('Super Health Center', 'Primary Care & Consultation', 'Carmona City (New Facility)', '14.3145', '121.0620'),
+                _buildFacilityCard('Hospital & Medical Center', 'Private Referral / Diagnostics', 'Sugar Road, Brgy. Maduya', '14.3015', '121.0485'),
+                _buildFacilityCard('Pagamutang Bayan ng Carmona', 'Public Hospital Support', 'Brgy. Mabuhay', '14.3072', '121.0423'),
               ],
             ),
           ),
         ],
       ),
+      bottomNavigationBar: _buildBottomNav(3, context),
     );
   }
 
-  Widget _buildFacilityCard(String name, String address, String hours, String lat, String lng, String rating, String distance) {
+  Widget _buildFacilityCard(String name, String type, String addr, String lat, String lng) {
+    const Color forestMed = Color(0xFF606C38);
+
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(
-        color: surfaceWhite,
-        borderRadius: BorderRadius.circular(25),
-        boxShadow: [
-          BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 15, offset: const Offset(0, 8))
-        ],
+        color: Colors.white, 
+        borderRadius: BorderRadius.circular(15),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
       ),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top Colored Section (Header)
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [primaryGreen, accentGreen],
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-              ),
-              borderRadius: const BorderRadius.only(topLeft: Radius.circular(25), topRight: Radius.circular(25)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(10)),
-                      child: Text(distance, style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                    ),
-                    Row(
-                      children: [
-                        const Icon(Icons.star, color: Colors.amber, size: 16),
-                        const SizedBox(width: 4),
-                        Text(rating, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-                      ],
-                    )
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Text(name, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18)),
-              ],
-            ),
-          ),
-
-          // Details Section
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildInfoRow(Icons.location_on_rounded, "ADDRESS", address),
-                const SizedBox(height: 12),
-                _buildInfoRow(Icons.access_time_filled_rounded, "OPERATING HOURS", hours),
-                
-                const SizedBox(height: 15),
-                const Text("AVAILABLE SERVICES", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.1)),
-                const SizedBox(height: 8),
-                
-                Wrap(
-                  spacing: 8,
-                  children: [
-                    _serviceChip("TB Screening", const Color(0xFF2D6A4F)),
-                    _serviceChip("DOTS Program", const Color(0xFF40916C)),
-                    _serviceChip("Health Education", const Color(0xFF52B788)),
-                  ],
-                ),
-                
-                const SizedBox(height: 20),
-
-                // Buttons - Updated to Unified Green Palette
-                Row(
-                  children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () {}, // Add phone logic if desired
-                        icon: const Icon(Icons.call, size: 18, color: Colors.white),
-                        label: const Text("Call Now", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: primaryGreen, // Using Primary Dark Green
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                          elevation: 2,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: () => _launchMaps(double.parse(lat), double.parse(lng)),
-                        icon: const Icon(Icons.near_me_rounded, size: 18, color: Colors.white),
-                        label: const Text("Directions", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: accentGreen, // Using Moss Green
-                          padding: const EdgeInsets.symmetric(vertical: 15),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)),
-                          elevation: 2,
-                        ),
-                      ),
-                    ),
-                  ],
-                )
-              ],
+          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          Text(type, style: const TextStyle(color: forestMed, fontSize: 13, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 5),
+          Text(addr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _launchMaps(double.parse(lat), double.parse(lng)),
+              icon: const Icon(Icons.directions, color: Colors.white),
+              label: const Text("Directions", style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(backgroundColor: forestMed, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
             ),
           ),
         ],
@@ -3741,44 +3769,21 @@ class _FacilitiesPageState extends State<FacilitiesPage> {
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: lightBg.withOpacity(0.5), 
-        borderRadius: BorderRadius.circular(15)
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: accentGreen, borderRadius: BorderRadius.circular(10)),
-            child: Icon(icon, size: 18, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label, style: const TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey)),
-                Text(value, style: TextStyle(fontSize: 13, color: primaryGreen, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _serviceChip(String label, Color color) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-      decoration: BoxDecoration(
-        color: color.withOpacity(0.1), 
-        borderRadius: BorderRadius.circular(8), 
-        border: Border.all(color: color.withOpacity(0.2))
-      ),
-      child: Text(label, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+  Widget _buildBottomNav(int index, BuildContext context) {
+    return BottomNavigationBar(
+      currentIndex: index,
+      selectedItemColor: const Color(0xFF283618),
+      unselectedItemColor: Colors.grey,
+      type: BottomNavigationBarType.fixed,
+      items: const [
+        BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
+        BottomNavigationBarItem(icon: Icon(Icons.medication_rounded), label: 'Meds'),
+        BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Follow-up'),
+        BottomNavigationBarItem(icon: Icon(Icons.map_rounded), label: 'Facilities'),
+      ],
+      onTap: (i) {
+        if (i == 0) Navigator.pushReplacementNamed(context, '/dashboard');
+      },
     );
   }
 }
