@@ -1535,25 +1535,28 @@ class _AssessmentPageState extends State<AssessmentPage> {
   int currentIndex = 0;
   int riskScore = 0;
 
-  // NEW: Track if a critical symptom is present
+  // Logic Flags to track exact variables
   bool hasRedFlag = false;
+  bool isSymptomatic = false;
+  bool isCloseContact = false;
+  bool isVulnerable = false;
 
   String? selected;
   bool _showError = false;
 
   final List<Map<String, dynamic>> questions = [
-    {"q": "Do you have a persistent cough lasting more than 2 weeks?", "weight": 3},
-    {"q": "Have you noticed blood in your phlegm or mucus?", "weight": 5}, // Index 1: RED FLAG
-    {"q": "Have you experienced unexplained weight loss recently?", "weight": 2},
-    {"q": "Do you suffer from frequent night sweats?", "weight": 2},
+    {"q": "Do you have a persistent cough lasting more than 2 weeks?", "weight": 3}, // Index 0: Symptom
+    {"q": "Have you noticed blood in your phlegm or mucus?", "weight": 5},          // Index 1: RED FLAG
+    {"q": "Have you experienced unexplained weight loss recently?", "weight": 2},  // Index 2: Symptom
+    {"q": "Do you suffer from frequent night sweats?", "weight": 2},               // Index 3: Symptom
     {"q": "Do you have persistent chest pain or pain when breathing?", "weight": 2},
     {"q": "Have you been feeling unusually tired or fatigued for weeks?", "weight": 1},
-    {"q": "Do you have a recurring fever (especially in the afternoon)?", "weight": 2},
+    {"q": "Do you have a recurring fever (especially in the afternoon)?", "weight": 2}, // Index 6: Symptom
     {"q": "Have you lost your appetite significantly?", "weight": 1},
-    {"q": "Have you lived with or cared for someone with active TB?", "weight": 4},
-    {"q": "Do you have a weakened immune system (e.g., Diabetes, HIV)?", "weight": 3},
+    {"q": "Have you lived with or cared for someone with active TB?", "weight": 4},    // Index 8: Close Contact
+    {"q": "Do you have a weakened immune system (e.g., Diabetes, HIV)?", "weight": 3}, // Index 9: Vulnerable
     {"q": "Have you recently traveled to an area with high TB rates?", "weight": 2},
-    {"q": "Do you smoke or have a history of heavy tobacco use?", "weight": 1},
+    {"q": "Do you smoke or have a history of heavy tobacco use?", "weight": 1},        // Index 11: Vulnerable
   ];
 
   // Theme Colors
@@ -1565,7 +1568,6 @@ class _AssessmentPageState extends State<AssessmentPage> {
   @override
   void initState() {
     super.initState();
-    // SHOW POP-UP ON LOAD
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _showStartDialog();
     });
@@ -1574,7 +1576,7 @@ class _AssessmentPageState extends State<AssessmentPage> {
   Future<void> _showStartDialog() async {
     return showDialog<void>(
       context: context,
-      barrierDismissible: false, // User must tap button!
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: Colors.white,
@@ -1585,11 +1587,11 @@ class _AssessmentPageState extends State<AssessmentPage> {
             style: TextStyle(color: Colors.black87),
           ),
           actions: <Widget>[
-             TextButton(
-              child: Text('Cancel', style: TextStyle(color: Colors.grey)),
+            TextButton(
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
               onPressed: () {
-                Navigator.of(context).pop(); // Close dialog
-                Navigator.of(context).pop(); // Go back to Home
+                Navigator.of(context).pop();
+                Navigator.of(context).pop();
               },
             ),
             ElevatedButton(
@@ -1599,7 +1601,7 @@ class _AssessmentPageState extends State<AssessmentPage> {
               ),
               child: const Text('Start Now', style: TextStyle(color: Colors.white)),
               onPressed: () {
-                Navigator.of(context).pop(); // Close dialog and start
+                Navigator.of(context).pop();
               },
             ),
           ],
@@ -1614,13 +1616,29 @@ class _AssessmentPageState extends State<AssessmentPage> {
       return;
     }
 
-    // LOGIC UPDATE: Accumulate score and check for Red Flags
     if (selected == "Yes") {
       riskScore += (questions[currentIndex]['weight'] as int);
 
-      // If the current question is "Blood in phlegm" (Index 1), mark as Red Flag
+      // --- GATE LOGIC: TRACK SPECIFIC VARIABLES ---
+      
+      // Gate 1: Red Flag
       if (currentIndex == 1) {
         hasRedFlag = true;
+      }
+
+      // Gate 2: WHO Primary Symptoms
+      if (currentIndex == 0 || currentIndex == 2 || currentIndex == 3 || currentIndex == 6) {
+        isSymptomatic = true;
+      }
+
+      // Gate 3: Close Contact
+      if (currentIndex == 8) {
+        isCloseContact = true;
+      }
+
+      // Gate 4: Vulnerability
+      if (currentIndex == 9 || currentIndex == 11) {
+        isVulnerable = true;
       }
     }
 
@@ -1631,7 +1649,6 @@ class _AssessmentPageState extends State<AssessmentPage> {
         _showError = false;
       });
     } else {
-      // UX UPDATE: Show confirmation dialog before calculating
       _showConfirmationDialog();
     }
   }
@@ -1639,7 +1656,7 @@ class _AssessmentPageState extends State<AssessmentPage> {
   Future<void> _showConfirmationDialog() async {
     return showDialog<void>(
       context: context,
-      barrierDismissible: false, // User must tap button!
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: Colors.white,
@@ -1664,7 +1681,7 @@ class _AssessmentPageState extends State<AssessmentPage> {
               child: const Text('Submit', style: TextStyle(color: Colors.white)),
               onPressed: () {
                 Navigator.of(context).pop();
-                _calculateAndNavigate(); // Proceed to calculation
+                _calculateAndNavigate();
               },
             ),
           ],
@@ -1676,11 +1693,13 @@ class _AssessmentPageState extends State<AssessmentPage> {
   Future<void> _calculateAndNavigate() async {
     String finalRisk = "Low Risk";
 
-    // LOGIC UPDATE: Automatic High Risk if Red Flag is present
-    // Otherwise, use the score threshold
-    if (hasRedFlag || riskScore >= 12) {
+    // ENHANCED LOGIC: Priority-based Risk Calculation
+    // High Risk if Red Flag exists OR if symptomatic with high score
+    if (hasRedFlag || (isSymptomatic && riskScore >= 10) || riskScore >= 12) {
       finalRisk = "High Risk";
-    } else if (riskScore >= 6) {
+    } 
+    // Medium Risk if symptomatic OR vulnerable/contact with moderate score
+    else if (isSymptomatic || isCloseContact || isVulnerable || riskScore >= 6) {
       finalRisk = "Medium Risk";
     }
 
@@ -1689,7 +1708,12 @@ class _AssessmentPageState extends State<AssessmentPage> {
       if (user != null) {
         await Supabase.instance.client
             .from('profiles')
-            .update({'risk_level': finalRisk})
+            .update({
+              'risk_level': finalRisk,
+              'is_symptomatic': isSymptomatic,
+              'is_close_contact': isCloseContact,
+              'is_vulnerable': isVulnerable,
+            })
             .eq('id', user.id);
       }
     } catch (e) {
@@ -1697,7 +1721,6 @@ class _AssessmentPageState extends State<AssessmentPage> {
     }
 
     if (mounted) {
-      // Navigates to the result page
       Navigator.pushReplacementNamed(context, '/result', arguments: riskScore);
     }
   }
@@ -1709,41 +1732,34 @@ class _AssessmentPageState extends State<AssessmentPage> {
       body: Column(
         children: [
           Container(
-            padding: const EdgeInsets.fromLTRB(25, 50, 25, 30), // Adjusted top padding
+            padding: const EdgeInsets.fromLTRB(25, 50, 25, 30),
             decoration: BoxDecoration(
               color: forestDark,
               borderRadius: const BorderRadius.only(bottomLeft: Radius.circular(30), bottomRight: Radius.circular(30)),
             ),
             child: Column(
               children: [
-                // Header Row with Return Button
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // Return Button
                     IconButton(
                       icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-                      onPressed: () => Navigator.pop(context), // Go back to dashboard
+                      onPressed: () => Navigator.pop(context),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
                     ),
                     const Text('TB Risk Assessment', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.bold)),
-                    // Empty SizedBox to balance the row visually
                     const SizedBox(width: 20),
                   ],
                 ),
-                
                 const SizedBox(height: 20),
-                
                 Row(
                    mainAxisAlignment: MainAxisAlignment.end,
                    children: [
                       Text('Step ${currentIndex + 1}/${questions.length}', style: const TextStyle(color: Colors.white70, fontSize: 12)),
                    ],
                 ),
-                
                 const SizedBox(height: 8),
-
                 LinearProgressIndicator(
                   value: (currentIndex + 1) / questions.length,
                   color: mossGreen,
@@ -1811,7 +1827,7 @@ class _AssessmentPageState extends State<AssessmentPage> {
   }
 }
 
-// --- 6. MEDS PAGE (CRUD + MULTI-VIEW CALENDAR + DIARY LOCK) ---
+// --- 6. MEDS PAGE (STRICT UI LOCK APPLIED) ---
 class MedsPage extends StatefulWidget {
   const MedsPage({super.key});
 
@@ -1824,37 +1840,53 @@ class _MedsPageState extends State<MedsPage> {
   bool _isLoading = true;
   DateTime _selectedDate = DateTime.now();
   String _viewType = 'Week';
-  int _selectedIndex = 2; // Defaulting to "Meds" tab
+  int _selectedIndex = 2; 
 
-  // NEW: Track Connection Status ('active', 'pending', or null)
+  DateTime? _treatmentStartDate;
   String? _connectionStatus;
 
-  // Define the Theme Colors
-  final Color primaryGreen = const Color(0xFF2D3B1E); // Dark Forest
-  final Color accentGreen = const Color(0xFF606C38);  // Olive
-  final Color lightBg = const Color(0xFFF9F9F7);      // Off-white background
+  final Color primaryGreen = const Color(0xFF2D3B1E); 
+  final Color accentGreen = const Color(0xFF606C38);  
+  final Color lightBg = const Color(0xFFF9F9F7);      
   final Color surfaceWhite = Colors.white;
 
   @override
   void initState() {
     super.initState();
     _fetchData();
+    _setupRealtimeListener(); // ADDED: Start listening when page opens
   }
 
-  // --- DATA FETCHING (Updated to check Connection) ---
+  // ADDED: Realtime listener for the profiles table
+  void _setupRealtimeListener() {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    Supabase.instance.client
+        .channel('meds_profile_sync')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'profiles',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: user.id),
+          callback: (payload) {
+            if (mounted) _fetchData();
+          },
+        )
+        .subscribe();
+  }
+
   Future<void> _fetchData() async {
     try {
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) return;
 
-      // 1. Check Connection Status
-      final connectionData = await Supabase.instance.client
-          .from('connections')
-          .select('status')
-          .eq('patient_id', user.id)
+      final profileData = await Supabase.instance.client
+          .from('profiles')
+          .select('treatment_start_date, status') // ADDED: fetch status from profiles
+          .eq('id', user.id)
           .maybeSingle();
 
-      // 2. Fetch Meds
       final medsData = await Supabase.instance.client
           .from('medications')
           .select()
@@ -1862,7 +1894,21 @@ class _MedsPageState extends State<MedsPage> {
 
       if (mounted) {
         setState(() {
-          _connectionStatus = connectionData != null ? connectionData['status'] : null;
+          // FIXED: Get status from profileData
+          _connectionStatus = profileData?['status'];
+          
+          // STRICT & SAFE DATE PARSING
+          if (profileData != null && profileData['treatment_start_date'] != null && profileData['treatment_start_date'].toString().trim().isNotEmpty) {
+            try {
+              _treatmentStartDate = DateTime.parse(profileData['treatment_start_date'].toString());
+            } catch (e) {
+              debugPrint("Date parse error: $e");
+              _treatmentStartDate = null;
+            }
+          } else {
+            _treatmentStartDate = null;
+          }
+          
           myMeds = medsData as List<dynamic>;
           _isLoading = false;
         });
@@ -1873,494 +1919,248 @@ class _MedsPageState extends State<MedsPage> {
     }
   }
 
-  // --- NEW: LOCK LOGIC HANDLER ---
   void _handleAddNewMed() {
-    // Only allow adding meds if status is 'active'
-    if (_connectionStatus == 'active') {
+    if (_treatmentStartDate != null) {
       _showMedDialog();
     } else {
-      _showLockDialog();
+      // Fallback lock dialog just in case
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          backgroundColor: surfaceWhite,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          title: Row(
+            children: [
+              Icon(Icons.lock_outline_rounded, color: primaryGreen),
+              const SizedBox(width: 10),
+              Text("Diary Locked", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
+            ],
+          ),
+          content: Text("Your medication diary is locked until your doctor sets your treatment dates.", style: const TextStyle(fontSize: 14, color: Colors.grey, height: 1.5)),
+          actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text("Close", style: TextStyle(color: Colors.grey[600])))],
+        ),
+      );
     }
   }
 
-  void _showLockDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: surfaceWhite,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Row(
-          children: [
-            Icon(Icons.lock_outline_rounded, color: primaryGreen),
-            const SizedBox(width: 10),
-            Text("Diary Locked", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
-          ],
-        ),
-        content: const Text(
-          "To ensure your safety, the Medication Diary is locked until you link with your doctor.\n\nPlease go to the Dashboard and enter the Clinic Code provided by your healthcare provider in Carmona.",
-          style: TextStyle(fontSize: 14, color: Colors.grey, height: 1.5),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text("Cancel", style: TextStyle(color: Colors.grey[600])),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentGreen,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushReplacementNamed(context, '/dashboard'); // Redirect to enter code
-            },
-            child: const Text("Go to Dashboard", style: TextStyle(color: Colors.white)),
-          )
-        ],
-      ),
-    );
-  }
-
-  // --- CRUD OPERATIONS ---
-  Future<void> _saveMed({
-    String? medId,
-    required String name,
-    required String dosage,
-    required String time,
-    required DateTime start,
-    required DateTime end
-  }) async {
+  Future<void> _saveMed({String? medId, required String name, required String dosage, required String time, required DateTime start, required DateTime end}) async {
+    if (_treatmentStartDate == null) return;
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
-
-    final medData = {
-      'user_id': user.id,
-      'name': name,
-      'dosage': dosage,
-      'time': time,
-      'start_date': start.toIso8601String(),
-      'end_date': end.toIso8601String(),
-      'is_taken': false,
-    };
-
+    final medData = {'user_id': user.id, 'name': name, 'dosage': dosage, 'time': time, 'start_date': start.toIso8601String(), 'end_date': end.toIso8601String(), 'is_taken': false};
     try {
-      if (medId == null) {
-        await Supabase.instance.client.from('medications').insert(medData);
-      } else {
-        await Supabase.instance.client.from('medications').update(medData).eq('id', medId);
-      }
+      if (medId == null) { await Supabase.instance.client.from('medications').insert(medData); } 
+      else { await Supabase.instance.client.from('medications').update(medData).eq('id', medId); }
       _fetchData();
-    } catch (e) {
-      debugPrint("Error saving med: $e");
-    }
+    } catch (e) { debugPrint("Error saving med: $e"); }
   }
 
   Future<void> _deleteMed(String medId) async {
-    try {
-      await Supabase.instance.client.from('medications').delete().eq('id', medId);
-      _fetchData();
-    } catch (e) {
-      debugPrint("Error deleting med: $e");
-    }
+    if (_treatmentStartDate == null) return;
+    try { await Supabase.instance.client.from('medications').delete().eq('id', medId); _fetchData(); } 
+    catch (e) { debugPrint("Error deleting med: $e"); }
   }
 
   Future<void> _toggleMed(bool currentValue, String medId) async {
-    try {
-      await Supabase.instance.client
-          .from('medications')
-          .update({'is_taken': !currentValue})
-          .eq('id', medId);
-      _fetchData();
-    } catch (e) {
-      debugPrint("Error toggling med: $e");
-    }
+    if (_treatmentStartDate == null) return;
+    try { await Supabase.instance.client.from('medications').update({'is_taken': !currentValue}).eq('id', medId); _fetchData(); } 
+    catch (e) { debugPrint("Error toggling med: $e"); }
   }
 
-  // --- DIALOGS ---
   void _showMedDialog({Map<String, dynamic>? existingMed}) async {
     final nameController = TextEditingController(text: existingMed?['name']);
     final dosageController = TextEditingController(text: existingMed?['dosage']);
     String selectedTime = existingMed?['time'] ?? "08:00 AM";
     DateTime startDate = existingMed != null ? DateTime.parse(existingMed['start_date']) : DateTime.now();
     DateTime endDate = existingMed != null ? DateTime.parse(existingMed['end_date']) : DateTime.now().add(const Duration(days: 7));
-
+    
     showDialog(
-      context: context,
+      context: context, 
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: surfaceWhite,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Text(existingMed == null ? "Add Medication" : "Edit Details",
-              style: TextStyle(color: primaryGreen, fontWeight: FontWeight.w700)),
+          backgroundColor: surfaceWhite, 
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)), 
+          title: Text(
+            existingMed == null ? "Add Medication" : "Edit Details", 
+            style: TextStyle(color: primaryGreen, fontWeight: FontWeight.w700)
+          ), 
           content: SingleChildScrollView(
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              mainAxisSize: MainAxisSize.min, 
               children: [
                 TextField(
-                  controller: nameController,
+                  controller: nameController, 
                   decoration: InputDecoration(
-                    labelText: "Medicine Name",
-                    labelStyle: TextStyle(color: accentGreen),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: accentGreen)),
-                  ),
-                ),
+                    labelText: "Medicine Name", 
+                    labelStyle: TextStyle(color: accentGreen), 
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: accentGreen))
+                  )
+                ), 
                 TextField(
-                  controller: dosageController,
+                  controller: dosageController, 
                   decoration: InputDecoration(
-                    labelText: "Dosage (e.g. 500mg)",
-                    labelStyle: TextStyle(color: accentGreen),
-                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: accentGreen)),
-                  ),
-                ),
-                const SizedBox(height: 15),
+                    labelText: "Dosage (e.g. 500mg)", 
+                    labelStyle: TextStyle(color: accentGreen), 
+                    focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: accentGreen))
+                  )
+                ), 
+                const SizedBox(height: 15), 
                 _buildDialogTile(
-                  icon: Icons.access_time_rounded,
-                  title: "Reminder Time",
-                  value: selectedTime,
-                  onTap: () async {
-                    TimeOfDay? picked = await showTimePicker(context: context, initialTime: TimeOfDay.now());
-                    if (picked != null) setDialogState(() => selectedTime = picked.format(context));
-                  },
-                ),
+                  icon: Icons.access_time_rounded, 
+                  title: "Reminder Time", 
+                  value: selectedTime, 
+                  onTap: () async { 
+                    TimeOfDay? picked = await showTimePicker(context: context, initialTime: TimeOfDay.now()); 
+                    if (picked != null) setDialogState(() => selectedTime = picked.format(context)); 
+                  }
+                ), 
                 _buildDialogTile(
-                  icon: Icons.calendar_today_rounded,
-                  title: "Treatment Duration",
-                  value: "${DateFormat('MMM d').format(startDate)} - ${DateFormat('MMM d').format(endDate)}",
-                  onTap: () async {
+                  icon: Icons.calendar_today_rounded, 
+                  title: "Treatment Duration", 
+                  value: "${DateFormat('MMM d').format(startDate)} - ${DateFormat('MMM d').format(endDate)}", 
+                  onTap: () async { 
                     DateTimeRange? picked = await showDateRangePicker(
-                      context: context,
-                      firstDate: DateTime.now().subtract(const Duration(days: 30)),
-                      lastDate: DateTime.now().add(const Duration(days: 365)),
-                    );
-                    if (picked != null) {
-                      setDialogState(() {
-                        startDate = picked.start;
-                        endDate = picked.end;
-                      });
-                    }
-                  },
-                ),
-              ],
-            ),
-          ),
+                      context: context, 
+                      firstDate: DateTime.now().subtract(const Duration(days: 30)), 
+                      lastDate: DateTime.now().add(const Duration(days: 365))
+                    ); 
+                    if (picked != null) { 
+                      setDialogState(() { 
+                        startDate = picked.start; 
+                        endDate = picked.end; 
+                      }); 
+                    } 
+                  }
+                ), 
+              ]
+            )
+          ), 
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text("Cancel", style: TextStyle(color: Colors.grey[600])),
-            ),
+              onPressed: () => Navigator.pop(context), 
+              child: Text("Cancel", style: TextStyle(color: Colors.grey[600]))
+            ), 
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: accentGreen,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                elevation: 0,
-              ),
-              onPressed: () {
+                backgroundColor: accentGreen, 
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)), 
+                elevation: 0
+              ), 
+              onPressed: () { 
                 _saveMed(
-                  medId: existingMed?['id']?.toString(),
-                  name: nameController.text,
-                  dosage: dosageController.text,
-                  time: selectedTime,
-                  start: startDate,
-                  end: endDate,
-                );
-                Navigator.pop(context);
-              },
-              child: const Text("Save Task", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
-            ),
-          ],
-        ),
-      ),
+                  medId: existingMed?['id']?.toString(), 
+                  name: nameController.text, 
+                  dosage: dosageController.text, 
+                  time: selectedTime, 
+                  start: startDate, 
+                  end: endDate
+                ); 
+                Navigator.pop(context); 
+              }, 
+              child: const Text("Save Task", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))
+            )
+          ]
+        )
+      )
     );
   }
 
   Widget _buildDialogTile({required IconData icon, required String title, required String value, required VoidCallback onTap}) {
-    return ListTile(
-      contentPadding: EdgeInsets.zero,
-      leading: Container(
-        padding: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(8)),
-        child: Icon(icon, color: accentGreen, size: 20),
-      ),
-      title: Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)),
-      subtitle: Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: primaryGreen)),
-      onTap: onTap,
-    );
+    return ListTile(contentPadding: EdgeInsets.zero, leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: accentGreen, size: 20)), title: Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)), subtitle: Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: primaryGreen)), onTap: onTap);
   }
-
-  // --- BUILD METHODS ---
 
   @override
   Widget build(BuildContext context) {
+    bool isUnlocked = _connectionStatus == 'active' && _treatmentStartDate != null;
+
     return Scaffold(
       backgroundColor: lightBg,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Row(children: [
-          Icon(Icons.favorite_rounded, color: accentGreen, size: 28),
-          const SizedBox(width: 10),
-          Text('TB HealthCare', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20))
-        ]),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.tune_rounded, color: primaryGreen),
-            onPressed: () {
-              setState(() {
-                if (_viewType == 'Day') _viewType = 'Week';
-                else if (_viewType == 'Week') _viewType = 'Month';
-                else _viewType = 'Day';
-              });
-            },
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen), onPressed: () => Navigator.of(context).pop()), title: Row(children: [Icon(Icons.favorite_rounded, color: accentGreen, size: 28), const SizedBox(width: 10), Text('TB HealthCare', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20))]), actions: [IconButton(icon: Icon(Icons.tune_rounded, color: primaryGreen), onPressed: () { setState(() { if (_viewType == 'Day') _viewType = 'Week'; else if (_viewType == 'Week') _viewType = 'Month'; else _viewType = 'Day'; }); })]),
+      
+      body: _isLoading 
+        ? Center(child: CircularProgressIndicator(color: accentGreen)) 
+        : isUnlocked 
+            ? _buildUnlockedContent() 
+            : _buildLockedUI(),
+
+      floatingActionButton: isUnlocked 
+        ? FloatingActionButton(backgroundColor: primaryGreen, onPressed: _handleAddNewMed, child: const Icon(Icons.add, color: Colors.white))
+        : null,
+
+      bottomNavigationBar: BottomNavigationBar(currentIndex: _selectedIndex, onTap: (index) { if (index == _selectedIndex) return; switch (index) { case 0: Navigator.pushReplacementNamed(context, '/dashboard'); break; case 1: Navigator.pushNamed(context, '/assess'); break; case 3: Navigator.pushNamed(context, '/followup'); break; case 4: Navigator.pushNamed(context, '/chat'); break; } setState(() => _selectedIndex = index); }, type: BottomNavigationBarType.fixed, backgroundColor: surfaceWhite, selectedItemColor: accentGreen, unselectedItemColor: Colors.grey, items: const [BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'), BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: 'Assess'), BottomNavigationBarItem(icon: Icon(Icons.medication_rounded), label: 'Meds'), BottomNavigationBarItem(icon: Icon(Icons.calendar_month_outlined), label: 'Follow-up'), BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline_rounded), label: 'Chat')]),
+    );
+  }
+
+  Widget _buildUnlockedContent() {
+    return Column(
+      children: [
+        _buildModernHeader(), 
+        const SizedBox(height: 20), 
+        _buildCalendarSection(), 
+        const SizedBox(height: 20), 
+        Expanded(
+          child: Container(
+            width: double.infinity, 
+            decoration: BoxDecoration(color: surfaceWhite, borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]), 
+            child: _buildMedList()
           )
-        ],
-      ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: accentGreen))
-          : Column(
-              children: [
-                _buildModernHeader(),
-                const SizedBox(height: 20),
-                _buildCalendarSection(),
-                const SizedBox(height: 20),
-                Expanded(
-                  child: Container(
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: surfaceWhite,
-                      borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)),
-                      boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))],
-                    ),
-                    child: _buildMedList(),
-                  ),
-                ),
-              ],
-            ),
-      floatingActionButton: FloatingActionButton(
-        backgroundColor: primaryGreen,
-        // CHANGED: Use the handler instead of showing dialog directly
-        onPressed: _handleAddNewMed, 
-        child: const Icon(Icons.add, color: Colors.white),
-      ),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _selectedIndex,
-        onTap: (index) {
-          if (index == _selectedIndex) return;
-          switch (index) {
-             case 0: Navigator.pushReplacementNamed(context, '/dashboard'); break;
-             case 1: Navigator.pushNamed(context, '/assess'); break;
-             // case 2 is current
-             case 3: Navigator.pushNamed(context, '/followup'); break;
-             case 4: Navigator.pushNamed(context, '/chat'); break;
-          }
-          setState(() => _selectedIndex = index);
-        },
-        type: BottomNavigationBarType.fixed,
-        backgroundColor: surfaceWhite,
-        selectedItemColor: accentGreen,
-        unselectedItemColor: Colors.grey,
-        selectedLabelStyle: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-        unselectedLabelStyle: const TextStyle(fontSize: 12),
-        items: const [
-          BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'),
-          BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: 'Assess'),
-          BottomNavigationBarItem(icon: Icon(Icons.medication_rounded), label: 'Meds'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month_outlined), label: 'Follow-up'),
-          BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline_rounded), label: 'Chat'),
-        ],
-      ),
+        )
+      ]
     );
   }
 
-  Widget _buildModernHeader() {
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 20),
-      padding: const EdgeInsets.all(20),
-      width: double.infinity,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(colors: [primaryGreen, accentGreen], begin: Alignment.topLeft, end: Alignment.bottomRight),
-        borderRadius: BorderRadius.circular(24),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text('Medication Diary', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(
-            'Keep track of your TB treatment journey.',
-            style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13),
-          ),
-          const SizedBox(height: 15),
-          Row(
-            children: [
-              const Icon(Icons.calendar_today, color: Colors.white, size: 14),
-              const SizedBox(width: 8),
-              Text(
-                '${DateFormat('MMMM dd, yyyy').format(_selectedDate)}',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-              ),
-            ],
-          )
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCalendarSection() {
-    if (_viewType == 'Month') {
-      return SizedBox(height: 300, child: _buildMonthGrid());
-    } else if (_viewType == 'Day') {
-      return _buildDateCard(_selectedDate, true);
-    } else {
-      return SizedBox(height: 90, child: _buildWeekStrip());
-    }
-  }
-
-  Widget _buildWeekStrip() {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 15),
-      scrollDirection: Axis.horizontal,
-      itemCount: 14,
-      itemBuilder: (context, index) {
-        DateTime date = DateTime.now().add(Duration(days: index - 3));
-        bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month;
-        return _buildDateCard(date, isSelected);
-      },
-    );
-  }
-
-  Widget _buildMonthGrid() {
-    int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day;
-    return GridView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 20),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 5, crossAxisSpacing: 5),
-      itemCount: daysInMonth,
-      itemBuilder: (context, index) {
-        DateTime date = DateTime(_selectedDate.year, _selectedDate.month, index + 1);
-        bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month;
-        return _buildDateCard(date, isSelected, compact: true);
-      },
-    );
-  }
-
-  Widget _buildDateCard(DateTime date, bool isSelected, {bool compact = false}) {
-    return GestureDetector(
-      onTap: () => setState(() => _selectedDate = date),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        width: compact ? null : 65,
-        margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-        decoration: BoxDecoration(
-          color: isSelected ? accentGreen : surfaceWhite,
-          borderRadius: BorderRadius.circular(16),
-          boxShadow: isSelected ? [BoxShadow(color: accentGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [],
-          border: Border.all(color: isSelected ? accentGreen : Colors.grey.withOpacity(0.1)),
-        ),
+  Widget _buildLockedUI() {
+    bool isLinked = _connectionStatus == 'active';
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Text(DateFormat('E').format(date).toUpperCase(),
-                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isSelected ? Colors.white70 : Colors.grey)),
-            const SizedBox(height: 4),
-            Text(date.day.toString(),
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: isSelected ? Colors.white : primaryGreen)),
+            Container(
+              padding: const EdgeInsets.all(20), 
+              decoration: BoxDecoration(color: accentGreen.withOpacity(0.1), shape: BoxShape.circle), 
+              child: Icon(
+                isLinked ? Icons.medical_services_outlined : Icons.lock_outline_rounded, 
+                size: 50, 
+                color: primaryGreen
+              )
+            ),
+            const SizedBox(height: 30),
+            Text(
+              isLinked ? "Awaiting Prescription" : "Diary Locked", 
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: primaryGreen)
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isLinked 
+                ? "Your account is linked. Your medication diary will automatically unlock once your doctor sets your treatment dates."
+                : "To ensure your safety, the Medication Diary is locked until you link with your doctor.", 
+              textAlign: TextAlign.center, 
+              style: const TextStyle(color: Colors.grey, fontSize: 14)
+            ),
+            const SizedBox(height: 40),
+            if (!isLinked)
+              ElevatedButton(
+                onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'), 
+                style: ElevatedButton.styleFrom(backgroundColor: primaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), 
+                child: const Text("Go to Dashboard to Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+              ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildMedList() {
-    final filteredMeds = myMeds.where((med) {
-      DateTime start = DateTime.parse(med['start_date']);
-      DateTime end = DateTime.parse(med['end_date']);
-      DateTime startDate = DateTime(start.year, start.month, start.day);
-      DateTime endDate = DateTime(end.year, end.month, end.day);
-      DateTime selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day);
-      return !selectedDate.isBefore(startDate) && !selectedDate.isAfter(endDate);
-    }).toList();
-
-    if (filteredMeds.isEmpty) {
-      return Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.spa_outlined, size: 60, color: Colors.grey[300]),
-          const SizedBox(height: 10),
-          Text("Rest easy. No meds today.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500)),
-        ],
-      );
-    }
-
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 30, 20, 100),
-      itemCount: filteredMeds.length,
-      itemBuilder: (context, index) {
-        final med = filteredMeds[index];
-        bool isTaken = med['is_taken'] ?? false;
-
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16),
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: isTaken ? lightBg.withOpacity(0.5) : surfaceWhite,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: isTaken ? Colors.transparent : Colors.grey.withOpacity(0.1)),
-          ),
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: () => _toggleMed(isTaken, med['id'].toString()),
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isTaken ? accentGreen : lightBg,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Icon(
-                    isTaken ? Icons.check : Icons.medication_rounded,
-                    color: isTaken ? Colors.white : accentGreen,
-                    size: 24,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 15),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(med['name'],
-                        style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 16,
-                            decoration: isTaken ? TextDecoration.lineThrough : null,
-                            color: isTaken ? Colors.grey : primaryGreen)),
-                    Text('${med['dosage']} • ${med['time']}',
-                        style: TextStyle(fontSize: 13, color: isTaken ? Colors.grey[400] : Colors.grey[600])),
-                  ],
-                ),
-              ),
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Colors.grey),
-                onSelected: (value) {
-                  if (value == 'edit') _showMedDialog(existingMed: med);
-                  if (value == 'delete') _deleteMed(med['id'].toString());
-                },
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'edit', child: Text('Edit')),
-                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red))),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+  Widget _buildModernHeader() { return Container(margin: const EdgeInsets.symmetric(horizontal: 20), padding: const EdgeInsets.all(20), width: double.infinity, decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryGreen, accentGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(24)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Medication Diary', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)), const SizedBox(height: 4), Text('Keep track of your TB treatment journey.', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13)), const SizedBox(height: 15), Row(children: [const Icon(Icons.calendar_today, color: Colors.white, size: 14), const SizedBox(width: 8), Text('${DateFormat('MMMM dd, yyyy').format(_selectedDate)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))])])); }
+  Widget _buildCalendarSection() { if (_viewType == 'Month') return SizedBox(height: 300, child: _buildMonthGrid()); if (_viewType == 'Day') return _buildDateCard(_selectedDate, true); return SizedBox(height: 90, child: _buildWeekStrip()); }
+  Widget _buildWeekStrip() { return ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 15), scrollDirection: Axis.horizontal, itemCount: 14, itemBuilder: (context, index) { DateTime date = DateTime.now().add(Duration(days: index - 3)); bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month; return _buildDateCard(date, isSelected); }); }
+  Widget _buildMonthGrid() { int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day; return GridView.builder(padding: const EdgeInsets.symmetric(horizontal: 20), gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 5, crossAxisSpacing: 5), itemCount: daysInMonth, itemBuilder: (context, index) { DateTime date = DateTime(_selectedDate.year, _selectedDate.month, index + 1); bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month; return _buildDateCard(date, isSelected, compact: true); }); }
+  Widget _buildDateCard(DateTime date, bool isSelected, {bool compact = false}) { return GestureDetector(onTap: () => setState(() => _selectedDate = date), child: AnimatedContainer(duration: const Duration(milliseconds: 200), width: compact ? null : 65, margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4), decoration: BoxDecoration(color: isSelected ? accentGreen : surfaceWhite, borderRadius: BorderRadius.circular(16), boxShadow: isSelected ? [BoxShadow(color: accentGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [], border: Border.all(color: isSelected ? accentGreen : Colors.grey.withOpacity(0.1))), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(DateFormat('E').format(date).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isSelected ? Colors.white70 : Colors.grey)), const SizedBox(height: 4), Text(date.day.toString(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: isSelected ? Colors.white : primaryGreen))]))); }
+  Widget _buildMedList() { final filteredMeds = myMeds.where((med) { DateTime start = DateTime.parse(med['start_date']); DateTime end = DateTime.parse(med['end_date']); DateTime startDate = DateTime(start.year, start.month, start.day); DateTime endDate = DateTime(end.year, end.month, end.day); DateTime selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day); return !selectedDate.isBefore(startDate) && !selectedDate.isAfter(endDate); }).toList(); if (filteredMeds.isEmpty) return Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.spa_outlined, size: 60, color: Colors.grey[300]), const SizedBox(height: 10), Text("Rest easy. No meds today.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))]); return ListView.builder(padding: const EdgeInsets.fromLTRB(20, 30, 20, 100), itemCount: filteredMeds.length, itemBuilder: (context, index) { final med = filteredMeds[index]; bool isTaken = med['is_taken'] ?? false; return Container(margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: isTaken ? lightBg.withOpacity(0.5) : surfaceWhite, borderRadius: BorderRadius.circular(20), border: Border.all(color: isTaken ? Colors.transparent : Colors.grey.withOpacity(0.1))), child: Row(children: [GestureDetector(onTap: () => _toggleMed(isTaken, med['id'].toString()), child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: isTaken ? accentGreen : lightBg, shape: BoxShape.circle), child: Icon(isTaken ? Icons.check : Icons.medication_rounded, color: isTaken ? Colors.white : accentGreen, size: 24))), const SizedBox(width: 15), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(med['name'], style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, decoration: isTaken ? TextDecoration.lineThrough : null, color: isTaken ? Colors.grey : primaryGreen)), Text('${med['dosage']} • ${med['time']}', style: TextStyle(fontSize: 13, color: isTaken ? Colors.grey[400] : Colors.grey[600]))])), PopupMenuButton<String>(icon: const Icon(Icons.more_vert, color: Colors.grey), onSelected: (value) { if (value == 'edit') _showMedDialog(existingMed: med); if (value == 'delete') _deleteMed(med['id'].toString()); }, itemBuilder: (context) => [const PopupMenuItem(value: 'edit', child: Text('Edit')), const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red)))])])); }); }
 }
 
+//FOLLOWUP PAGE
 class FollowUpPage extends StatefulWidget {
   const FollowUpPage({super.key});
 
@@ -2415,21 +2215,19 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
     _supabase
       .channel('followup_sync')
-      // 1. Listen for Connection Status Changes (Approvals)
       .onPostgresChanges(
         event: PostgresChangeEvent.all,
         schema: 'public',
-        table: 'connections',
-        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+        table: 'profiles', // FIXED: Watch the profiles table for status updates
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: user.id),
         callback: (payload) => _checkConnectionAndLoad(),
       )
-      // 2. Listen for Appointment Updates (Doctor marks as done)
       .onPostgresChanges(
         event: PostgresChangeEvent.all,
         schema: 'public',
         table: 'appointments',
         filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: user.id),
-        callback: (payload) => _fetchAppointments(), // Refresh list instantly
+        callback: (payload) => _fetchAppointments(), 
       )
       .subscribe();
   }
@@ -2446,35 +2244,42 @@ class _FollowUpPageState extends State<FollowUpPage> {
           .eq('patient_id', user.id)
           .maybeSingle();
 
-      // Fetch Profile for Start Date
       final profileData = await _supabase
           .from('profiles')
-          .select('treatment_start_date')
+          .select('treatment_start_date, status') // FIXED: fetch status directly from profiles
           .eq('id', user.id)
-          .single();
+          .maybeSingle(); 
 
       if (mounted) {
         setState(() {
+          // FIXED: Use status from the profile table
+          _connectionStatus = profileData?['status'];
+
           if (connectionData != null) {
-            _connectionStatus = connectionData['status'];
             _linkedDoctorId = connectionData['doctor_id'];
-            
-            // Priority: Explicit Start Date > Connection Date > Today
-            if (profileData['treatment_start_date'] != null) {
-               _treatmentStartDate = DateTime.parse(profileData['treatment_start_date']);
-            } else {
-               _treatmentStartDate = DateTime.parse(connectionData['created_at']);
-            }
             
             final doctorProfile = connectionData['profiles'] as Map<String, dynamic>?;
             _doctorName = doctorProfile?['full_name'];
           } else {
-            _connectionStatus = null;
+            _linkedDoctorId = null;
+            _doctorName = null;
+          }
+
+          // STRICT & SAFE DATE PARSING
+          if (profileData != null && profileData['treatment_start_date'] != null && profileData['treatment_start_date'].toString().trim().isNotEmpty) {
+             try {
+               _treatmentStartDate = DateTime.parse(profileData['treatment_start_date'].toString());
+             } catch (e) {
+               debugPrint("Date parse error: $e");
+               _treatmentStartDate = null;
+             }
+          } else {
+             _treatmentStartDate = null; 
           }
         });
       }
 
-      if (_connectionStatus == 'active') {
+      if (_connectionStatus == 'active' && _treatmentStartDate != null) {
         await Future.wait([
           _fetchStreak(),
           _fetchNotes(), 
@@ -2513,124 +2318,231 @@ class _FollowUpPageState extends State<FollowUpPage> {
       final data = await _supabase.from('appointments')
           .select()
           .eq('user_id', _supabase.auth.currentUser!.id)
-          .neq('status', 'completed') // Filter out completed appointments
+          .neq('status', 'completed') 
           .order('appointment_date', ascending: true);
       if (mounted) setState(() => _appointments = List<Map<String, dynamic>>.from(data));
     } catch (e) { debugPrint('Appt Error: $e'); }
   }
 
-  // --- CRUD OPERATIONS ---
-  
+  // --- CRUD OPERATIONS (PROTECTED) ---
   Future<void> _addNote() async {
+    if (_treatmentStartDate == null) return; // STRICT LOCK
     if (_noteController.text.isEmpty) return;
+    
     final text = _noteController.text;
     final category = _selectedCategory;
-    
     _noteController.clear();
-    setState(() => _selectedCategory = 'Question'); // Reset
-
+    setState(() => _selectedCategory = 'Question');
     try {
-      await _supabase.from('doctor_notes').insert({
-        'note_text': text,
-        'category': category, 
-        'user_id': _supabase.auth.currentUser!.id,
-        'is_checked': false
-      });
+      await _supabase.from('doctor_notes').insert({'note_text': text, 'category': category, 'user_id': _supabase.auth.currentUser!.id, 'is_checked': false});
       _fetchNotes();
     } catch (e) { debugPrint('Add Note Error: $e'); }
   }
 
-  Future<void> _editNoteDialog(Map<String, dynamic> note) async {
-    final editController = TextEditingController(text: note['note_text']);
-    String editCategory = note['category'] ?? 'Question';
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: Text("Edit Note", style: TextStyle(color: kPrimaryGreen, fontWeight: FontWeight.bold)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Wrap(
-                spacing: 8,
-                children: _categories.map((cat) {
-                  final isSelected = editCategory == cat;
-                  return ChoiceChip(
-                    label: Text(cat),
-                    selected: isSelected,
-                    selectedColor: kSecondaryGreen,
-                    labelStyle: TextStyle(color: isSelected ? Colors.white : kPrimaryGreen, fontSize: 12),
-                    onSelected: (val) => setDialogState(() => editCategory = cat),
-                  );
-                }).toList(),
-              ),
-              const SizedBox(height: 15),
-              TextField(
-                controller: editController,
-                maxLines: 3,
-                decoration: InputDecoration(
-                  hintText: "Update your note...",
-                  filled: true,
-                  fillColor: kSoftGrey,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.grey))),
-            ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-              onPressed: () async {
-                if (editController.text.isNotEmpty) {
-                  await _supabase.from('doctor_notes').update({
-                    'note_text': editController.text,
-                    'category': editCategory
-                  }).eq('id', note['id']);
-                  _fetchNotes();
-                  if (context.mounted) Navigator.pop(context);
-                }
-              }, 
-              child: const Text("Save Changes", style: TextStyle(color: Colors.white))
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Future<void> _deleteNote(String id) async {
-    await _supabase.from('doctor_notes').delete().eq('id', id);
-    _fetchNotes();
+  Future<void> _deleteNote(String id) async { 
+    if (_treatmentStartDate == null) return; // STRICT LOCK
+    await _supabase.from('doctor_notes').delete().eq('id', id); 
+    _fetchNotes(); 
   }
 
   Future<void> _toggleNote(int index) async {
-    setState(() {
-      _doctorNotes[index]['is_checked'] = true;
-    });
-
+    if (_treatmentStartDate == null) return; // STRICT LOCK
+    setState(() { _doctorNotes[index]['is_checked'] = true; });
     await Future.delayed(const Duration(milliseconds: 500));
-
     final noteId = _doctorNotes[index]['id'];
     await _supabase.from('doctor_notes').update({'is_checked': true}).eq('id', noteId);
-
-    if (mounted) {
-      setState(() {
-        _doctorNotes.removeAt(index);
-      });
-    }
+    if (mounted) { setState(() { _doctorNotes.removeAt(index); }); }
   }
 
-  Future<void> _deleteAppointment(String id) async {
-    await _supabase.from('appointments').delete().eq('id', id);
-    _fetchAppointments();
+  Future<void> _deleteAppointment(String id) async { 
+    if (_treatmentStartDate == null) return; // STRICT LOCK
+    await _supabase.from('appointments').delete().eq('id', id); 
+    _fetchAppointments(); 
+  }
+
+  // FIXED: Bracket structure properly un-nested and closed
+  Future<void> _editNoteDialog(Map<String, dynamic> note) async {
+    if (_treatmentStartDate == null) return; // STRICT LOCK
+    final editController = TextEditingController(text: note['note_text']);
+    String editCategory = note['category'] ?? 'Question';
+    
+    await showDialog(
+      context: context, 
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), 
+          title: Text("Edit Note", style: TextStyle(color: kPrimaryGreen, fontWeight: FontWeight.bold)), 
+          content: Column(
+            mainAxisSize: MainAxisSize.min, 
+            children: [
+              Wrap(
+                spacing: 8, 
+                children: _categories.map((cat) { 
+                  final isSelected = editCategory == cat; 
+                  return ChoiceChip(
+                    label: Text(cat), 
+                    selected: isSelected, 
+                    selectedColor: kSecondaryGreen, 
+                    labelStyle: TextStyle(color: isSelected ? Colors.white : kPrimaryGreen, fontSize: 12), 
+                    onSelected: (val) => setDialogState(() => editCategory = cat)
+                  ); 
+                }).toList()
+              ), 
+              const SizedBox(height: 15), 
+              TextField(
+                controller: editController, 
+                maxLines: 3, 
+                decoration: InputDecoration(
+                  hintText: "Update your note...", 
+                  filled: true, 
+                  fillColor: kSoftGrey, 
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)
+                )
+              )
+            ]
+          ), 
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context), 
+              child: const Text("Cancel", style: TextStyle(color: Colors.grey))
+            ), 
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), 
+              onPressed: () async { 
+                if (editController.text.isNotEmpty) { 
+                  await _supabase.from('doctor_notes').update({'note_text': editController.text, 'category': editCategory}).eq('id', note['id']); 
+                  _fetchNotes(); 
+                  if (context.mounted) Navigator.pop(context); 
+                } 
+              }, 
+              child: const Text("Save Changes", style: TextStyle(color: Colors.white))
+            )
+          ]
+        )
+      )
+    );
+  }
+
+  // FIXED: Bracket structure properly un-nested and closed
+  void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) { 
+    if (_treatmentStartDate == null) return; // STRICT LOCK
+    
+    final isEditing = apptToEdit != null;
+    final docController = TextEditingController(text: isEditing ? apptToEdit['doctor_name'] : (_doctorName ?? ""));
+    final locController = TextEditingController(text: isEditing ? apptToEdit['location'] : "");
+    DateTime? selectedDate = isEditing ? DateTime.parse(apptToEdit['appointment_date']) : null;
+    TimeOfDay? selectedTime;
+    
+    if (isEditing) { 
+      final parts = apptToEdit['appointment_time'].toString().split(':'); 
+      selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])); 
+    }
+    
+    bool isSaving = false;
+    
+    showModalBottomSheet(
+      context: context, 
+      isScrollControlled: true, 
+      backgroundColor: kWhite, 
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(35))), 
+      builder: (context) => StatefulBuilder(
+        builder: (context, setModalState) => Padding(
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 25, right: 25, top: 20), 
+          child: Column(
+            mainAxisSize: MainAxisSize.min, 
+            crossAxisAlignment: CrossAxisAlignment.start, 
+            children: [
+              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))), 
+              const SizedBox(height: 25), 
+              Text(isEditing ? "Edit Visit" : "Schedule Visit", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
+              const SizedBox(height: 20), 
+              if (_doctorName != null && !isEditing) 
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 15), 
+                  child: Row(children: [
+                    Icon(Icons.link, size: 16, color: kSecondaryGreen), 
+                    const SizedBox(width: 5), 
+                    Text("Linked to Dr. $_doctorName", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.bold))
+                  ])
+                ), 
+              _buildModernField(docController, "Doctor or Clinic Name", Icons.medical_services_outlined), 
+              const SizedBox(height: 15), 
+              _buildModernField(locController, "Location", Icons.location_on_outlined), 
+              const SizedBox(height: 20), 
+              Row(children: [
+                Expanded(
+                  child: _buildPickerTile(
+                    label: selectedDate == null ? "Select Date" : DateFormat('MMM dd, yyyy').format(selectedDate!), 
+                    icon: Icons.calendar_month_rounded, 
+                    onTap: () async { 
+                      final picked = await showDatePicker(context: context, initialDate: selectedDate ?? DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030)); 
+                      if (picked != null) setModalState(() => selectedDate = picked); 
+                    }
+                  )
+                ), 
+                const SizedBox(width: 15), 
+                Expanded(
+                  child: _buildPickerTile(
+                    label: selectedTime == null ? "Select Time" : selectedTime!.format(context), 
+                    icon: Icons.access_time_rounded, 
+                    onTap: () async { 
+                      final picked = await showTimePicker(context: context, initialTime: selectedTime ?? TimeOfDay.now()); 
+                      if (picked != null) setModalState(() => selectedTime = picked); 
+                    }
+                  )
+                )
+              ]), 
+              const SizedBox(height: 30), 
+              SizedBox(
+                width: double.infinity, 
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))), 
+                  onPressed: isSaving ? null : () async { 
+                    if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) { 
+                      setModalState(() => isSaving = true); 
+                      try { 
+                        final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00'; 
+                        final Map<String, dynamic> appointmentData = {
+                          'user_id': _supabase.auth.currentUser!.id, 
+                          'doctor_name': docController.text, 
+                          'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!), 
+                          'appointment_time': timeString, 
+                          'location': locController.text, 
+                          'status': 'scheduled'
+                        }; 
+                        if (_linkedDoctorId != null) appointmentData['doctor_id'] = _linkedDoctorId; 
+                        
+                        if (isEditing) { 
+                          await _supabase.from('appointments').update(appointmentData).eq('id', apptToEdit['id']); 
+                        } else { 
+                          await _supabase.from('appointments').insert(appointmentData); 
+                        } 
+                        await _fetchAppointments(); 
+                        if (context.mounted) Navigator.pop(context); 
+                      } catch (e) { 
+                        setModalState(() => isSaving = false); 
+                        debugPrint("Appointment Error: $e"); 
+                      } 
+                    } 
+                  }, 
+                  child: isSaving 
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
+                    : Text(isEditing ? "Update Appointment" : "Confirm Appointment", style: TextStyle(color: kWhite, fontSize: 16, fontWeight: FontWeight.bold))
+                )
+              ), 
+              const SizedBox(height: 40)
+            ]
+          )
+        )
+      )
+    );
   }
 
   // --- UI BUILD ---
   @override
   Widget build(BuildContext context) {
+    bool isUnlocked = _connectionStatus == 'active' && _treatmentStartDate != null;
+
     return Scaffold(
       backgroundColor: kWhite,
       appBar: AppBar(
@@ -2640,7 +2552,8 @@ class _FollowUpPageState extends State<FollowUpPage> {
       ),
       body: _isLoading 
         ? Center(child: CircularProgressIndicator(color: kSecondaryGreen)) 
-        : _connectionStatus == 'active' 
+        // OBJECTIVE CHANGE: Only unlock if linked AND doctor set the date
+        : isUnlocked
             ? _buildUnlockedContent() 
             : _buildLockedState(),
     );
@@ -2652,15 +2565,10 @@ class _FollowUpPageState extends State<FollowUpPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. RECOVERY ROADMAP
           _buildRecoveryRoadmap(), 
           const SizedBox(height: 25),
-
-          // 2. STREAK CARD
           _buildStreakCard(),
           const SizedBox(height: 35),
-          
-          // 3. APPOINTMENTS
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -2685,32 +2593,22 @@ class _FollowUpPageState extends State<FollowUpPage> {
               child: _buildAppointmentCard(appt['doctor_name'] ?? "Doctor", appt['appointment_date'], appt['appointment_time'] ?? "00:00", appt['location'] ?? "")
             )
           )),
-          
           const SizedBox(height: 40),
-          
-          // 4. DOCTOR NOTES
           Row(children: [
              Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
              const Spacer(),
              if (_doctorName != null) Text("Shared with Dr. $_doctorName", style: TextStyle(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic)),
           ]),
           const SizedBox(height: 15),
-          
           _buildNoteInputArea(), 
           const SizedBox(height: 25),
-          
-          if (_doctorNotes.isEmpty) 
-             _buildEmptyState("No notes added yet."),
-
+          if (_doctorNotes.isEmpty) _buildEmptyState("No notes added yet."),
           ListView.builder(
             shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
             itemCount: _doctorNotes.length,
             itemBuilder: (context, index) {
               final note = _doctorNotes[index];
-              return InkWell(
-                onLongPress: () => _editNoteDialog(note), 
-                child: _buildNoteTile(note, index),
-              );
+              return InkWell(onLongPress: () => _editNoteDialog(note), child: _buildNoteTile(note, index));
             },
           ),
           const SizedBox(height: 100),
@@ -2719,337 +2617,97 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  // --- WIDGETS ---
-  Widget _buildRecoveryRoadmap() {
-    int daysPassed = 0;
-    if (_treatmentStartDate != null) {
-      daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays;
-    }
-    double progress = (daysPassed / 180).clamp(0.0, 1.0); 
-    int month = (daysPassed / 30).ceil();
-    if (month == 0) month = 1;
-    if (month > 6) month = 6;
-
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-             Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-               Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)),
-               Text("Started: ${_treatmentStartDate != null ? DateFormat('MMM dd').format(_treatmentStartDate!) : 'Pending'}", style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold)),
-             ]),
-             Container(
-               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-               decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(10)),
-               child: Text("Month $month of 6", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kSecondaryGreen)),
-             ),
-          ]),
-          const SizedBox(height: 15),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(10),
-            child: LinearProgressIndicator(
-              value: progress, 
-              minHeight: 12, 
-              backgroundColor: kSoftGrey, 
-              color: kSecondaryGreen
-            ),
-          ),
-          const SizedBox(height: 10),
-          Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-            Text("${(progress * 100).toInt()}% Complete", style: TextStyle(fontSize: 12, color: kPrimaryGreen, fontWeight: FontWeight.bold)),
-            Text("${180 - daysPassed} days left", style: const TextStyle(fontSize: 11, color: Colors.grey)),
-          ]),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNoteInputArea() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: _categories.map((cat) {
-              final isSelected = _selectedCategory == cat;
-              return Padding(
-                padding: const EdgeInsets.only(right: 8.0),
-                child: ChoiceChip(
-                  label: Text(cat),
-                  selected: isSelected,
-                  selectedColor: kPrimaryGreen,
-                  backgroundColor: kSoftGrey,
-                  labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontSize: 12, fontWeight: FontWeight.bold),
-                  onSelected: (val) => setState(() => _selectedCategory = cat),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
-                ),
-              );
-            }).toList(),
-          ),
-        ),
-        const SizedBox(height: 10),
-        Container(
-          decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(20)),
-          child: TextField(
-            controller: _noteController,
-            decoration: InputDecoration(
-              hintText: "Add a $_selectedCategory...",
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15),
-              suffixIcon: IconButton(
-                icon: CircleAvatar(backgroundColor: kPrimaryGreen, child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20)),
-                onPressed: _addNote,
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNoteTile(Map<String, dynamic> note, int index) {
-    bool isChecked = note['is_checked'] ?? false;
-    String category = note['category'] ?? 'Question';
-
-    Color catColor = Colors.grey;
-    if (category == 'Symptom') catColor = const Color(0xFFE76F51); 
-    if (category == 'Question') catColor = const Color(0xFF2A9D8F); 
-    if (category == 'Side Effect') catColor = const Color(0xFFE9C46A); 
-
-    return AnimatedOpacity(
-      opacity: isChecked ? 0.0 : 1.0,
-      duration: const Duration(milliseconds: 500),
-      child: _buildDismissibleWrapper(
-        id: note['id'].toString(), 
-        onDismiss: () => _deleteNote(note['id'].toString()),
-        child: Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          decoration: BoxDecoration(
-            color: kWhite,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: kSoftGrey, width: 1),
-          ),
-          child: CheckboxListTile(
-            activeColor: kSecondaryGreen,
-            checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-            value: isChecked,
-            onChanged: (bool? value) => _toggleNote(index),
-            title: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                  decoration: BoxDecoration(color: catColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
-                  child: Text(category, style: TextStyle(color: catColor, fontSize: 10, fontWeight: FontWeight.bold)),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(note['note_text'], style: TextStyle(
-                    color: kPrimaryGreen,
-                    fontWeight: FontWeight.w600,
-                    fontSize: 15
-                  )),
-                ),
-              ],
-            ),
-            controlAffinity: ListTileControlAffinity.leading,
-          ),
-        ),
-      ),
-    );
-  }
-
+  // --- MODIFIED LOCKED STATE UI ---
   Widget _buildLockedState() {
     bool isPending = _connectionStatus == 'pending';
+    bool isAwaitingPrescription = _connectionStatus == 'active' && _treatmentStartDate == null;
+
     return Padding(
       padding: const EdgeInsets.all(30),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kCreamAccent, shape: BoxShape.circle), child: Icon(isPending ? Icons.hourglass_top_rounded : Icons.lock_outline_rounded, size: 50, color: kPrimaryGreen)),
+          Container(
+            padding: const EdgeInsets.all(20), 
+            decoration: BoxDecoration(color: kCreamAccent, shape: BoxShape.circle), 
+            child: Icon(
+              isAwaitingPrescription ? Icons.medical_services_outlined : (isPending ? Icons.hourglass_top_rounded : Icons.lock_outline_rounded), 
+              size: 50, 
+              color: kPrimaryGreen
+            )
+          ),
           const SizedBox(height: 30),
-          Text(isPending ? "Waiting for Approval" : "Feature Locked", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)),
+          Text(
+            isAwaitingPrescription ? "Awaiting Prescription" : (isPending ? "Waiting for Approval" : "Feature Locked"), 
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)
+          ),
           const SizedBox(height: 10),
-          Text(isPending ? "Your request is being reviewed by the clinic." : "Link with your doctor to coordinate visits.", textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+          Text(
+            isAwaitingPrescription 
+              ? "Dr. $_doctorName has linked your account. Once your physical consultation is complete and your treatment dates are set, your roadmap will appear."
+              : (isPending ? "Your request is being reviewed by the clinic." : "Link with your doctor to coordinate visits."), 
+            textAlign: TextAlign.center, 
+            style: const TextStyle(color: Colors.grey, fontSize: 14)
+          ),
           const SizedBox(height: 40),
           Container(
             padding: const EdgeInsets.all(25), decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(25)),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text("YOUR TREATMENT JOURNEY", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: kSecondaryGreen, letterSpacing: 1.2)),
               const SizedBox(height: 25),
-              _buildStep("Account Created", true), _buildStep("Risk Assessment", true), _buildStep("Link to Clinic", isPending), _buildStep("Unlock Follow-up & Diary", false, isLast: true),
+              _buildStep("Account Created", true), 
+              _buildStep("Risk Assessment", true), 
+              _buildStep("Link to Clinic", isPending || isAwaitingPrescription), 
+              _buildStep("Unlock Roadmap & Diary", false, isLast: true),
             ]),
           ),
           const SizedBox(height: 30),
-          if (!isPending) ElevatedButton(onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'), style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), child: const Text("Go to Dashboard to Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+          if (!isPending && !isAwaitingPrescription) ElevatedButton(onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'), style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), child: const Text("Go to Dashboard to Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
         ],
       ),
     );
   }
 
+  // --- UI COMPONENTS (UNCHANGED) ---
+  Widget _buildRecoveryRoadmap() {
+    int daysPassed = 0;
+    if (_treatmentStartDate != null) { daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays; }
+    double progress = (daysPassed / 180).clamp(0.0, 1.0); 
+    int month = (daysPassed / 30).ceil();
+    if (month <= 0) month = 1;
+    if (month > 6) month = 6;
+    return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), Text("Started: ${DateFormat('MMM dd, yyyy').format(_treatmentStartDate ?? DateTime.now())}", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))]), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(10)), child: Text("Month $month of 6", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kSecondaryGreen)))]), const SizedBox(height: 15), ClipRRect(borderRadius: BorderRadius.circular(10), child: LinearProgressIndicator(value: progress, minHeight: 12, backgroundColor: kSoftGrey, color: kSecondaryGreen)), const SizedBox(height: 10), Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("${(progress * 100).toInt()}% Complete", style: TextStyle(fontSize: 12, color: kPrimaryGreen, fontWeight: FontWeight.bold)), Text("${180 - daysPassed} days left", style: const TextStyle(fontSize: 11, color: Colors.grey))])]));
+  }
+
   Widget _buildStep(String title, bool isActive, {bool isLast = false}) {
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Column(children: [Icon(isActive ? Icons.check_circle : Icons.circle_outlined, color: isActive ? kPrimaryGreen : Colors.grey, size: 22), if (!isLast) Container(height: 30, width: 2, color: isActive ? kPrimaryGreen : Colors.grey.withOpacity(0.3))]),
-      const SizedBox(width: 15), Text(title, style: TextStyle(fontWeight: isActive ? FontWeight.bold : FontWeight.normal, color: isActive ? kPrimaryGreen : Colors.grey, fontSize: 15)),
-    ]);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Column(children: [Icon(isActive ? Icons.check_circle : Icons.circle_outlined, color: isActive ? kPrimaryGreen : Colors.grey, size: 22), if (!isLast) Container(height: 30, width: 2, color: isActive ? kPrimaryGreen : Colors.grey.withOpacity(0.3))]), const SizedBox(width: 15), Text(title, style: TextStyle(fontWeight: isActive ? FontWeight.bold : FontWeight.normal, color: isActive ? kPrimaryGreen : Colors.grey, fontSize: 15))]);
   }
 
   Widget _buildStreakCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(gradient: LinearGradient(colors: [kSecondaryGreen, kPrimaryGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: kPrimaryGreen.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]),
-      child: Stack(children: [
-        Positioned(right: -10, top: -10, child: Icon(Icons.favorite, color: Colors.white10, size: 100)),
-        Row(children: [Container(height: 60, width: 60, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.bolt_rounded, color: Colors.orangeAccent, size: 35)), const SizedBox(width: 20), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('$_streakDays Day Streak', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26)), const Text('Keep going!', style: TextStyle(color: Colors.white70, fontSize: 14))])]),
-      ]),
-    );
+    return Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(gradient: LinearGradient(colors: [kSecondaryGreen, kPrimaryGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: kPrimaryGreen.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]), child: Stack(children: [Positioned(right: -10, top: -10, child: Icon(Icons.favorite, color: Colors.white10, size: 100)), Row(children: [Container(height: 60, width: 60, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.bolt_rounded, color: Colors.orangeAccent, size: 35)), const SizedBox(width: 20), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('$_streakDays Day Streak', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26)), const Text('Keep going!', style: TextStyle(color: Colors.white70, fontSize: 14))])])]));
   }
 
   Widget _buildAppointmentCard(String title, String date, String time, String loc) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 15), padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.03), blurRadius: 15, offset: const Offset(0, 5))]),
-      child: Row(children: [
-        Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(15)), child: Column(children: [Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)), Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen))])),
-        const SizedBox(width: 20),
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kPrimaryGreen)), Text("$date • $time • $loc", style: const TextStyle(color: Colors.grey, fontSize: 12))])),
-      ]),
-    );
+    return Container(margin: const EdgeInsets.only(bottom: 15), padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), child: Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(15)), child: Column(children: [Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)), Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen))])), const SizedBox(width: 20), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kPrimaryGreen)), Text("$date • $time • $loc", style: const TextStyle(color: Colors.grey, fontSize: 12))]))]));
   }
 
-  Widget _buildDismissibleWrapper({required String id, required VoidCallback onDismiss, required Widget child}) {
-    return Dismissible(key: Key(id), direction: DismissDirection.endToStart, onDismissed: (dir) => onDismiss(), background: Container(margin: const EdgeInsets.symmetric(vertical: 5), decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 25), child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 30)), child: child);
+  Widget _buildNoteInputArea() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: _categories.map((cat) { final isSelected = _selectedCategory == cat; return Padding(padding: const EdgeInsets.only(right: 8.0), child: ChoiceChip(label: Text(cat), selected: isSelected, selectedColor: kPrimaryGreen, backgroundColor: kSoftGrey, labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontSize: 12, fontWeight: FontWeight.bold), onSelected: (val) => setState(() => _selectedCategory = cat), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none))); }).toList())), const SizedBox(height: 10), Container(decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(20)), child: TextField(controller: _noteController, decoration: InputDecoration(hintText: "Add a $_selectedCategory...", border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15), suffixIcon: IconButton(icon: CircleAvatar(backgroundColor: kPrimaryGreen, child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20)), onPressed: _addNote))))]);
   }
 
+  Widget _buildNoteTile(Map<String, dynamic> note, int index) {
+    bool isChecked = note['is_checked'] ?? false;
+    String category = note['category'] ?? 'Question';
+    Color catColor = Colors.grey;
+    if (category == 'Symptom') catColor = const Color(0xFFE76F51); 
+    if (category == 'Question') catColor = const Color(0xFF2A9D8F); 
+    if (category == 'Side Effect') catColor = const Color(0xFFE9C46A); 
+    return AnimatedOpacity(opacity: isChecked ? 0.0 : 1.0, duration: const Duration(milliseconds: 500), child: _buildDismissibleWrapper(id: note['id'].toString(), onDismiss: () => _deleteNote(note['id'].toString()), child: Container(margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(18), border: Border.all(color: kSoftGrey, width: 1)), child: CheckboxListTile(activeColor: kSecondaryGreen, checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), value: isChecked, onChanged: (bool? value) => _toggleNote(index), title: Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: catColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: Text(category, style: TextStyle(color: catColor, fontSize: 10, fontWeight: FontWeight.bold))), const SizedBox(width: 8), Expanded(child: Text(note['note_text'], style: TextStyle(color: kPrimaryGreen, fontWeight: FontWeight.w600, fontSize: 15)))]), controlAffinity: ListTileControlAffinity.leading))));
+  }
+
+  Widget _buildDismissibleWrapper({required String id, required VoidCallback onDismiss, required Widget child}) { return Dismissible(key: Key(id), direction: DismissDirection.endToStart, onDismissed: (dir) => onDismiss(), background: Container(margin: const EdgeInsets.symmetric(vertical: 5), decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 25), child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 30)), child: child); }
   Widget _buildEmptyState(String msg) { return Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Text(msg, style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)))); }
 
-  // --- MODAL LOGIC (FIXED) ---
-  void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) { 
-    final isEditing = apptToEdit != null;
-    final docController = TextEditingController(text: isEditing ? apptToEdit['doctor_name'] : (_doctorName ?? ""));
-    final locController = TextEditingController(text: isEditing ? apptToEdit['location'] : "");
-    DateTime? selectedDate = isEditing ? DateTime.parse(apptToEdit['appointment_date']) : null;
-    TimeOfDay? selectedTime;
-    
-    if (isEditing) {
-      final parts = apptToEdit['appointment_time'].toString().split(':');
-      selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
-    }
-    
-    bool isSaving = false;
-
-    showModalBottomSheet(
-      context: context, 
-      isScrollControlled: true, 
-      backgroundColor: kWhite,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(35))),
-      builder: (context) => StatefulBuilder(
-        builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 25, right: 25, top: 20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min, 
-            crossAxisAlignment: CrossAxisAlignment.start, 
-            children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
-              const SizedBox(height: 25), 
-              Text(isEditing ? "Edit Visit" : "Schedule Visit", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
-              const SizedBox(height: 20),
-              
-              if (_doctorName != null && !isEditing) 
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 15), 
-                  child: Row(children: [
-                    Icon(Icons.link, size: 16, color: kSecondaryGreen), 
-                    const SizedBox(width: 5), 
-                    Text("Linked to Dr. $_doctorName", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.bold))
-                  ])
-                ),
-
-              _buildModernField(docController, "Doctor or Clinic Name", Icons.medical_services_outlined), 
-              const SizedBox(height: 15), 
-              _buildModernField(locController, "Location", Icons.location_on_outlined), 
-              const SizedBox(height: 20),
-              
-              Row(children: [
-                Expanded(child: _buildPickerTile(
-                  label: selectedDate == null ? "Select Date" : DateFormat('MMM dd, yyyy').format(selectedDate!), 
-                  icon: Icons.calendar_month_rounded, 
-                  onTap: () async { 
-                    final picked = await showDatePicker(context: context, initialDate: selectedDate ?? DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030)); 
-                    if (picked != null) setModalState(() => selectedDate = picked); 
-                  }
-                )), 
-                const SizedBox(width: 15), 
-                Expanded(child: _buildPickerTile(
-                  label: selectedTime == null ? "Select Time" : selectedTime!.format(context), 
-                  icon: Icons.access_time_rounded, 
-                  onTap: () async { 
-                    final picked = await showTimePicker(context: context, initialTime: selectedTime ?? TimeOfDay.now()); 
-                    if (picked != null) setModalState(() => selectedTime = picked); 
-                  }
-                ))
-              ]),
-              
-              const SizedBox(height: 30), 
-              
-              SizedBox(
-                width: double.infinity, 
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))), 
-                  onPressed: isSaving ? null : () async { 
-                    if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) { 
-                      setModalState(() => isSaving = true); 
-                      try { 
-                        final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00'; 
-                        
-                        final Map<String, dynamic> appointmentData = {
-                          'user_id': _supabase.auth.currentUser!.id, 
-                          'doctor_name': docController.text, 
-                          'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!), 
-                          'appointment_time': timeString, 
-                          'location': locController.text,
-                          'status': 'scheduled' // Explicitly sending status
-                        }; 
-                        
-                        if (_linkedDoctorId != null) appointmentData['doctor_id'] = _linkedDoctorId; 
-                        
-                        if (isEditing) { 
-                          await _supabase.from('appointments').update(appointmentData).eq('id', apptToEdit['id']); 
-                        } else { 
-                          await _supabase.from('appointments').insert(appointmentData); 
-                        } 
-                        
-                        await _fetchAppointments(); 
-                        if (context.mounted) Navigator.pop(context); 
-                        
-                      } catch (e) { 
-                        setModalState(() => isSaving = false); 
-                        debugPrint("Appointment Error: $e"); 
-                        // Show Error Toast
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                          content: Text("Error: ${e.toString().contains('policy') ? 'Permission denied. Run SQL script.' : 'Failed to save.'}"),
-                          backgroundColor: Colors.redAccent,
-                        ));
-                      } 
-                    } else {
-                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Please fill all fields"), backgroundColor: Colors.orange));
-                    }
-                  }, 
-                  child: isSaving 
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                    : Text(isEditing ? "Update Appointment" : "Confirm Appointment", style: TextStyle(color: kWhite, fontSize: 16, fontWeight: FontWeight.bold))
-                )
-              ),
-              const SizedBox(height: 40),
-          ]),
-        ),
-      ),
-    );
-  }
-  
   Widget _buildModernField(TextEditingController controller, String label, IconData icon) { return TextField(controller: controller, decoration: InputDecoration(prefixIcon: Icon(icon, color: kSecondaryGreen), labelText: label, labelStyle: const TextStyle(color: Colors.grey, fontSize: 14), filled: true, fillColor: kSoftGrey, border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none))); }
   Widget _buildPickerTile({required String label, required IconData icon, required VoidCallback onTap}) { return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(18)), child: Column(children: [Icon(icon, color: kSecondaryGreen), const SizedBox(height: 8), Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimaryGreen))]))); }
 }
