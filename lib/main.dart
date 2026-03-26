@@ -9,7 +9,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
-
+import 'package:image_picker/image_picker.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -476,6 +476,7 @@ class _LoginPageState extends State<LoginPage> {
   }
 }
 
+
 class SignUpPage extends StatefulWidget {
   const SignUpPage({super.key});
 
@@ -495,9 +496,68 @@ class _SignUpPageState extends State<SignUpPage> {
   final List<String> _genderOptions = ['Male', 'Female', 'Other'];
   bool _isLoading = false;
 
+  // --- NEW ATTACHMENT & TERMS STATE (WEB SAFE) ---
+  XFile? _idAttachment; 
+  bool _acceptedTerms = false;
+  final ImagePicker _picker = ImagePicker();
+
+  // --- IMAGE PICKER LOGIC ---
+  Future<void> _pickImage() async {
+    try {
+      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      if (pickedFile != null) {
+        setState(() {
+          _idAttachment = pickedFile;
+        });
+      }
+    } catch (e) {
+      _showSnackBar("Failed to pick image: $e");
+    }
+  }
+
+  // --- TERMS & CONDITIONS DIALOG ---
+  void _showTermsDialog(Color forestDark, Color forestLight) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.gavel_rounded, color: forestDark),
+            const SizedBox(width: 10),
+            Text("Terms & Conditions", style: TextStyle(color: forestDark, fontWeight: FontWeight.bold, fontSize: 18)),
+          ],
+        ),
+        content: const SingleChildScrollView(
+          child: Text(
+            "By proceeding with this registration and attaching the requested Carmona Residency ID, I hereby certify under penalty of perjury that the information provided is true, accurate, and reflects my current legal residence within the Municipality of Carmona. I acknowledge that the document submitted is a confidential record intended solely for the purpose of eligibility verification for the TB HealthCare management system. Furthermore, I agree to a strict Non-Disclosure obligation, understanding that any unauthorized access to the system's internal protocols, or the falsification of residency data to gain such access, constitutes a breach of professional conduct and may result in the immediate termination of my account and potential legal action. I consent to the secure electronic processing of my identification data and waive any claims against the system administrators regarding the standardized verification procedures required to maintain the integrity of this localized healthcare initiative.",
+            style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.5),
+            textAlign: TextAlign.justify,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text("Close", style: TextStyle(color: forestLight, fontWeight: FontWeight.bold)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: forestDark,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () {
+              setState(() => _acceptedTerms = true);
+              Navigator.pop(context);
+            },
+            child: const Text("I Agree", style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // --- VALIDATION LOGIC ---
   bool _validateInputs() {
-    // 1. Name: Letters only, max 50 chars
     final nameRegex = RegExp(r'^[a-zA-Z ]+$');
     if (_nameController.text.isEmpty ||
         _nameController.text.length > 50 ||
@@ -506,35 +566,40 @@ class _SignUpPageState extends State<SignUpPage> {
       return false;
     }
 
-    // 2. Age: Number 1-100
     final age = int.tryParse(_ageController.text);
     if (age == null || age < 1 || age > 100) {
       _showSnackBar("Age must be a valid number between 1 and 100.");
       return false;
     }
 
-    // 3. Contact: Starts with 09, exactly 11 digits
     if (!_contactController.text.startsWith('09') ||
         _contactController.text.length != 11) {
       _showSnackBar("Contact number must start with '09' and be 11 digits.");
       return false;
     }
 
-    // 4. Email: Must contain @
     if (!_emailController.text.contains('@')) {
       _showSnackBar("Please enter a valid email address.");
       return false;
     }
 
-    // 5. Password: Minimum 10 chars
     if (_passwordController.text.length < 10) {
       _showSnackBar("Password must be at least 10 characters long.");
       return false;
     }
 
-    // 6. Gender Check
     if (_selectedGender == null) {
       _showSnackBar("Please select a gender.");
+      return false;
+    }
+
+    if (_idAttachment == null) {
+      _showSnackBar("Please attach a valid ID to confirm your residence in Carmona.");
+      return false;
+    }
+
+    if (!_acceptedTerms) {
+      _showSnackBar("You must acknowledge the terms and conditions to proceed.");
       return false;
     }
 
@@ -552,7 +617,6 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _handleSignUp() async {
-    // Run validation before proceeding
     if (!_validateInputs()) return;
 
     setState(() => _isLoading = true);
@@ -563,6 +627,23 @@ class _SignUpPageState extends State<SignUpPage> {
       );
 
       if (authResponse.user != null) {
+        // --- PROCESS WORKFLOW: UPLOAD ID ATTACHMENT ---
+        String? idUrl;
+        if (_idAttachment != null) {
+          final fileExt = _idAttachment!.name.split('.').last;
+          final fileName = '${authResponse.user!.id}_id.$fileExt';
+          
+          final bytes = await _idAttachment!.readAsBytes();
+          
+          await Supabase.instance.client.storage
+              .from('id_attachments')
+              .uploadBinary(fileName, bytes);
+              
+          idUrl = Supabase.instance.client.storage
+              .from('id_attachments')
+              .getPublicUrl(fileName);
+        }
+
         // --- PROCESS WORKFLOW: AUTOMATIC PATIENT ASSIGNMENT ---
         await Supabase.instance.client.from('profiles').insert({
           'id': authResponse.user!.id,
@@ -571,7 +652,8 @@ class _SignUpPageState extends State<SignUpPage> {
           'gender': _selectedGender,
           'contact_number': _contactController.text.trim(),
           'email': _emailController.text.trim(),
-          'role': 'patient', // HARDCODED: Mobile App registrations are always Patients
+          'role': 'patient', 
+          'id_attachment_url': idUrl, 
         });
 
         if (mounted) Navigator.pushNamed(context, '/home');
@@ -604,6 +686,7 @@ class _SignUpPageState extends State<SignUpPage> {
       ),
       body: Stack(
         children: [
+          // The Restored Blob Background
           Positioned(
             top: 200,
             right: -50,
@@ -664,7 +747,6 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
                       const SizedBox(height: 25),
 
-                      // NAME: Letters only, Max 50
                       _buildTextField(
                         label: "Full Name",
                         hint: "Juan Dela Cruz",
@@ -681,7 +763,6 @@ class _SignUpPageState extends State<SignUpPage> {
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // AGE: Numbers only, Max 3 digits (logic handles 1-100)
                           Expanded(
                             child: _buildTextField(
                               label: "Age",
@@ -701,7 +782,6 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
                       const SizedBox(height: 20),
 
-                      // CONTACT: Numbers only, Max 11 digits
                       _buildTextField(
                         label: "Contact Number",
                         hint: "09123456789",
@@ -715,7 +795,6 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
                       const SizedBox(height: 20),
 
-                      // EMAIL: Standard email input
                       _buildTextField(
                         label: "Email Address",
                         hint: "your.email@example.com",
@@ -725,7 +804,6 @@ class _SignUpPageState extends State<SignUpPage> {
                       ),
                       const SizedBox(height: 20),
 
-                      // PASSWORD: Obscured text
                       _buildTextField(
                         label: "Password",
                         hint: "Minimum 10 characters",
@@ -733,12 +811,88 @@ class _SignUpPageState extends State<SignUpPage> {
                         controller: _passwordController,
                         icon: Icons.lock_open_outlined,
                       ),
+                      const SizedBox(height: 20),
 
-                      const SizedBox(height: 40),
+                      // --- STYLED ID ATTACHMENT UPLOAD ---
+                      const Text("Proof of Residence (Carmona ID)", style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold, fontSize: 14)),
+                      const SizedBox(height: 8),
+                      GestureDetector(
+                        onTap: _pickImage,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(color: _idAttachment != null ? forestLight : Colors.transparent, width: 1.5),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                _idAttachment != null ? Icons.check_circle : Icons.upload_file, 
+                                color: _idAttachment != null ? forestLight : forestLight.withOpacity(0.5), 
+                                size: 20
+                              ),
+                              const SizedBox(width: 15),
+                              Expanded(
+                                child: Text(
+                                  _idAttachment != null ? "ID Attached Successfully" : "Tap to upload ID photo",
+                                  style: TextStyle(
+                                    color: _idAttachment != null ? forestDark : Colors.grey, 
+                                    fontSize: 14,
+                                    fontWeight: _idAttachment != null ? FontWeight.bold : FontWeight.normal
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
+
+                      // --- INTERACTIVE TERMS AND CONDITIONS CHECKBOX ---
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          SizedBox(
+                            height: 24,
+                            width: 24,
+                            child: Checkbox(
+                              value: _acceptedTerms,
+                              onChanged: (val) => setState(() => _acceptedTerms = val ?? false),
+                              activeColor: forestLight,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GestureDetector(
+                              onTap: () => _showTermsDialog(forestDark, forestLight),
+                              child: RichText(
+                                text: TextSpan(
+                                  text: "I acknowledge the ",
+                                  style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                                  children: [
+                                    TextSpan(
+                                      text: "Terms & Conditions",
+                                      style: TextStyle(color: forestDark, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                                    ),
+                                    const TextSpan(text: " and confirm I am a resident of Carmona."),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 35),
+
+                      // SUBMIT BUTTON
                       _isLoading
                           ? const Center(child: CircularProgressIndicator(color: forestDark))
                           : _buildGradientButton("Create Account", _handleSignUp, [forestLight, forestDark]),
                       const SizedBox(height: 25),
+                      
                       Center(
                         child: TextButton(
                           onPressed: () => Navigator.pop(context),
@@ -872,6 +1026,9 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 }
 
+
+
+//DASHBOARD
 class DashboardPage extends StatefulWidget {
   const DashboardPage({super.key});
 
@@ -1206,8 +1363,6 @@ class _DashboardPageState extends State<DashboardPage> {
                         mainAxisSpacing: 15,
                         children: [
                           _buildActionCard(context, Icons.assignment_rounded, 'Risk Assessment', 'Check your TB risk', '/assess', forestMed, paleGreen),
-                          _buildActionCard(context, Icons.medication_rounded, 'Medication Diary', 'Track your medicines', '/meds', forestMed, paleGreen),
-                          _buildActionCard(context, Icons.calendar_today_rounded, 'Follow-up', 'Upcoming visits', '/followup', forestMed, paleGreen),
                           _buildActionCard(context, Icons.chat_bubble_rounded, 'Chatbot', 'Support', '/chat', forestMed, paleGreen),
                           _buildActionCard(context, Icons.settings_rounded, 'Settings', 'Preferences', '/settings', forestMed, paleGreen),
                           _buildActionCard(context, Icons.help_outline_rounded, 'Support', 'Contact Us', '/support', forestMed, paleGreen),
@@ -1515,7 +1670,7 @@ class _DashboardPageState extends State<DashboardPage> {
         items: const [
           BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
           BottomNavigationBarItem(icon: Icon(Icons.medication_rounded), label: 'Meds'),
-          BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Follow-up'),
+          BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Roadmap'),
           BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
         ],
       ),
@@ -1844,6 +1999,7 @@ class _MedsPageState extends State<MedsPage> {
 
   DateTime? _treatmentStartDate;
   String? _connectionStatus;
+  String _riskLevel = "Not yet assessed";
 
   final Color primaryGreen = const Color(0xFF2D3B1E); 
   final Color accentGreen = const Color(0xFF606C38);  
@@ -1854,24 +2010,36 @@ class _MedsPageState extends State<MedsPage> {
   void initState() {
     super.initState();
     _fetchData();
-    _setupRealtimeListener(); // ADDED: Start listening when page opens
+    _setupRealtimeListener();
   }
 
-  // ADDED: Realtime listener for the profiles table
   void _setupRealtimeListener() {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
     Supabase.instance.client
-        .channel('meds_profile_sync')
+        .channel('meds_sync')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'connections',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+          callback: (payload) => _fetchData(),
+        )
+        // FIXED: Added profiles listener to catch the moment treatment dates are saved
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'profiles',
           filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: user.id),
-          callback: (payload) {
-            if (mounted) _fetchData();
-          },
+          callback: (payload) => _fetchData(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'medications',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: user.id),
+          callback: (payload) => _fetchData(),
         )
         .subscribe();
   }
@@ -1883,8 +2051,14 @@ class _MedsPageState extends State<MedsPage> {
 
       final profileData = await Supabase.instance.client
           .from('profiles')
-          .select('treatment_start_date, status') // ADDED: fetch status from profiles
+          .select('treatment_start_date, risk_level')
           .eq('id', user.id)
+          .maybeSingle();
+
+      final connectionData = await Supabase.instance.client
+          .from('connections')
+          .select('status')
+          .eq('patient_id', user.id)
           .maybeSingle();
 
       final medsData = await Supabase.instance.client
@@ -1894,19 +2068,11 @@ class _MedsPageState extends State<MedsPage> {
 
       if (mounted) {
         setState(() {
-          // FIXED: Get status from profileData
-          _connectionStatus = profileData?['status'];
+          _connectionStatus = connectionData?['status'];
+          _riskLevel = profileData?['risk_level'] ?? "Not yet assessed";
           
-          // STRICT & SAFE DATE PARSING
-          if (profileData != null && profileData['treatment_start_date'] != null && profileData['treatment_start_date'].toString().trim().isNotEmpty) {
-            try {
-              _treatmentStartDate = DateTime.parse(profileData['treatment_start_date'].toString());
-            } catch (e) {
-              debugPrint("Date parse error: $e");
-              _treatmentStartDate = null;
-            }
-          } else {
-            _treatmentStartDate = null;
+          if (profileData != null && profileData['treatment_start_date'] != null) {
+            _treatmentStartDate = DateTime.parse(profileData['treatment_start_date'].toString());
           }
           
           myMeds = medsData as List<dynamic>;
@@ -1920,31 +2086,10 @@ class _MedsPageState extends State<MedsPage> {
   }
 
   void _handleAddNewMed() {
-    if (_treatmentStartDate != null) {
-      _showMedDialog();
-    } else {
-      // Fallback lock dialog just in case
-      showDialog(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: surfaceWhite,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-          title: Row(
-            children: [
-              Icon(Icons.lock_outline_rounded, color: primaryGreen),
-              const SizedBox(width: 10),
-              Text("Diary Locked", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          content: Text("Your medication diary is locked until your doctor sets your treatment dates.", style: const TextStyle(fontSize: 14, color: Colors.grey, height: 1.5)),
-          actions: [TextButton(onPressed: () => Navigator.pop(context), child: Text("Close", style: TextStyle(color: Colors.grey[600])))],
-        ),
-      );
-    }
+    _showMedDialog();
   }
 
   Future<void> _saveMed({String? medId, required String name, required String dosage, required String time, required DateTime start, required DateTime end}) async {
-    if (_treatmentStartDate == null) return;
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     final medData = {'user_id': user.id, 'name': name, 'dosage': dosage, 'time': time, 'start_date': start.toIso8601String(), 'end_date': end.toIso8601String(), 'is_taken': false};
@@ -1956,13 +2101,11 @@ class _MedsPageState extends State<MedsPage> {
   }
 
   Future<void> _deleteMed(String medId) async {
-    if (_treatmentStartDate == null) return;
     try { await Supabase.instance.client.from('medications').delete().eq('id', medId); _fetchData(); } 
     catch (e) { debugPrint("Error deleting med: $e"); }
   }
 
   Future<void> _toggleMed(bool currentValue, String medId) async {
-    if (_treatmentStartDate == null) return;
     try { await Supabase.instance.client.from('medications').update({'is_taken': !currentValue}).eq('id', medId); _fetchData(); } 
     catch (e) { debugPrint("Error toggling med: $e"); }
   }
@@ -2071,17 +2214,33 @@ class _MedsPageState extends State<MedsPage> {
 
   @override
   Widget build(BuildContext context) {
-    bool isUnlocked = _connectionStatus == 'active' && _treatmentStartDate != null;
+    bool hasTakenAssessment = _riskLevel != "Not yet assessed";
+    bool isVerifiedByDoctor = _connectionStatus == 'active';
+    bool isUnlocked = hasTakenAssessment && isVerifiedByDoctor;
 
     return Scaffold(
       backgroundColor: lightBg,
-      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0, leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen), onPressed: () => Navigator.of(context).pop()), title: Row(children: [Icon(Icons.favorite_rounded, color: accentGreen, size: 28), const SizedBox(width: 10), Text('TB HealthCare', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20))]), actions: [IconButton(icon: Icon(Icons.tune_rounded, color: primaryGreen), onPressed: () { setState(() { if (_viewType == 'Day') _viewType = 'Week'; else if (_viewType == 'Week') _viewType = 'Month'; else _viewType = 'Day'; }); })]),
+      appBar: AppBar(
+        backgroundColor: Colors.transparent, 
+        elevation: 0, 
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen), 
+          onPressed: () => Navigator.of(context).pop()
+        ), 
+        title: Row(
+          children: [
+            Icon(Icons.favorite_rounded, color: accentGreen, size: 28), 
+            const SizedBox(width: 10), 
+            Text('TB HealthCare', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20))
+          ]
+        ),
+      ),
       
       body: _isLoading 
         ? Center(child: CircularProgressIndicator(color: accentGreen)) 
         : isUnlocked 
             ? _buildUnlockedContent() 
-            : _buildLockedUI(),
+            : _buildLockedUI(hasTakenAssessment, isVerifiedByDoctor),
 
       floatingActionButton: isUnlocked 
         ? FloatingActionButton(backgroundColor: primaryGreen, onPressed: _handleAddNewMed, child: const Icon(Icons.add, color: Colors.white))
@@ -2095,7 +2254,9 @@ class _MedsPageState extends State<MedsPage> {
     return Column(
       children: [
         _buildModernHeader(), 
-        const SizedBox(height: 20), 
+        const SizedBox(height: 15), 
+        _buildViewSelector(), 
+        const SizedBox(height: 15), 
         _buildCalendarSection(), 
         const SizedBox(height: 20), 
         Expanded(
@@ -2109,8 +2270,67 @@ class _MedsPageState extends State<MedsPage> {
     );
   }
 
-  Widget _buildLockedUI() {
-    bool isLinked = _connectionStatus == 'active';
+  Widget _buildViewSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Container(
+        height: 45,
+        decoration: BoxDecoration(
+          color: Colors.grey.withOpacity(0.12),
+          borderRadius: BorderRadius.circular(25),
+        ),
+        child: Row(
+          children: ['Day', 'Week', 'Month'].map((type) {
+            bool isSelected = _viewType == type;
+            return Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _viewType = type),
+                behavior: HitTestBehavior.opaque,
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 250),
+                  curve: Curves.easeInOut,
+                  margin: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: isSelected ? Colors.white : Colors.transparent,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: isSelected 
+                        ? [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4, offset: const Offset(0, 2))]
+                        : [],
+                  ),
+                  child: Center(
+                    child: Text(
+                      type,
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                        color: isSelected ? primaryGreen : Colors.grey[500],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          }).toList(),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLockedUI(bool hasAssessed, bool isVerified) {
+    String title = "Diary Locked";
+    String message = "To ensure your safety, the Medication Diary is locked until you complete your assessment and link with your doctor.";
+    IconData icon = Icons.lock_outline_rounded;
+
+    if (!hasAssessed) {
+      title = "Assessment Required";
+      message = "Please complete the Risk Assessment first to unlock your health features.";
+      icon = Icons.assignment_late_outlined;
+    } else if (!isVerified) {
+      title = "Verification Pending";
+      message = "Assessment complete! Now, please link your account to your clinic via the Dashboard and wait for doctor approval.";
+      icon = Icons.hourglass_empty_rounded;
+    }
+
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(30),
@@ -2120,44 +2340,190 @@ class _MedsPageState extends State<MedsPage> {
             Container(
               padding: const EdgeInsets.all(20), 
               decoration: BoxDecoration(color: accentGreen.withOpacity(0.1), shape: BoxShape.circle), 
-              child: Icon(
-                isLinked ? Icons.medical_services_outlined : Icons.lock_outline_rounded, 
-                size: 50, 
-                color: primaryGreen
-              )
+              child: Icon(icon, size: 50, color: primaryGreen)
             ),
             const SizedBox(height: 30),
-            Text(
-              isLinked ? "Awaiting Prescription" : "Diary Locked", 
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: primaryGreen)
-            ),
+            Text(title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: primaryGreen)),
             const SizedBox(height: 10),
-            Text(
-              isLinked 
-                ? "Your account is linked. Your medication diary will automatically unlock once your doctor sets your treatment dates."
-                : "To ensure your safety, the Medication Diary is locked until you link with your doctor.", 
-              textAlign: TextAlign.center, 
-              style: const TextStyle(color: Colors.grey, fontSize: 14)
-            ),
+            Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 14)),
             const SizedBox(height: 40),
-            if (!isLinked)
-              ElevatedButton(
-                onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'), 
+            ElevatedButton(
+                onPressed: () => Navigator.pushReplacementNamed(context, hasAssessed ? '/dashboard' : '/assess'), 
                 style: ElevatedButton.styleFrom(backgroundColor: primaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), 
-                child: const Text("Go to Dashboard to Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
-              ),
+                child: Text(hasAssessed ? "Go to Dashboard" : "Take Assessment", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+            ),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildModernHeader() { return Container(margin: const EdgeInsets.symmetric(horizontal: 20), padding: const EdgeInsets.all(20), width: double.infinity, decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryGreen, accentGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(24)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('Medication Diary', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)), const SizedBox(height: 4), Text('Keep track of your TB treatment journey.', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13)), const SizedBox(height: 15), Row(children: [const Icon(Icons.calendar_today, color: Colors.white, size: 14), const SizedBox(width: 8), Text('${DateFormat('MMMM dd, yyyy').format(_selectedDate)}', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))])])); }
-  Widget _buildCalendarSection() { if (_viewType == 'Month') return SizedBox(height: 300, child: _buildMonthGrid()); if (_viewType == 'Day') return _buildDateCard(_selectedDate, true); return SizedBox(height: 90, child: _buildWeekStrip()); }
-  Widget _buildWeekStrip() { return ListView.builder(padding: const EdgeInsets.symmetric(horizontal: 15), scrollDirection: Axis.horizontal, itemCount: 14, itemBuilder: (context, index) { DateTime date = DateTime.now().add(Duration(days: index - 3)); bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month; return _buildDateCard(date, isSelected); }); }
-  Widget _buildMonthGrid() { int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day; return GridView.builder(padding: const EdgeInsets.symmetric(horizontal: 20), gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(crossAxisCount: 7, mainAxisSpacing: 5, crossAxisSpacing: 5), itemCount: daysInMonth, itemBuilder: (context, index) { DateTime date = DateTime(_selectedDate.year, _selectedDate.month, index + 1); bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month; return _buildDateCard(date, isSelected, compact: true); }); }
-  Widget _buildDateCard(DateTime date, bool isSelected, {bool compact = false}) { return GestureDetector(onTap: () => setState(() => _selectedDate = date), child: AnimatedContainer(duration: const Duration(milliseconds: 200), width: compact ? null : 65, margin: const EdgeInsets.symmetric(horizontal: 6, vertical: 4), decoration: BoxDecoration(color: isSelected ? accentGreen : surfaceWhite, borderRadius: BorderRadius.circular(16), boxShadow: isSelected ? [BoxShadow(color: accentGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [], border: Border.all(color: isSelected ? accentGreen : Colors.grey.withOpacity(0.1))), child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text(DateFormat('E').format(date).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: isSelected ? Colors.white70 : Colors.grey)), const SizedBox(height: 4), Text(date.day.toString(), style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: isSelected ? Colors.white : primaryGreen))]))); }
-  Widget _buildMedList() { final filteredMeds = myMeds.where((med) { DateTime start = DateTime.parse(med['start_date']); DateTime end = DateTime.parse(med['end_date']); DateTime startDate = DateTime(start.year, start.month, start.day); DateTime endDate = DateTime(end.year, end.month, end.day); DateTime selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day); return !selectedDate.isBefore(startDate) && !selectedDate.isAfter(endDate); }).toList(); if (filteredMeds.isEmpty) return Column(mainAxisAlignment: MainAxisAlignment.center, children: [Icon(Icons.spa_outlined, size: 60, color: Colors.grey[300]), const SizedBox(height: 10), Text("Rest easy. No meds today.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))]); return ListView.builder(padding: const EdgeInsets.fromLTRB(20, 30, 20, 100), itemCount: filteredMeds.length, itemBuilder: (context, index) { final med = filteredMeds[index]; bool isTaken = med['is_taken'] ?? false; return Container(margin: const EdgeInsets.only(bottom: 16), padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: isTaken ? lightBg.withOpacity(0.5) : surfaceWhite, borderRadius: BorderRadius.circular(20), border: Border.all(color: isTaken ? Colors.transparent : Colors.grey.withOpacity(0.1))), child: Row(children: [GestureDetector(onTap: () => _toggleMed(isTaken, med['id'].toString()), child: Container(padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: isTaken ? accentGreen : lightBg, shape: BoxShape.circle), child: Icon(isTaken ? Icons.check : Icons.medication_rounded, color: isTaken ? Colors.white : accentGreen, size: 24))), const SizedBox(width: 15), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(med['name'], style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, decoration: isTaken ? TextDecoration.lineThrough : null, color: isTaken ? Colors.grey : primaryGreen)), Text('${med['dosage']} • ${med['time']}', style: TextStyle(fontSize: 13, color: isTaken ? Colors.grey[400] : Colors.grey[600]))])), PopupMenuButton<String>(icon: const Icon(Icons.more_vert, color: Colors.grey), onSelected: (value) { if (value == 'edit') _showMedDialog(existingMed: med); if (value == 'delete') _deleteMed(med['id'].toString()); }, itemBuilder: (context) => [const PopupMenuItem(value: 'edit', child: Text('Edit')), const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red)))])])); }); }
+  Widget _buildModernHeader() { 
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 20), 
+      padding: const EdgeInsets.all(20), 
+      width: double.infinity, 
+      decoration: BoxDecoration(gradient: LinearGradient(colors: [primaryGreen, accentGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(24)), 
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start, 
+        children: [
+          const Text('Medication Diary', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)), 
+          const SizedBox(height: 4), 
+          Text('Keep track of your TB treatment journey.', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13)), 
+          const SizedBox(height: 15), 
+          Row(
+            children: [
+              const Icon(Icons.calendar_today, color: Colors.white, size: 14), 
+              const SizedBox(width: 8), 
+              Text(DateFormat('MMMM dd, yyyy').format(_selectedDate), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))
+            ]
+          )
+        ]
+      )
+    ); 
+  }
+
+  Widget _buildCalendarSection() { 
+    if (_viewType == 'Month') return SizedBox(height: 350, child: _buildMonthGrid()); 
+    if (_viewType == 'Day') return Center(child: SizedBox(height: 90, child: _buildDateCard(_selectedDate, true))); 
+    return SizedBox(height: 90, child: _buildWeekStrip()); 
+  }
+
+  Widget _buildWeekStrip() { 
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 15), 
+      scrollDirection: Axis.horizontal, 
+      itemCount: 14, 
+      itemBuilder: (context, index) { 
+        DateTime date = DateTime.now().add(Duration(days: index - 3)); 
+        bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month; 
+        return _buildDateCard(date, isSelected); 
+      }
+    ); 
+  }
+
+  Widget _buildMonthGrid() { 
+    int daysInMonth = DateTime(_selectedDate.year, _selectedDate.month + 1, 0).day; 
+    return GridView.builder(
+      padding: const EdgeInsets.symmetric(horizontal: 20), 
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 7, 
+        mainAxisSpacing: 8, 
+        crossAxisSpacing: 8,
+        childAspectRatio: 0.75, 
+      ), 
+      itemCount: daysInMonth, 
+      itemBuilder: (context, index) { 
+        DateTime date = DateTime(_selectedDate.year, _selectedDate.month, index + 1); 
+        bool isSelected = date.day == _selectedDate.day && date.month == _selectedDate.month; 
+        return _buildDateCard(date, isSelected, compact: true); 
+      }
+    ); 
+  }
+
+  Widget _buildDateCard(DateTime date, bool isSelected, {bool compact = false}) { 
+    return GestureDetector(
+      onTap: () => setState(() => _selectedDate = date), 
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200), 
+        width: compact ? null : 65, 
+        margin: EdgeInsets.symmetric(horizontal: compact ? 2 : 6, vertical: compact ? 2 : 4), 
+        decoration: BoxDecoration(
+          color: isSelected ? accentGreen : surfaceWhite, 
+          borderRadius: BorderRadius.circular(16), 
+          boxShadow: isSelected ? [BoxShadow(color: accentGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [], 
+          border: Border.all(color: isSelected ? accentGreen : Colors.grey.withOpacity(0.1))
+        ), 
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center, 
+          children: [
+            Text(
+              DateFormat('E').format(date).toUpperCase(), 
+              style: TextStyle(fontSize: compact ? 8 : 10, fontWeight: FontWeight.w800, color: isSelected ? Colors.white70 : Colors.grey)
+            ), 
+            const SizedBox(height: 2), 
+            Text(
+              date.day.toString(), 
+              style: TextStyle(fontSize: compact ? 14 : 18, fontWeight: FontWeight.w700, color: isSelected ? Colors.white : primaryGreen)
+            )
+          ]
+        )
+      )
+    ); 
+  }
+
+  Widget _buildMedList() { 
+    final filteredMeds = myMeds.where((med) { 
+      DateTime start = DateTime.parse(med['start_date']); 
+      DateTime end = DateTime.parse(med['end_date']); 
+      DateTime startDate = DateTime(start.year, start.month, start.day); 
+      DateTime endDate = DateTime(end.year, end.month, end.day); 
+      DateTime selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day); 
+      return !selectedDate.isBefore(startDate) && !selectedDate.isAfter(endDate); 
+    }).toList(); 
+
+    if (filteredMeds.isEmpty) {
+      return Column(
+        mainAxisAlignment: MainAxisAlignment.center, 
+        children: [
+          Icon(Icons.spa_outlined, size: 60, color: Colors.grey[300]), 
+          const SizedBox(height: 10), 
+          Text("Rest easy. No meds today.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))
+        ]
+      ); 
+    }
+
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(20, 30, 20, 100), 
+      itemCount: filteredMeds.length, 
+      itemBuilder: (context, index) { 
+        final med = filteredMeds[index]; 
+        bool isTaken = med['is_taken'] ?? false; 
+        return Container(
+          margin: const EdgeInsets.only(bottom: 16), 
+          padding: const EdgeInsets.all(12), 
+          decoration: BoxDecoration(
+            color: isTaken ? lightBg.withOpacity(0.5) : surfaceWhite, 
+            borderRadius: BorderRadius.circular(20), 
+            border: Border.all(color: isTaken ? Colors.transparent : Colors.grey.withOpacity(0.1))
+          ), 
+          child: Row(
+            children: [
+              GestureDetector(
+                onTap: () => _toggleMed(isTaken, med['id'].toString()), 
+                child: Container(
+                  padding: const EdgeInsets.all(10), 
+                  decoration: BoxDecoration(color: isTaken ? accentGreen : lightBg, shape: BoxShape.circle), 
+                  child: Icon(isTaken ? Icons.check : Icons.medication_rounded, color: isTaken ? Colors.white : accentGreen, size: 24)
+                )
+              ), 
+              const SizedBox(width: 15), 
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start, 
+                  children: [
+                    Text(med['name'], style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, decoration: isTaken ? TextDecoration.lineThrough : null, color: isTaken ? Colors.grey : primaryGreen)), 
+                    Text('${med['dosage']} • ${med['time']}', style: TextStyle(fontSize: 13, color: isTaken ? Colors.grey[400] : Colors.grey[600]))
+                  ]
+                )
+              ), 
+              PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert, color: Colors.grey), 
+                onSelected: (value) { 
+                  if (value == 'edit') _showMedDialog(existingMed: med); 
+                  if (value == 'delete') _deleteMed(med['id'].toString()); 
+                }, 
+                itemBuilder: (context) => [
+                  const PopupMenuItem(value: 'edit', child: Text('Edit')), 
+                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red)))
+                ]
+              )
+            ]
+          )
+        ); 
+      }
+    ); 
+  }
 }
 
 //FOLLOWUP PAGE
@@ -2218,15 +2584,22 @@ class _FollowUpPageState extends State<FollowUpPage> {
       .onPostgresChanges(
         event: PostgresChangeEvent.all,
         schema: 'public',
-        table: 'profiles', // FIXED: Watch the profiles table for status updates
+        table: 'profiles',
         filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: user.id),
         callback: (payload) => _checkConnectionAndLoad(),
       )
       .onPostgresChanges(
         event: PostgresChangeEvent.all,
         schema: 'public',
-        table: 'appointments',
-        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: user.id),
+        table: 'connections',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+        callback: (payload) => _checkConnectionAndLoad(),
+      )
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'roadmap',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
         callback: (payload) => _fetchAppointments(), 
       )
       .subscribe();
@@ -2238,26 +2611,26 @@ class _FollowUpPageState extends State<FollowUpPage> {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
+      // 1. Check connection status (Handshake)
       final connectionData = await _supabase
           .from('connections')
-          .select('status, created_at, doctor_id, profiles!fk_doctor(full_name)')
+          .select('status, doctor_id, profiles!fk_doctor(full_name)')
           .eq('patient_id', user.id)
           .maybeSingle();
 
+      // 2. Check treatment dates (Prescription)
       final profileData = await _supabase
           .from('profiles')
-          .select('treatment_start_date, status') // FIXED: fetch status directly from profiles
+          .select('treatment_start_date') 
           .eq('id', user.id)
           .maybeSingle(); 
 
       if (mounted) {
         setState(() {
-          // FIXED: Use status from the profile table
-          _connectionStatus = profileData?['status'];
+          _connectionStatus = connectionData?['status'];
 
           if (connectionData != null) {
             _linkedDoctorId = connectionData['doctor_id'];
-            
             final doctorProfile = connectionData['profiles'] as Map<String, dynamic>?;
             _doctorName = doctorProfile?['full_name'];
           } else {
@@ -2265,20 +2638,15 @@ class _FollowUpPageState extends State<FollowUpPage> {
             _doctorName = null;
           }
 
-          // STRICT & SAFE DATE PARSING
-          if (profileData != null && profileData['treatment_start_date'] != null && profileData['treatment_start_date'].toString().trim().isNotEmpty) {
-             try {
-               _treatmentStartDate = DateTime.parse(profileData['treatment_start_date'].toString());
-             } catch (e) {
-               debugPrint("Date parse error: $e");
-               _treatmentStartDate = null;
-             }
+          if (profileData != null && profileData['treatment_start_date'] != null) {
+             _treatmentStartDate = DateTime.tryParse(profileData['treatment_start_date'].toString());
           } else {
-             _treatmentStartDate = null; 
+             _treatmentStartDate = null;
           }
         });
       }
 
+      // 3. Load content if unlocked
       if (_connectionStatus == 'active' && _treatmentStartDate != null) {
         await Future.wait([
           _fetchStreak(),
@@ -2315,20 +2683,19 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   Future<void> _fetchAppointments() async {
     try {
-      final data = await _supabase.from('appointments')
+      final data = await _supabase.from('roadmap')
           .select()
-          .eq('user_id', _supabase.auth.currentUser!.id)
+          .eq('patient_id', _supabase.auth.currentUser!.id)
           .neq('status', 'completed') 
           .order('appointment_date', ascending: true);
       if (mounted) setState(() => _appointments = List<Map<String, dynamic>>.from(data));
     } catch (e) { debugPrint('Appt Error: $e'); }
   }
 
-  // --- CRUD OPERATIONS (PROTECTED) ---
+  // --- CRUD OPERATIONS ---
   Future<void> _addNote() async {
-    if (_treatmentStartDate == null) return; // STRICT LOCK
+    if (_treatmentStartDate == null) return; 
     if (_noteController.text.isEmpty) return;
-    
     final text = _noteController.text;
     final category = _selectedCategory;
     _noteController.clear();
@@ -2340,13 +2707,13 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   Future<void> _deleteNote(String id) async { 
-    if (_treatmentStartDate == null) return; // STRICT LOCK
+    if (_treatmentStartDate == null) return; 
     await _supabase.from('doctor_notes').delete().eq('id', id); 
     _fetchNotes(); 
   }
 
   Future<void> _toggleNote(int index) async {
-    if (_treatmentStartDate == null) return; // STRICT LOCK
+    if (_treatmentStartDate == null) return; 
     setState(() { _doctorNotes[index]['is_checked'] = true; });
     await Future.delayed(const Duration(milliseconds: 500));
     final noteId = _doctorNotes[index]['id'];
@@ -2355,14 +2722,13 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   Future<void> _deleteAppointment(String id) async { 
-    if (_treatmentStartDate == null) return; // STRICT LOCK
-    await _supabase.from('appointments').delete().eq('id', id); 
+    if (_treatmentStartDate == null) return; 
+    await _supabase.from('roadmap').delete().eq('id', id);
     _fetchAppointments(); 
   }
 
-  // FIXED: Bracket structure properly un-nested and closed
   Future<void> _editNoteDialog(Map<String, dynamic> note) async {
-    if (_treatmentStartDate == null) return; // STRICT LOCK
+    if (_treatmentStartDate == null) return; 
     final editController = TextEditingController(text: note['note_text']);
     String editCategory = note['category'] ?? 'Question';
     
@@ -2402,10 +2768,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
             ]
           ), 
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context), 
-              child: const Text("Cancel", style: TextStyle(color: Colors.grey))
-            ), 
+            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.grey))), 
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), 
               onPressed: () async { 
@@ -2423,113 +2786,80 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  // FIXED: Bracket structure properly un-nested and closed
   void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) { 
-    if (_treatmentStartDate == null) return; // STRICT LOCK
-    
+    if (_treatmentStartDate == null) return; 
     final isEditing = apptToEdit != null;
-    final docController = TextEditingController(text: isEditing ? apptToEdit['doctor_name'] : (_doctorName ?? ""));
+    final docController = TextEditingController(text: isEditing ? (_doctorName ?? "") : (_doctorName ?? ""));
     final locController = TextEditingController(text: isEditing ? apptToEdit['location'] : "");
     DateTime? selectedDate = isEditing ? DateTime.parse(apptToEdit['appointment_date']) : null;
     TimeOfDay? selectedTime;
-    
     if (isEditing) { 
       final parts = apptToEdit['appointment_time'].toString().split(':'); 
       selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])); 
     }
-    
     bool isSaving = false;
     
     showModalBottomSheet(
-      context: context, 
-      isScrollControlled: true, 
-      backgroundColor: kWhite, 
+      context: context, isScrollControlled: true, backgroundColor: kWhite, 
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(35))), 
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Padding(
           padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 25, right: 25, top: 20), 
           child: Column(
-            mainAxisSize: MainAxisSize.min, 
-            crossAxisAlignment: CrossAxisAlignment.start, 
+            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, 
             children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))), 
               const SizedBox(height: 25), 
-              Text(isEditing ? "Edit Visit" : "Schedule Visit", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
+              Text(isEditing ? "Edit Milestone" : "Add Roadmap Milestone", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
               const SizedBox(height: 20), 
-              if (_doctorName != null && !isEditing) 
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 15), 
-                  child: Row(children: [
-                    Icon(Icons.link, size: 16, color: kSecondaryGreen), 
-                    const SizedBox(width: 5), 
-                    Text("Linked to Dr. $_doctorName", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.bold))
-                  ])
-                ), 
               _buildModernField(docController, "Doctor or Clinic Name", Icons.medical_services_outlined), 
               const SizedBox(height: 15), 
-              _buildModernField(locController, "Location", Icons.location_on_outlined), 
+              _buildModernField(locController, "Location / Goal", Icons.flag_outlined), 
               const SizedBox(height: 20), 
               Row(children: [
-                Expanded(
-                  child: _buildPickerTile(
-                    label: selectedDate == null ? "Select Date" : DateFormat('MMM dd, yyyy').format(selectedDate!), 
-                    icon: Icons.calendar_month_rounded, 
-                    onTap: () async { 
-                      final picked = await showDatePicker(context: context, initialDate: selectedDate ?? DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030)); 
-                      if (picked != null) setModalState(() => selectedDate = picked); 
-                    }
-                  )
-                ), 
+                Expanded(child: _buildPickerTile(
+                  label: selectedDate == null ? "Select Date" : DateFormat('MMM dd, yyyy').format(selectedDate!), 
+                  icon: Icons.calendar_month_rounded, 
+                  onTap: () async { 
+                    final picked = await showDatePicker(context: context, initialDate: selectedDate ?? DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030)); 
+                    if (picked != null) setModalState(() => selectedDate = picked); 
+                  }
+                )), 
                 const SizedBox(width: 15), 
-                Expanded(
-                  child: _buildPickerTile(
-                    label: selectedTime == null ? "Select Time" : selectedTime!.format(context), 
-                    icon: Icons.access_time_rounded, 
-                    onTap: () async { 
-                      final picked = await showTimePicker(context: context, initialTime: selectedTime ?? TimeOfDay.now()); 
-                      if (picked != null) setModalState(() => selectedTime = picked); 
-                    }
-                  )
-                )
+                Expanded(child: _buildPickerTile(
+                  label: selectedTime == null ? "Select Time" : selectedTime!.format(context), 
+                  icon: Icons.access_time_rounded, 
+                  onTap: () async { 
+                    final picked = await showTimePicker(context: context, initialTime: selectedTime ?? TimeOfDay.now()); 
+                    if (picked != null) setModalState(() => selectedTime = picked); 
+                  }
+                ))
               ]), 
               const SizedBox(height: 30), 
-              SizedBox(
-                width: double.infinity, 
-                child: ElevatedButton(
-                  style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))), 
-                  onPressed: isSaving ? null : () async { 
-                    if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) { 
-                      setModalState(() => isSaving = true); 
-                      try { 
-                        final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00'; 
-                        final Map<String, dynamic> appointmentData = {
-                          'user_id': _supabase.auth.currentUser!.id, 
-                          'doctor_name': docController.text, 
-                          'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!), 
-                          'appointment_time': timeString, 
-                          'location': locController.text, 
-                          'status': 'scheduled'
-                        }; 
-                        if (_linkedDoctorId != null) appointmentData['doctor_id'] = _linkedDoctorId; 
-                        
-                        if (isEditing) { 
-                          await _supabase.from('appointments').update(appointmentData).eq('id', apptToEdit['id']); 
-                        } else { 
-                          await _supabase.from('appointments').insert(appointmentData); 
-                        } 
-                        await _fetchAppointments(); 
-                        if (context.mounted) Navigator.pop(context); 
-                      } catch (e) { 
-                        setModalState(() => isSaving = false); 
-                        debugPrint("Appointment Error: $e"); 
-                      } 
-                    } 
-                  }, 
-                  child: isSaving 
-                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) 
-                    : Text(isEditing ? "Update Appointment" : "Confirm Appointment", style: TextStyle(color: kWhite, fontSize: 16, fontWeight: FontWeight.bold))
-                )
-              ), 
+              SizedBox(width: double.infinity, child: ElevatedButton(
+                style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))), 
+                onPressed: isSaving ? null : () async { 
+                  if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) { 
+                    setModalState(() => isSaving = true); 
+                    try { 
+                      final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00'; 
+                      final Map<String, dynamic> appointmentData = {
+                        'patient_id': _supabase.auth.currentUser!.id, 
+                        'doctor_id': _linkedDoctorId, 
+                        'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!), 
+                        'appointment_time': timeString, 
+                        'location': locController.text, 
+                        'status': 'scheduled'
+                      }; 
+                      if (isEditing) { await _supabase.from('roadmap').update(appointmentData).eq('id', apptToEdit['id']); } 
+                      else { await _supabase.from('roadmap').insert(appointmentData); } 
+                      await _fetchAppointments(); 
+                      if (context.mounted) Navigator.pop(context); 
+                    } catch (e) { setModalState(() => isSaving = false); } 
+                  } 
+                }, 
+                child: isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(isEditing ? "Update Milestone" : "Add Milestone", style: TextStyle(color: kWhite, fontWeight: FontWeight.bold))
+              )), 
               const SizedBox(height: 40)
             ]
           )
@@ -2552,10 +2882,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
       ),
       body: _isLoading 
         ? Center(child: CircularProgressIndicator(color: kSecondaryGreen)) 
-        // OBJECTIVE CHANGE: Only unlock if linked AND doctor set the date
-        : isUnlocked
-            ? _buildUnlockedContent() 
-            : _buildLockedState(),
+        : isUnlocked ? _buildUnlockedContent() : _buildLockedState(),
     );
   }
 
@@ -2572,33 +2899,29 @@ class _FollowUpPageState extends State<FollowUpPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Upcoming Visits", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
+              Text("Roadmap Milestones", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
               GestureDetector(
                 onTap: () => _showAppointmentModal(),
                 child: Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: kSecondaryGreen, shape: BoxShape.circle, boxShadow: [BoxShadow(color: kSecondaryGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))]),
+                  decoration: BoxDecoration(color: kSecondaryGreen, shape: BoxShape.circle),
                   child: const Icon(Icons.add, color: Colors.white, size: 20),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 15),
-          if (_appointments.isEmpty) _buildEmptyState("No scheduled visits yet."),
+          if (_appointments.isEmpty) _buildEmptyState("No milestones scheduled yet."),
           ..._appointments.map((appt) => _buildDismissibleWrapper(
             id: appt['id'].toString(), 
             onDismiss: () => _deleteAppointment(appt['id'].toString()), 
             child: GestureDetector(
               onTap: () => _showAppointmentModal(apptToEdit: appt),
-              child: _buildAppointmentCard(appt['doctor_name'] ?? "Doctor", appt['appointment_date'], appt['appointment_time'] ?? "00:00", appt['location'] ?? "")
+              child: _buildAppointmentCard(_doctorName ?? "Doctor", appt['appointment_date'], appt['appointment_time'] ?? "00:00", appt['location'] ?? "")
             )
           )),
           const SizedBox(height: 40),
-          Row(children: [
-             Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-             const Spacer(),
-             if (_doctorName != null) Text("Shared with Dr. $_doctorName", style: TextStyle(color: Colors.grey, fontSize: 10, fontStyle: FontStyle.italic)),
-          ]),
+          Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
           const SizedBox(height: 15),
           _buildNoteInputArea(), 
           const SizedBox(height: 25),
@@ -2617,7 +2940,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  // --- MODIFIED LOCKED STATE UI ---
   Widget _buildLockedState() {
     bool isPending = _connectionStatus == 'pending';
     bool isAwaitingPrescription = _connectionStatus == 'active' && _treatmentStartDate == null;
@@ -2628,27 +2950,17 @@ class _FollowUpPageState extends State<FollowUpPage> {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Container(
-            padding: const EdgeInsets.all(20), 
-            decoration: BoxDecoration(color: kCreamAccent, shape: BoxShape.circle), 
-            child: Icon(
-              isAwaitingPrescription ? Icons.medical_services_outlined : (isPending ? Icons.hourglass_top_rounded : Icons.lock_outline_rounded), 
-              size: 50, 
-              color: kPrimaryGreen
-            )
+            padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kCreamAccent, shape: BoxShape.circle), 
+            child: Icon(isAwaitingPrescription ? Icons.medical_services_outlined : Icons.lock_outline_rounded, size: 50, color: kPrimaryGreen)
           ),
           const SizedBox(height: 30),
-          Text(
-            isAwaitingPrescription ? "Awaiting Prescription" : (isPending ? "Waiting for Approval" : "Feature Locked"), 
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)
-          ),
+          Text(isAwaitingPrescription ? "Awaiting Prescription" : (isPending ? "Waiting for Approval" : "Feature Locked"), 
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)),
           const SizedBox(height: 10),
-          Text(
-            isAwaitingPrescription 
-              ? "Dr. $_doctorName has linked your account. Once your physical consultation is complete and your treatment dates are set, your roadmap will appear."
-              : (isPending ? "Your request is being reviewed by the clinic." : "Link with your doctor to coordinate visits."), 
-            textAlign: TextAlign.center, 
-            style: const TextStyle(color: Colors.grey, fontSize: 14)
-          ),
+          Text(isAwaitingPrescription 
+            ? "Dr. ${(_doctorName ?? "your doctor")} has linked your account. Once your treatment dates are set, your roadmap will appear."
+            : (isPending ? "Your request is being reviewed by the clinic." : "Link with your doctor to coordinate visits."), 
+            textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 14)),
           const SizedBox(height: 40),
           Container(
             padding: const EdgeInsets.all(25), decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(25)),
@@ -2662,55 +2974,99 @@ class _FollowUpPageState extends State<FollowUpPage> {
             ]),
           ),
           const SizedBox(height: 30),
-          if (!isPending && !isAwaitingPrescription) ElevatedButton(onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'), style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), child: const Text("Go to Dashboard to Link", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
+          if (!isPending && !isAwaitingPrescription) ElevatedButton(onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'), style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), child: const Text("Go to Dashboard", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
         ],
       ),
     );
   }
 
-  // --- UI COMPONENTS (UNCHANGED) ---
+  // --- UI COMPONENTS ---
   Widget _buildRecoveryRoadmap() {
     int daysPassed = 0;
     if (_treatmentStartDate != null) { daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays; }
     double progress = (daysPassed / 180).clamp(0.0, 1.0); 
-    int month = (daysPassed / 30).ceil();
-    if (month <= 0) month = 1;
-    if (month > 6) month = 6;
-    return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), Text("Started: ${DateFormat('MMM dd, yyyy').format(_treatmentStartDate ?? DateTime.now())}", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))]), Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(10)), child: Text("Month $month of 6", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kSecondaryGreen)))]), const SizedBox(height: 15), ClipRRect(borderRadius: BorderRadius.circular(10), child: LinearProgressIndicator(value: progress, minHeight: 12, backgroundColor: kSoftGrey, color: kSecondaryGreen)), const SizedBox(height: 10), Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("${(progress * 100).toInt()}% Complete", style: TextStyle(fontSize: 12, color: kPrimaryGreen, fontWeight: FontWeight.bold)), Text("${180 - daysPassed} days left", style: const TextStyle(fontSize: 11, color: Colors.grey))])]));
+    int month = (daysPassed / 30).ceil().clamp(1, 6);
+    return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), 
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), 
+            Text("Started: ${DateFormat('MMM dd, yyyy').format(_treatmentStartDate ?? DateTime.now())}", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))
+          ]), 
+          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(10)), child: Text("Month $month of 6", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kSecondaryGreen)))
+        ]), 
+        const SizedBox(height: 15), 
+        ClipRRect(borderRadius: BorderRadius.circular(10), child: LinearProgressIndicator(value: progress, minHeight: 12, backgroundColor: kSoftGrey, color: kSecondaryGreen)), 
+        const SizedBox(height: 10), 
+        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("${(progress * 100).toInt()}% Complete", style: TextStyle(fontSize: 12, color: kPrimaryGreen, fontWeight: FontWeight.bold)), Text("${180 - daysPassed} days left", style: const TextStyle(fontSize: 11, color: Colors.grey))])
+      ]));
   }
 
   Widget _buildStep(String title, bool isActive, {bool isLast = false}) {
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Column(children: [Icon(isActive ? Icons.check_circle : Icons.circle_outlined, color: isActive ? kPrimaryGreen : Colors.grey, size: 22), if (!isLast) Container(height: 30, width: 2, color: isActive ? kPrimaryGreen : Colors.grey.withOpacity(0.3))]), const SizedBox(width: 15), Text(title, style: TextStyle(fontWeight: isActive ? FontWeight.bold : FontWeight.normal, color: isActive ? kPrimaryGreen : Colors.grey, fontSize: 15))]);
+    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Column(children: [
+        Icon(isActive ? Icons.check_circle : Icons.circle_outlined, color: isActive ? kPrimaryGreen : Colors.grey, size: 22), 
+        if (!isLast) Container(height: 30, width: 2, color: isActive ? kPrimaryGreen : Colors.grey.withOpacity(0.3))
+      ]), 
+      const SizedBox(width: 15), 
+      Text(title, style: TextStyle(fontWeight: isActive ? FontWeight.bold : FontWeight.normal, color: isActive ? kPrimaryGreen : Colors.grey, fontSize: 15))
+    ]);
   }
 
   Widget _buildStreakCard() {
-    return Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(gradient: LinearGradient(colors: [kSecondaryGreen, kPrimaryGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(30), boxShadow: [BoxShadow(color: kPrimaryGreen.withOpacity(0.3), blurRadius: 20, offset: const Offset(0, 10))]), child: Stack(children: [Positioned(right: -10, top: -10, child: Icon(Icons.favorite, color: Colors.white10, size: 100)), Row(children: [Container(height: 60, width: 60, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.bolt_rounded, color: Colors.orangeAccent, size: 35)), const SizedBox(width: 20), Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('$_streakDays Day Streak', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26)), const Text('Keep going!', style: TextStyle(color: Colors.white70, fontSize: 14))])])]));
+    return Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(gradient: LinearGradient(colors: [kSecondaryGreen, kPrimaryGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(30)), 
+      child: Row(children: [
+        Container(height: 60, width: 60, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.bolt_rounded, color: Colors.orangeAccent, size: 35)), 
+        const SizedBox(width: 20), 
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('$_streakDays Day Streak', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26)), const Text('Keep going!', style: TextStyle(color: Colors.white70, fontSize: 14))])
+      ]));
   }
 
   Widget _buildAppointmentCard(String title, String date, String time, String loc) {
-    return Container(margin: const EdgeInsets.only(bottom: 15), padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), child: Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(15)), child: Column(children: [Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)), Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen))])), const SizedBox(width: 20), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kPrimaryGreen)), Text("$date • $time • $loc", style: const TextStyle(color: Colors.grey, fontSize: 12))]))]));
+    return Container(margin: const EdgeInsets.only(bottom: 15), padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), 
+      child: Row(children: [
+        Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(15)), child: Column(children: [Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)), Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen))])), 
+        const SizedBox(width: 20), 
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kPrimaryGreen)), Text("$date • $time • $loc", style: const TextStyle(color: Colors.grey, fontSize: 12))]))
+      ]));
   }
 
   Widget _buildNoteInputArea() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: _categories.map((cat) { final isSelected = _selectedCategory == cat; return Padding(padding: const EdgeInsets.only(right: 8.0), child: ChoiceChip(label: Text(cat), selected: isSelected, selectedColor: kPrimaryGreen, backgroundColor: kSoftGrey, labelStyle: TextStyle(color: isSelected ? Colors.white : Colors.grey[700], fontSize: 12, fontWeight: FontWeight.bold), onSelected: (val) => setState(() => _selectedCategory = cat), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none))); }).toList())), const SizedBox(height: 10), Container(decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(20)), child: TextField(controller: _noteController, decoration: InputDecoration(hintText: "Add a $_selectedCategory...", border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15), suffixIcon: IconButton(icon: CircleAvatar(backgroundColor: kPrimaryGreen, child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20)), onPressed: _addNote))))]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: _categories.map((cat) { 
+        final isSelected = _selectedCategory == cat; 
+        return Padding(padding: const EdgeInsets.only(right: 8.0), child: ChoiceChip(label: Text(cat), selected: isSelected, selectedColor: kPrimaryGreen, onSelected: (val) => setState(() => _selectedCategory = cat))); }).toList())), 
+      const SizedBox(height: 10), 
+      Container(decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(20)), 
+        child: TextField(controller: _noteController, decoration: InputDecoration(hintText: "Add a $_selectedCategory...", border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15), suffixIcon: IconButton(icon: CircleAvatar(backgroundColor: kPrimaryGreen, child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20)), onPressed: _addNote))))
+    ]);
   }
 
   Widget _buildNoteTile(Map<String, dynamic> note, int index) {
     bool isChecked = note['is_checked'] ?? false;
     String category = note['category'] ?? 'Question';
-    Color catColor = Colors.grey;
-    if (category == 'Symptom') catColor = const Color(0xFFE76F51); 
-    if (category == 'Question') catColor = const Color(0xFF2A9D8F); 
-    if (category == 'Side Effect') catColor = const Color(0xFFE9C46A); 
-    return AnimatedOpacity(opacity: isChecked ? 0.0 : 1.0, duration: const Duration(milliseconds: 500), child: _buildDismissibleWrapper(id: note['id'].toString(), onDismiss: () => _deleteNote(note['id'].toString()), child: Container(margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(18), border: Border.all(color: kSoftGrey, width: 1)), child: CheckboxListTile(activeColor: kSecondaryGreen, checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)), value: isChecked, onChanged: (bool? value) => _toggleNote(index), title: Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: catColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: Text(category, style: TextStyle(color: catColor, fontSize: 10, fontWeight: FontWeight.bold))), const SizedBox(width: 8), Expanded(child: Text(note['note_text'], style: TextStyle(color: kPrimaryGreen, fontWeight: FontWeight.w600, fontSize: 15)))]), controlAffinity: ListTileControlAffinity.leading))));
+    Color catColor = category == 'Symptom' ? const Color(0xFFE76F51) : (category == 'Question' ? const Color(0xFF2A9D8F) : const Color(0xFFE9C46A)); 
+    return AnimatedOpacity(opacity: isChecked ? 0.0 : 1.0, duration: const Duration(milliseconds: 500), 
+      child: _buildDismissibleWrapper(id: note['id'].toString(), onDismiss: () => _deleteNote(note['id'].toString()), 
+        child: Container(margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(18), border: Border.all(color: kSoftGrey, width: 1)), 
+          child: CheckboxListTile(activeColor: kSecondaryGreen, value: isChecked, onChanged: (bool? value) => _toggleNote(index), 
+            title: Row(children: [
+              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: catColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: Text(category, style: TextStyle(color: catColor, fontSize: 10, fontWeight: FontWeight.bold))), 
+              const SizedBox(width: 8), 
+              Expanded(child: Text(note['note_text'], style: TextStyle(color: kPrimaryGreen, fontWeight: FontWeight.w600, fontSize: 15)))
+            ]), controlAffinity: ListTileControlAffinity.leading))));
   }
 
-  Widget _buildDismissibleWrapper({required String id, required VoidCallback onDismiss, required Widget child}) { return Dismissible(key: Key(id), direction: DismissDirection.endToStart, onDismissed: (dir) => onDismiss(), background: Container(margin: const EdgeInsets.symmetric(vertical: 5), decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 25), child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 30)), child: child); }
-  Widget _buildEmptyState(String msg) { return Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Text(msg, style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)))); }
+  Widget _buildDismissibleWrapper({required String id, required VoidCallback onDismiss, required Widget child}) { 
+    return Dismissible(key: Key(id), direction: DismissDirection.endToStart, onDismissed: (dir) => onDismiss(), background: Container(decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 25), child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 30)), child: child); 
+  }
 
-  Widget _buildModernField(TextEditingController controller, String label, IconData icon) { return TextField(controller: controller, decoration: InputDecoration(prefixIcon: Icon(icon, color: kSecondaryGreen), labelText: label, labelStyle: const TextStyle(color: Colors.grey, fontSize: 14), filled: true, fillColor: kSoftGrey, border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none))); }
+  Widget _buildEmptyState(String msg) { return Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Text(msg, style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)))); }
+  Widget _buildModernField(TextEditingController controller, String label, IconData icon) { return TextField(controller: controller, decoration: InputDecoration(prefixIcon: Icon(icon, color: kSecondaryGreen), labelText: label, filled: true, fillColor: kSoftGrey, border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none))); }
   Widget _buildPickerTile({required String label, required IconData icon, required VoidCallback onTap}) { return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(18)), child: Column(children: [Icon(icon, color: kSecondaryGreen), const SizedBox(height: 8), Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimaryGreen))]))); }
 }
+
+
 
 // --- 8. CHATBOT PAGE ---
 class ChatPage extends StatefulWidget {
