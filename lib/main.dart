@@ -2026,7 +2026,6 @@ class _MedsPageState extends State<MedsPage> {
           filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
           callback: (payload) => _fetchData(),
         )
-        // FIXED: Added profiles listener to catch the moment treatment dates are saved
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -2789,14 +2788,21 @@ class _FollowUpPageState extends State<FollowUpPage> {
   void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) { 
     if (_treatmentStartDate == null) return; 
     final isEditing = apptToEdit != null;
-    final docController = TextEditingController(text: isEditing ? (_doctorName ?? "") : (_doctorName ?? ""));
-    final locController = TextEditingController(text: isEditing ? apptToEdit['location'] : "");
-    DateTime? selectedDate = isEditing ? DateTime.parse(apptToEdit['appointment_date']) : null;
+    
+    // Changed to handle the actual title of the milestone
+    final titleController = TextEditingController(text: isEditing ? (apptToEdit['title'] ?? "") : "Follow-up Checkup");
+    final locController = TextEditingController(text: isEditing ? (apptToEdit['location'] ?? "") : "");
+    
+    DateTime? selectedDate = isEditing ? DateTime.tryParse(apptToEdit['appointment_date']) : null;
     TimeOfDay? selectedTime;
-    if (isEditing) { 
+    
+    if (isEditing && apptToEdit['appointment_time'] != null) { 
       final parts = apptToEdit['appointment_time'].toString().split(':'); 
       selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])); 
+    } else {
+      selectedTime = const TimeOfDay(hour: 8, minute: 0);
     }
+    
     bool isSaving = false;
     
     showModalBottomSheet(
@@ -2812,7 +2818,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
               const SizedBox(height: 25), 
               Text(isEditing ? "Edit Milestone" : "Add Roadmap Milestone", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
               const SizedBox(height: 20), 
-              _buildModernField(docController, "Doctor or Clinic Name", Icons.medical_services_outlined), 
+              _buildModernField(titleController, "Milestone Title", Icons.event_note_outlined), 
               const SizedBox(height: 15), 
               _buildModernField(locController, "Location / Goal", Icons.flag_outlined), 
               const SizedBox(height: 20), 
@@ -2839,17 +2845,19 @@ class _FollowUpPageState extends State<FollowUpPage> {
               SizedBox(width: double.infinity, child: ElevatedButton(
                 style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))), 
                 onPressed: isSaving ? null : () async { 
-                  if (docController.text.isNotEmpty && selectedDate != null && selectedTime != null) { 
+                  if (titleController.text.isNotEmpty && selectedDate != null && selectedTime != null) { 
                     setModalState(() => isSaving = true); 
                     try { 
                       final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00'; 
                       final Map<String, dynamic> appointmentData = {
                         'patient_id': _supabase.auth.currentUser!.id, 
                         'doctor_id': _linkedDoctorId, 
+                        'title': titleController.text, // Now correctly saving the title
                         'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!), 
                         'appointment_time': timeString, 
                         'location': locController.text, 
-                        'status': 'scheduled'
+                        'status': 'scheduled',
+                        'type': isEditing ? apptToEdit['type'] : 'manual' // Preserve type if editing
                       }; 
                       if (isEditing) { await _supabase.from('roadmap').update(appointmentData).eq('id', apptToEdit['id']); } 
                       else { await _supabase.from('roadmap').insert(appointmentData); } 
@@ -2912,12 +2920,20 @@ class _FollowUpPageState extends State<FollowUpPage> {
           ),
           const SizedBox(height: 15),
           if (_appointments.isEmpty) _buildEmptyState("No milestones scheduled yet."),
+          
+          // Updated to pass the correct parameters, including title and type
           ..._appointments.map((appt) => _buildDismissibleWrapper(
             id: appt['id'].toString(), 
             onDismiss: () => _deleteAppointment(appt['id'].toString()), 
             child: GestureDetector(
               onTap: () => _showAppointmentModal(apptToEdit: appt),
-              child: _buildAppointmentCard(_doctorName ?? "Doctor", appt['appointment_date'], appt['appointment_time'] ?? "00:00", appt['location'] ?? "")
+              child: _buildAppointmentCard(
+                appt['title'] ?? _doctorName ?? "Follow-up", 
+                appt['appointment_date'], 
+                appt['appointment_time'] ?? "08:00:00", 
+                appt['location'] ?? "Clinic",
+                appt['type'] ?? "manual"
+              )
             )
           )),
           const SizedBox(height: 40),
@@ -3022,13 +3038,78 @@ class _FollowUpPageState extends State<FollowUpPage> {
       ]));
   }
 
-  Widget _buildAppointmentCard(String title, String date, String time, String loc) {
-    return Container(margin: const EdgeInsets.only(bottom: 15), padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), 
+  // Updated to include DOH Protocol UI styling
+  Widget _buildAppointmentCard(String title, String date, String time, String loc, String type) {
+    bool isProtocol = type == 'protocol';
+    
+    // Formatting time safely
+    String displayTime = time;
+    if (time.contains(':')) {
+      final parts = time.split(':');
+      if (parts.length >= 2) {
+        final hr = int.parse(parts[0]);
+        final min = parts[1];
+        final period = hr >= 12 ? 'PM' : 'AM';
+        final formattedHr = hr > 12 ? hr - 12 : (hr == 0 ? 12 : hr);
+        displayTime = "$formattedHr:$min $period";
+      }
+    }
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 15), 
+      padding: const EdgeInsets.all(20), 
+      decoration: BoxDecoration(
+        color: kWhite, 
+        borderRadius: BorderRadius.circular(25), 
+        border: Border.all(
+          color: isProtocol ? kSecondaryGreen.withOpacity(0.5) : kSoftGrey, 
+          width: 2
+        )
+      ), 
       child: Row(children: [
-        Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(15)), child: Column(children: [Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)), Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen))])), 
-        const SizedBox(width: 20), 
-        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: TextStyle(fontWeight: FontWeight.w900, fontSize: 17, color: kPrimaryGreen)), Text("$date • $time • $loc", style: const TextStyle(color: Colors.grey, fontSize: 12))]))
-      ]));
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), 
+          decoration: BoxDecoration(
+            color: isProtocol ? kSecondaryGreen.withOpacity(0.1) : kCreamAccent, 
+            borderRadius: BorderRadius.circular(15)
+          ), 
+          child: Column(children: [
+            Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
+            Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen))
+          ])
+        ), 
+        const SizedBox(width: 15), 
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start, 
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      title, 
+                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: kPrimaryGreen),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  ),
+                  if (isProtocol) 
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(6)),
+                      child: Text("DOH Protocol", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                    )
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text("$displayTime • $loc", style: const TextStyle(color: Colors.grey, fontSize: 12))
+            ]
+          )
+        )
+      ])
+    );
   }
 
   Widget _buildNoteInputArea() {
