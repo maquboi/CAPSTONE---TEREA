@@ -181,10 +181,41 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> {
+// Added TickerProviderStateMixin for animations
+class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
+  // State for toggling password visibility
+  bool _obscurePassword = true;
+
+  // Animation controllers
+  late AnimationController _blob1Controller;
+  late AnimationController _blob2Controller;
+
+  @override
+  void initState() {
+    super.initState();
+    // Initialize animations for background blobs
+    _blob1Controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat(reverse: true); // Move back and forth
+
+    _blob2Controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 10),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _blob1Controller.dispose();
+    _blob2Controller.dispose();
+    super.dispose();
+  }
 
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
@@ -203,7 +234,8 @@ class _LoginPageState extends State<LoginPage> {
             .eq('id', response.user!.id)
             .maybeSingle(); // Use maybeSingle to avoid crashes if profile is missing
 
-        String role = data != null && data['role'] != null ? data['role'] : 'patient';
+        String role =
+            data != null && data['role'] != null ? data['role'] : 'patient';
 
         if (mounted) {
           // 3. ROLE GATEKEEPER
@@ -247,40 +279,57 @@ class _LoginPageState extends State<LoginPage> {
       backgroundColor: bgWhite,
       body: Stack(
         children: [
-          // --- BACKGROUND DECORATIONS ---
-          Positioned(
-            top: -60,
-            right: -60,
-            child: Container(
-              width: 220,
-              height: 220,
-              decoration: BoxDecoration(
-                color: forestLight.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(80),
-              ),
-            ),
+          // --- ANIMATED BACKGROUND DECORATIONS ---
+          
+          // Top Right Floating Blob
+          AnimatedBuilder(
+            animation: _blob1Controller,
+            builder: (context, child) {
+              return Positioned(
+                top: -60 + (_blob1Controller.value * 20), // Gentle vertical move
+                right: -60 + (_blob1Controller.value * 15), // Gentle horizontal move
+                child: Container(
+                  width: 230,
+                  height: 230,
+                  decoration: BoxDecoration(
+                    color: forestLight.withOpacity(0.08), // Slightly softer
+                    borderRadius: BorderRadius.circular(80),
+                  ),
+                ),
+              );
+            },
           ),
-          Positioned(
-            bottom: -100,
-            left: -40,
-            child: Container(
-              width: 250,
-              height: 250,
-              decoration: BoxDecoration(
-                color: forestDark.withOpacity(0.08),
-                shape: BoxShape.circle,
-              ),
-            ),
+          
+          // Bottom Left Floating Circle
+          AnimatedBuilder(
+            animation: _blob2Controller,
+            builder: (context, child) {
+              return Positioned(
+                bottom: -100 - (_blob2Controller.value * 30),
+                left: -40 + (_blob2Controller.value * 20),
+                child: Container(
+                  width: 260,
+                  height: 260,
+                  decoration: BoxDecoration(
+                    color: forestDark.withOpacity(0.05), // Softer, more balanced
+                    shape: BoxShape.circle,
+                  ),
+                ),
+              );
+            },
           ),
 
           // --- MAIN CONTENT ---
           Center(
             child: SingleChildScrollView(
+              // Physics added for nice scrolling feel on mobile
+              physics: const BouncingScrollPhysics(),
               padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // Logo Placeholder retained
                   Center(child: _buildLogo(size: 80)),
                   const SizedBox(height: 30),
                   const Text(
@@ -310,19 +359,39 @@ class _LoginPageState extends State<LoginPage> {
                     hint: "you@example.com",
                     controller: _emailController,
                     icon: Icons.email_outlined,
+                    keyboardType: TextInputType.emailAddress,
                   ),
                   const SizedBox(height: 20),
+                  
+                  // Updated Password Field with Toggle
                   _buildTextField(
                     label: "Password",
                     hint: "••••••••",
                     isPassword: true,
                     controller: _passwordController,
                     icon: Icons.lock_outline,
+                    obscureText: _obscurePassword,
+                    // Pass suffix icon for toggling
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _obscurePassword
+                            ? Icons.visibility_outlined
+                            : Icons.visibility_off_outlined,
+                        color: forestLight.withOpacity(0.6),
+                        size: 20,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _obscurePassword = !_obscurePassword;
+                        });
+                      },
+                    ),
                   ),
                   const SizedBox(height: 40),
 
                   _isLoading
-                      ? const Center(child: CircularProgressIndicator(color: forestDark))
+                      ? const Center(
+                          child: CircularProgressIndicator(color: forestDark))
                       : _buildGradientButton(
                           text: "Sign in",
                           onPressed: _signIn,
@@ -361,20 +430,27 @@ class _LoginPageState extends State<LoginPage> {
     );
   }
 
+  // Updated reusable text field widget to support suffix icons and obscureText state
   Widget _buildTextField({
     required String label,
     required String hint,
     required TextEditingController controller,
     bool isPassword = false,
+    bool obscureText = false,
     IconData? icon,
+    Widget? suffixIcon,
+    TextInputType? keyboardType,
   }) {
+    const Color forestDark = Color(0xFF283618);
+    const Color forestLight = Color(0xFF606C38);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
           style: const TextStyle(
-            color: Color(0xFF283618),
+            color: forestDark,
             fontWeight: FontWeight.bold,
             fontSize: 14,
           ),
@@ -394,20 +470,26 @@ class _LoginPageState extends State<LoginPage> {
           ),
           child: TextField(
             controller: controller,
-            obscureText: isPassword,
+            // Uses local state pass down or hardcoded false for email
+            obscureText: isPassword ? obscureText : false,
+            keyboardType: keyboardType,
+            style: const TextStyle(color: forestDark, fontSize: 15),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              prefixIcon: Icon(icon, color: const Color(0xFF606C38).withOpacity(0.6), size: 20),
+              prefixIcon: Icon(icon, color: forestLight.withOpacity(0.6), size: 20),
+              // Added Suffix Icon for password toggle
+              suffixIcon: suffixIcon,
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+              contentPadding:
+                  const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
                 borderSide: BorderSide.none,
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: Color(0xFF606C38), width: 1.5),
+                borderSide: const BorderSide(color: forestLight, width: 1.5),
               ),
             ),
           ),
@@ -442,7 +524,7 @@ class _LoginPageState extends State<LoginPage> {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onPressed,
+          onTap: onPressed, // FIXED: Changed onPressed to onTap
           borderRadius: BorderRadius.circular(16),
           child: Center(
             child: Text(
@@ -468,7 +550,7 @@ class _LoginPageState extends State<LoginPage> {
         shape: BoxShape.circle,
       ),
       child: Icon(
-        Icons.eco,
+        Icons.eco, // Retained existing icon
         size: size,
         color: const Color(0xFF283618),
       ),
@@ -926,25 +1008,40 @@ class _SignUpPageState extends State<SignUpPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text("Gender", style: TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618), fontSize: 14)),
+        Text("Gender", style: TextStyle(fontWeight: FontWeight.bold, color: forestDark, fontSize: 14)),
         const SizedBox(height: 8),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
+          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
           decoration: BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.circular(16),
             boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
           ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: _selectedGender,
-              hint: Text("Select", style: TextStyle(fontSize: 14, color: forestLight.withOpacity(0.5))),
-              isExpanded: true,
-              items: _genderOptions.map((String value) {
-                return DropdownMenuItem<String>(value: value, child: Text(value, style: const TextStyle(fontSize: 14)));
-              }).toList(),
-              onChanged: (newValue) => setState(() => _selectedGender = newValue),
-            ),
+          child: Row(
+            children: [
+              Icon(Icons.person_outline, color: forestLight.withOpacity(0.5), size: 20),
+              const SizedBox(width: 12),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedGender,
+                    hint: Text("Select", style: TextStyle(fontSize: 14, color: Colors.grey.shade400)),
+                    icon: Icon(Icons.keyboard_arrow_down_rounded, color: forestLight, size: 22),
+                    isExpanded: true,
+                    dropdownColor: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    style: TextStyle(color: forestDark, fontSize: 15, fontWeight: FontWeight.w500),
+                    items: _genderOptions.map((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value, 
+                        child: Text(value)
+                      );
+                    }).toList(),
+                    onChanged: (newValue) => setState(() => _selectedGender = newValue),
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -976,6 +1073,7 @@ class _SignUpPageState extends State<SignUpPage> {
             obscureText: isPassword,
             keyboardType: inputType,
             inputFormatters: formatters,
+            style: const TextStyle(color: Color(0xFF283618), fontSize: 15),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
@@ -1025,7 +1123,6 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 }
-
 
 
 //DASHBOARD
