@@ -10,6 +10,7 @@ import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -181,26 +182,22 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-// Added TickerProviderStateMixin for animations
 class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
-  // State for toggling password visibility
   bool _obscurePassword = true;
 
-  // Animation controllers
   late AnimationController _blob1Controller;
   late AnimationController _blob2Controller;
 
   @override
   void initState() {
     super.initState();
-    // Initialize animations for background blobs
     _blob1Controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
-    )..repeat(reverse: true); // Move back and forth
+    )..repeat(reverse: true);
 
     _blob2Controller = AnimationController(
       vsync: this,
@@ -232,7 +229,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             .from('profiles')
             .select('role')
             .eq('id', response.user!.id)
-            .maybeSingle(); // Use maybeSingle to avoid crashes if profile is missing
+            .maybeSingle();
 
         String role =
             data != null && data['role'] != null ? data['role'] : 'patient';
@@ -240,17 +237,20 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         if (mounted) {
           // 3. ROLE GATEKEEPER
           if (role == 'doctor') {
-            // If Doctor, deny access on Mobile
-            await Supabase.instance.client.auth.signOut(); // Force sign out
+            await Supabase.instance.client.auth.signOut();
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text("Access Denied: Doctors must use the Web Portal."),
+              SnackBar(
+                content: Text(
+                  "Access Denied: Doctors must use the Web Portal.",
+                  style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+                ),
                 backgroundColor: Colors.redAccent,
-                duration: Duration(seconds: 4),
+                duration: const Duration(seconds: 4),
+                behavior: SnackBarBehavior.floating,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
               ),
             );
           } else {
-            // If Patient (or null), proceed to Mobile Dashboard
             Navigator.pushNamed(context, '/home');
           }
         }
@@ -259,8 +259,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Login Failed: $e"),
+            content: Text(
+              "Login Failed: $e",
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
+            ),
             backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
@@ -271,47 +276,43 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    const Color forestDark = Color(0xFF283618);
-    const Color forestLight = Color(0xFF606C38);
-    const Color bgWhite = Color(0xFFF9FAFB);
+    const Color forestDark = Color(0xFF2D3B1E); // Updated to your new Deep Forest
+    const Color forestLight = Color(0xFF606C38); // Moss Green
+    const Color bgOffWhite = Color(0xFFF4F7F4); // Clean modern background
 
     return Scaffold(
-      backgroundColor: bgWhite,
+      backgroundColor: bgOffWhite,
       body: Stack(
         children: [
           // --- ANIMATED BACKGROUND DECORATIONS ---
-          
-          // Top Right Floating Blob
           AnimatedBuilder(
             animation: _blob1Controller,
             builder: (context, child) {
               return Positioned(
-                top: -60 + (_blob1Controller.value * 20), // Gentle vertical move
-                right: -60 + (_blob1Controller.value * 15), // Gentle horizontal move
+                top: -80 + (_blob1Controller.value * 20),
+                right: -80 + (_blob1Controller.value * 15),
                 child: Container(
-                  width: 230,
-                  height: 230,
+                  width: 300,
+                  height: 300,
                   decoration: BoxDecoration(
-                    color: forestLight.withOpacity(0.08), // Slightly softer
-                    borderRadius: BorderRadius.circular(80),
+                    color: forestLight.withOpacity(0.06),
+                    shape: BoxShape.circle,
                   ),
                 ),
               );
             },
           ),
-          
-          // Bottom Left Floating Circle
           AnimatedBuilder(
             animation: _blob2Controller,
             builder: (context, child) {
               return Positioned(
-                bottom: -100 - (_blob2Controller.value * 30),
-                left: -40 + (_blob2Controller.value * 20),
+                bottom: -120 - (_blob2Controller.value * 30),
+                left: -60 + (_blob2Controller.value * 20),
                 child: Container(
-                  width: 260,
-                  height: 260,
+                  width: 350,
+                  height: 350,
                   decoration: BoxDecoration(
-                    color: forestDark.withOpacity(0.05), // Softer, more balanced
+                    color: forestLight.withOpacity(0.04),
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -320,108 +321,153 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           ),
 
           // --- MAIN CONTENT ---
-          Center(
-            child: SingleChildScrollView(
-              // Physics added for nice scrolling feel on mobile
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 40),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // Logo Placeholder retained
-                  Center(child: _buildLogo(size: 80)),
-                  const SizedBox(height: 30),
-                  const Text(
-                    'Welcome back',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 32,
-                      fontWeight: FontWeight.w800,
-                      color: forestDark,
-                      letterSpacing: -0.5,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Sign in to your personalized tracker',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: forestLight.withOpacity(0.8),
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                  const SizedBox(height: 50),
-
-                  _buildTextField(
-                    label: "Email",
-                    hint: "you@example.com",
-                    controller: _emailController,
-                    icon: Icons.email_outlined,
-                    keyboardType: TextInputType.emailAddress,
-                  ),
-                  const SizedBox(height: 20),
-                  
-                  // Updated Password Field with Toggle
-                  _buildTextField(
-                    label: "Password",
-                    hint: "••••••••",
-                    isPassword: true,
-                    controller: _passwordController,
-                    icon: Icons.lock_outline,
-                    obscureText: _obscurePassword,
-                    // Pass suffix icon for toggling
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        _obscurePassword
-                            ? Icons.visibility_outlined
-                            : Icons.visibility_off_outlined,
-                        color: forestLight.withOpacity(0.6),
-                        size: 20,
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Center(child: _buildLogo(size: 70)),
+                    const SizedBox(height: 35),
+                    
+                    Text(
+                      'Welcome back',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 28,
+                        fontWeight: FontWeight.w700,
+                        color: forestDark,
+                        letterSpacing: -0.5,
                       ),
-                      onPressed: () {
-                        setState(() {
-                          _obscurePassword = !_obscurePassword;
-                        });
-                      },
                     ),
-                  ),
-                  const SizedBox(height: 40),
-
-                  _isLoading
-                      ? const Center(
-                          child: CircularProgressIndicator(color: forestDark))
-                      : _buildGradientButton(
-                          text: "Sign in",
-                          onPressed: _signIn,
-                          colors: [forestLight, forestDark],
-                        ),
-
-                  const SizedBox(height: 25),
-                  TextButton(
-                    onPressed: () => Navigator.pushNamed(context, '/signup'),
-                    style: TextButton.styleFrom(
-                      foregroundColor: forestLight,
+                    const SizedBox(height: 8),
+                    Text(
+                      'Sign in to your personalized tracker',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.poppins(
+                        fontSize: 14,
+                        color: Colors.black45,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
-                    child: RichText(
-                      text: const TextSpan(
-                        text: "Don't have an account? ",
-                        style: TextStyle(color: Colors.grey, fontSize: 14),
-                        children: [
-                          TextSpan(
-                            text: "Sign up",
-                            style: TextStyle(
-                              color: forestDark,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 14,
-                            ),
+                    const SizedBox(height: 50),
+
+                    // Modern Input Cards
+                    Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
                           ),
                         ],
                       ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          children: [
+                            _buildTextField(
+                              label: "Email Address",
+                              hint: "you@example.com",
+                              controller: _emailController,
+                              icon: Icons.alternate_email_rounded,
+                              keyboardType: TextInputType.emailAddress,
+                            ),
+                            const SizedBox(height: 24),
+                            _buildTextField(
+                              label: "Password",
+                              hint: "••••••••",
+                              isPassword: true,
+                              controller: _passwordController,
+                              icon: Icons.lock_outline_rounded,
+                              obscureText: _obscurePassword,
+                              suffixIcon: IconButton(
+                                icon: Icon(
+                                  _obscurePassword
+                                      ? Icons.visibility_outlined
+                                      : Icons.visibility_off_outlined,
+                                  color: Colors.black38,
+                                  size: 20,
+                                ),
+                                onPressed: () {
+                                  setState(() {
+                                    _obscurePassword = !_obscurePassword;
+                                  });
+                                },
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () {},
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  minimumSize: Size.zero,
+                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: Text(
+                                  "Forgot password?",
+                                  style: GoogleFonts.poppins(
+                                    color: forestLight,
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
                     ),
-                  ),
-                ],
+                    
+                    const SizedBox(height: 40),
+
+                    _isLoading
+                        ? const Center(
+                            child: CircularProgressIndicator(color: forestDark))
+                        : _buildGradientButton(
+                            text: "Sign in securely",
+                            onPressed: _signIn,
+                            colors: [forestLight, forestDark],
+                          ),
+
+                    const SizedBox(height: 30),
+                    
+                    TextButton(
+                      onPressed: () => Navigator.pushNamed(context, '/signup'),
+                      style: TextButton.styleFrom(
+                        foregroundColor: forestLight,
+                        splashFactory: NoSplash.splashFactory,
+                      ),
+                      child: RichText(
+                        text: TextSpan(
+                          text: "Don't have an account? ",
+                          style: GoogleFonts.poppins(
+                            color: Colors.black45, 
+                            fontSize: 13,
+                            fontWeight: FontWeight.w500
+                          ),
+                          children: [
+                            TextSpan(
+                              text: "Create an Account",
+                              style: GoogleFonts.poppins(
+                                color: forestDark,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -430,7 +476,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  // Updated reusable text field widget to support suffix icons and obscureText state
+  // Modernized Text Field
   Widget _buildTextField({
     required String label,
     required String hint,
@@ -441,56 +487,45 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     Widget? suffixIcon,
     TextInputType? keyboardType,
   }) {
-    const Color forestDark = Color(0xFF283618);
-    const Color forestLight = Color(0xFF606C38);
+    const Color forestDark = Color(0xFF2D3B1E);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
           label,
-          style: const TextStyle(
+          style: GoogleFonts.poppins(
             color: forestDark,
-            fontWeight: FontWeight.bold,
-            fontSize: 14,
+            fontWeight: FontWeight.w600,
+            fontSize: 13,
           ),
         ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFFF8F9FA), // Very subtle gray input background
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.grey.withOpacity(0.08),
-                blurRadius: 15,
-                offset: const Offset(0, 5),
-              ),
-            ],
+            border: Border.all(color: Colors.black.withOpacity(0.05)),
           ),
           child: TextField(
             controller: controller,
-            // Uses local state pass down or hardcoded false for email
             obscureText: isPassword ? obscureText : false,
             keyboardType: keyboardType,
-            style: const TextStyle(color: forestDark, fontSize: 15),
+            style: GoogleFonts.poppins(
+              color: forestDark, 
+              fontSize: 14, 
+              fontWeight: FontWeight.w500
+            ),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-              prefixIcon: Icon(icon, color: forestLight.withOpacity(0.6), size: 20),
-              // Added Suffix Icon for password toggle
+              hintStyle: GoogleFonts.poppins(
+                color: Colors.black26, 
+                fontSize: 14
+              ),
+              prefixIcon: Icon(icon, color: Colors.black38, size: 20),
               suffixIcon: suffixIcon,
               border: InputBorder.none,
-              contentPadding:
-                  const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: BorderSide.none,
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(16),
-                borderSide: const BorderSide(color: forestLight, width: 1.5),
-              ),
+              contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
             ),
           ),
         ),
@@ -498,6 +533,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
+  // Modernized Pill-Shaped Button
   Widget _buildGradientButton({
     required String text,
     required VoidCallback onPressed,
@@ -505,18 +541,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }) {
     return Container(
       width: double.infinity,
-      height: 55,
+      height: 58,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: colors,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
         ),
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(20), // More rounded like the inspo image
         boxShadow: [
           BoxShadow(
             color: colors.last.withOpacity(0.3),
-            blurRadius: 15,
+            blurRadius: 20,
             offset: const Offset(0, 8),
           ),
         ],
@@ -524,16 +560,18 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       child: Material(
         color: Colors.transparent,
         child: InkWell(
-          onTap: onPressed, // FIXED: Changed onPressed to onTap
-          borderRadius: BorderRadius.circular(16),
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(20),
+          splashColor: Colors.white.withOpacity(0.1),
+          highlightColor: Colors.transparent,
           child: Center(
             child: Text(
               text,
-              style: const TextStyle(
+              style: GoogleFonts.poppins(
                 color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-                letterSpacing: 1,
+                fontWeight: FontWeight.w600,
+                fontSize: 15,
+                letterSpacing: 0.5,
               ),
             ),
           ),
@@ -544,15 +582,22 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   Widget _buildLogo({required double size}) {
     return Container(
-      padding: const EdgeInsets.all(15),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF283618).withOpacity(0.1),
-        shape: BoxShape.circle,
+        color: const Color(0xFF606C38), // Solid Moss Green block
+        borderRadius: BorderRadius.circular(24), // Squircle shape
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF606C38).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 10),
+          ),
+        ],
       ),
       child: Icon(
-        Icons.eco, // Retained existing icon
-        size: size,
-        color: const Color(0xFF283618),
+        Icons.local_hospital_rounded, // Changed to a more medical/health icon to match the vibe
+        size: size * 0.6,
+        color: Colors.white,
       ),
     );
   }
@@ -602,36 +647,41 @@ class _SignUpPageState extends State<SignUpPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: Colors.white,
         title: Row(
           children: [
             Icon(Icons.gavel_rounded, color: forestDark),
             const SizedBox(width: 10),
-            Text("Terms & Conditions", style: TextStyle(color: forestDark, fontWeight: FontWeight.bold, fontSize: 18)),
+            Text(
+              "Terms & Conditions", 
+              style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.bold, fontSize: 16)
+            ),
           ],
         ),
-        content: const SingleChildScrollView(
+        content: SingleChildScrollView(
           child: Text(
             "By proceeding with this registration and attaching the requested Carmona Residency ID, I hereby certify under penalty of perjury that the information provided is true, accurate, and reflects my current legal residence within the Municipality of Carmona. I acknowledge that the document submitted is a confidential record intended solely for the purpose of eligibility verification for the TB HealthCare management system. Furthermore, I agree to a strict Non-Disclosure obligation, understanding that any unauthorized access to the system's internal protocols, or the falsification of residency data to gain such access, constitutes a breach of professional conduct and may result in the immediate termination of my account and potential legal action. I consent to the secure electronic processing of my identification data and waive any claims against the system administrators regarding the standardized verification procedures required to maintain the integrity of this localized healthcare initiative.",
-            style: TextStyle(fontSize: 13, color: Colors.black87, height: 1.5),
+            style: GoogleFonts.poppins(fontSize: 13, color: Colors.black87, height: 1.6),
             textAlign: TextAlign.justify,
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text("Close", style: TextStyle(color: forestLight, fontWeight: FontWeight.bold)),
+            child: Text("Close", style: GoogleFonts.poppins(color: Colors.grey.shade600, fontWeight: FontWeight.w600)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: forestDark,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              elevation: 0,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: () {
               setState(() => _acceptedTerms = true);
               Navigator.pop(context);
             },
-            child: const Text("I Agree", style: TextStyle(color: Colors.white)),
+            child: Text("I Agree", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600)),
           ),
         ],
       ),
@@ -691,9 +741,10 @@ class _SignUpPageState extends State<SignUpPage> {
   void _showSnackBar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text(message),
+        content: Text(message, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
         backgroundColor: Colors.redAccent,
         behavior: SnackBarBehavior.floating,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
       ),
     );
   }
@@ -751,215 +802,260 @@ class _SignUpPageState extends State<SignUpPage> {
 
   @override
   Widget build(BuildContext context) {
-    const Color forestDark = Color(0xFF283618);
+    const Color forestDark = Color(0xFF2D3B1E);
     const Color forestLight = Color(0xFF606C38);
-    const Color bgWhite = Color(0xFFF9FAFB);
+    const Color bgOffWhite = Color(0xFFF4F7F4);
 
     return Scaffold(
-      backgroundColor: bgWhite,
+      backgroundColor: bgOffWhite,
       extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 20),
-          onPressed: () => Navigator.pop(context),
+        leading: Padding(
+          padding: const EdgeInsets.only(left: 8.0),
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: forestDark, size: 20),
+            onPressed: () => Navigator.pop(context),
+          ),
         ),
       ),
       body: Stack(
         children: [
-          // The Restored Blob Background
+          // Soft decorative background shapes
           Positioned(
-            top: 200,
+            top: -50,
             right: -50,
-            child: _buildBackgroundShape(180, forestLight.withOpacity(0.08)),
+            child: _buildBackgroundShape(250, forestLight.withOpacity(0.06)),
           ),
-          SingleChildScrollView(
-            child: Column(
-              children: [
-                // Header
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.only(top: 80, bottom: 40),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [forestLight, forestDark],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.only(
-                      bottomLeft: Radius.circular(40),
-                      bottomRight: Radius.circular(40),
+          Positioned(
+            top: 250,
+            left: -80,
+            child: _buildBackgroundShape(200, forestLight.withOpacity(0.04)),
+          ),
+          
+          SafeArea(
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: Column(
+                children: [
+                  // Header Section (Modernized text, no heavy background)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 20, bottom: 30, left: 24, right: 24),
+                    child: Column(
+                      children: [
+                        _buildLogo(size: 50),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Join TEREA',
+                          style: GoogleFonts.poppins(
+                            fontSize: 32,
+                            fontWeight: FontWeight.w700,
+                            color: forestDark,
+                            letterSpacing: -0.5,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Start your wellness journey today',
+                          style: GoogleFonts.poppins(
+                            color: Colors.black45,
+                            fontSize: 14,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                  child: Column(
-                    children: [
-                      _buildLogo(size: 60),
-                      const SizedBox(height: 20),
-                      const Text(
-                        'Join TB HealthCare',
-                        style: TextStyle(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                          letterSpacing: -0.5,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Start your wellness journey today',
-                        style: TextStyle(
-                          color: Colors.white.withOpacity(0.85),
-                          fontSize: 14,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
 
-                // Form Card
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(25, 30, 25, 40),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Text(
-                        'Create Account',
-                        style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: forestDark),
-                      ),
-                      const SizedBox(height: 25),
-
-                      _buildTextField(
-                        label: "Full Name",
-                        hint: "Juan Dela Cruz",
-                        controller: _nameController,
-                        icon: Icons.person_outline,
-                        inputType: TextInputType.name,
-                        formatters: [
-                          LengthLimitingTextInputFormatter(50),
-                          FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                  // Form Card
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withOpacity(0.03),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 20),
-
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          Expanded(
-                            child: _buildTextField(
-                              label: "Age",
-                              hint: "25",
-                              controller: _ageController,
-                              icon: Icons.cake_outlined,
-                              inputType: TextInputType.number,
-                              formatters: [
-                                LengthLimitingTextInputFormatter(3),
-                                FilteringTextInputFormatter.digitsOnly,
-                              ],
+                          Text(
+                            'Create Account',
+                            style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700, color: forestDark),
+                          ),
+                          const SizedBox(height: 24),
+
+                          _buildTextField(
+                            label: "Full Name",
+                            hint: "Juan Dela Cruz",
+                            controller: _nameController,
+                            icon: Icons.person_outline_rounded,
+                            inputType: TextInputType.name,
+                            formatters: [
+                              LengthLimitingTextInputFormatter(50),
+                              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: _buildTextField(
+                                  label: "Age",
+                                  hint: "25",
+                                  controller: _ageController,
+                                  icon: Icons.cake_outlined,
+                                  inputType: TextInputType.number,
+                                  formatters: [
+                                    LengthLimitingTextInputFormatter(3),
+                                    FilteringTextInputFormatter.digitsOnly,
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(child: _buildGenderDropdown(forestDark, forestLight)),
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          _buildTextField(
+                            label: "Contact Number",
+                            hint: "09123456789",
+                            controller: _contactController,
+                            icon: Icons.phone_android_outlined,
+                            inputType: TextInputType.phone,
+                            formatters: [
+                              LengthLimitingTextInputFormatter(11),
+                              FilteringTextInputFormatter.digitsOnly,
+                            ],
+                          ),
+                          const SizedBox(height: 20),
+
+                          _buildTextField(
+                            label: "Email Address",
+                            hint: "your.email@example.com",
+                            controller: _emailController,
+                            icon: Icons.alternate_email_rounded,
+                            inputType: TextInputType.emailAddress,
+                          ),
+                          const SizedBox(height: 20),
+
+                          _buildTextField(
+                            label: "Password",
+                            hint: "Minimum 10 characters",
+                            isPassword: true,
+                            controller: _passwordController,
+                            icon: Icons.lock_outline_rounded,
+                          ),
+                          const SizedBox(height: 24),
+
+                          // --- STYLED ID ATTACHMENT UPLOAD ---
+                          Text(
+                            "Proof of Residence (Carmona ID)", 
+                            style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.w600, fontSize: 13)
+                          ),
+                          const SizedBox(height: 8),
+                          GestureDetector(
+                            onTap: _pickImage,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFF8F9FA),
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: _idAttachment != null ? forestLight : Colors.black.withOpacity(0.05), width: 1.5),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    _idAttachment != null ? Icons.check_circle_rounded : Icons.upload_file_rounded, 
+                                    color: _idAttachment != null ? forestLight : Colors.black38, 
+                                    size: 22
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Text(
+                                      _idAttachment != null ? "ID Attached Successfully" : "Tap to upload ID photo",
+                                      style: GoogleFonts.poppins(
+                                        color: _idAttachment != null ? forestDark : Colors.black45, 
+                                        fontSize: 13,
+                                        fontWeight: _idAttachment != null ? FontWeight.w600 : FontWeight.w500
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
-                          const SizedBox(width: 15),
-                          Expanded(child: _buildGenderDropdown(forestDark, forestLight)),
-                        ],
-                      ),
-                      const SizedBox(height: 20),
+                          const SizedBox(height: 24),
 
-                      _buildTextField(
-                        label: "Contact Number",
-                        hint: "09123456789",
-                        controller: _contactController,
-                        icon: Icons.phone_android_outlined,
-                        inputType: TextInputType.phone,
-                        formatters: [
-                          LengthLimitingTextInputFormatter(11),
-                          FilteringTextInputFormatter.digitsOnly,
-                        ],
-                      ),
-                      const SizedBox(height: 20),
-
-                      _buildTextField(
-                        label: "Email Address",
-                        hint: "your.email@example.com",
-                        controller: _emailController,
-                        icon: Icons.mail_outline,
-                        inputType: TextInputType.emailAddress,
-                      ),
-                      const SizedBox(height: 20),
-
-                      _buildTextField(
-                        label: "Password",
-                        hint: "Minimum 10 characters",
-                        isPassword: true,
-                        controller: _passwordController,
-                        icon: Icons.lock_open_outlined,
-                      ),
-                      const SizedBox(height: 20),
-
-                      // --- STYLED ID ATTACHMENT UPLOAD ---
-                      const Text("Proof of Residence (Carmona ID)", style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold, fontSize: 14)),
-                      const SizedBox(height: 8),
-                      GestureDetector(
-                        onTap: _pickImage,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: _idAttachment != null ? forestLight : Colors.transparent, width: 1.5),
-                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
-                          ),
-                          child: Row(
+                          // --- INTERACTIVE TERMS AND CONDITIONS CHECKBOX ---
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Icon(
-                                _idAttachment != null ? Icons.check_circle : Icons.upload_file, 
-                                color: _idAttachment != null ? forestLight : forestLight.withOpacity(0.5), 
-                                size: 20
+                              SizedBox(
+                                height: 24,
+                                width: 24,
+                                child: Checkbox(
+                                  value: _acceptedTerms,
+                                  onChanged: (val) => setState(() => _acceptedTerms = val ?? false),
+                                  activeColor: forestLight,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+                                  side: BorderSide(color: Colors.black.withOpacity(0.2)),
+                                ),
                               ),
-                              const SizedBox(width: 15),
+                              const SizedBox(width: 12),
                               Expanded(
-                                child: Text(
-                                  _idAttachment != null ? "ID Attached Successfully" : "Tap to upload ID photo",
-                                  style: TextStyle(
-                                    color: _idAttachment != null ? forestDark : Colors.grey, 
-                                    fontSize: 14,
-                                    fontWeight: _idAttachment != null ? FontWeight.bold : FontWeight.normal
+                                child: GestureDetector(
+                                  onTap: () => _showTermsDialog(forestDark, forestLight),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      text: "I acknowledge the ",
+                                      style: GoogleFonts.poppins(fontSize: 12, color: Colors.black54, height: 1.5),
+                                      children: [
+                                        TextSpan(
+                                          text: "Terms & Conditions",
+                                          style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.w700, decoration: TextDecoration.underline),
+                                        ),
+                                        const TextSpan(text: " and confirm I am a resident of Carmona."),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ],
                           ),
-                        ),
-                      ),
-                      const SizedBox(height: 20),
+                          const SizedBox(height: 32),
 
-                      // --- INTERACTIVE TERMS AND CONDITIONS CHECKBOX ---
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: Checkbox(
-                              value: _acceptedTerms,
-                              onChanged: (val) => setState(() => _acceptedTerms = val ?? false),
-                              activeColor: forestLight,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: GestureDetector(
-                              onTap: () => _showTermsDialog(forestDark, forestLight),
+                          // SUBMIT BUTTON
+                          _isLoading
+                              ? const Center(child: CircularProgressIndicator(color: forestDark))
+                              : _buildGradientButton("Create Account", _handleSignUp, [forestLight, forestDark]),
+                          
+                          const SizedBox(height: 24),
+                          
+                          Center(
+                            child: TextButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: TextButton.styleFrom(splashFactory: NoSplash.splashFactory),
                               child: RichText(
                                 text: TextSpan(
-                                  text: "I acknowledge the ",
-                                  style: const TextStyle(fontSize: 13, color: Colors.grey, height: 1.4),
+                                  text: "Already have an account? ",
+                                  style: GoogleFonts.poppins(color: Colors.black45, fontSize: 13, fontWeight: FontWeight.w500),
                                   children: [
                                     TextSpan(
-                                      text: "Terms & Conditions",
-                                      style: TextStyle(color: forestDark, fontWeight: FontWeight.bold, decoration: TextDecoration.underline),
+                                      text: "Sign In",
+                                      style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.w700),
                                     ),
-                                    const TextSpan(text: " and confirm I am a resident of Carmona."),
                                   ],
                                 ),
                               ),
@@ -967,35 +1063,10 @@ class _SignUpPageState extends State<SignUpPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 35),
-
-                      // SUBMIT BUTTON
-                      _isLoading
-                          ? const Center(child: CircularProgressIndicator(color: forestDark))
-                          : _buildGradientButton("Create Account", _handleSignUp, [forestLight, forestDark]),
-                      const SizedBox(height: 25),
-                      
-                      Center(
-                        child: TextButton(
-                          onPressed: () => Navigator.pop(context),
-                          child: RichText(
-                            text: const TextSpan(
-                              text: "Already have an account? ",
-                              style: TextStyle(color: Colors.grey, fontSize: 14),
-                              children: [
-                                TextSpan(
-                                  text: "Sign In",
-                                  style: TextStyle(color: forestDark, fontWeight: FontWeight.bold),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -1008,29 +1079,32 @@ class _SignUpPageState extends State<SignUpPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text("Gender", style: TextStyle(fontWeight: FontWeight.bold, color: forestDark, fontSize: 14)),
+        Text(
+          "Gender", 
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: forestDark, fontSize: 13)
+        ),
         const SizedBox(height: 8),
         Container(
           padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFFF8F9FA),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
+            border: Border.all(color: Colors.black.withOpacity(0.05)),
           ),
           child: Row(
             children: [
-              Icon(Icons.person_outline, color: forestLight.withOpacity(0.5), size: 20),
+              const Icon(Icons.person_outline_rounded, color: Colors.black38, size: 20),
               const SizedBox(width: 12),
               Expanded(
                 child: DropdownButtonHideUnderline(
                   child: DropdownButton<String>(
                     value: _selectedGender,
-                    hint: Text("Select", style: TextStyle(fontSize: 14, color: Colors.grey.shade400)),
-                    icon: Icon(Icons.keyboard_arrow_down_rounded, color: forestLight, size: 22),
+                    hint: Text("Select", style: GoogleFonts.poppins(fontSize: 14, color: Colors.black26)),
+                    icon: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black38, size: 20),
                     isExpanded: true,
                     dropdownColor: Colors.white,
                     borderRadius: BorderRadius.circular(16),
-                    style: TextStyle(color: forestDark, fontSize: 15, fontWeight: FontWeight.w500),
+                    style: GoogleFonts.poppins(color: forestDark, fontSize: 14, fontWeight: FontWeight.w500),
                     items: _genderOptions.map((String value) {
                       return DropdownMenuItem<String>(
                         value: value, 
@@ -1057,29 +1131,34 @@ class _SignUpPageState extends State<SignUpPage> {
     TextInputType inputType = TextInputType.text,
     List<TextInputFormatter>? formatters,
   }) {
+    const Color forestDark = Color(0xFF2D3B1E);
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold, fontSize: 14)),
+        Text(
+          label, 
+          style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.w600, fontSize: 13)
+        ),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: const Color(0xFFF8F9FA),
             borderRadius: BorderRadius.circular(16),
-            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 15, offset: const Offset(0, 5))],
+            border: Border.all(color: Colors.black.withOpacity(0.05)),
           ),
           child: TextField(
             controller: controller,
             obscureText: isPassword,
             keyboardType: inputType,
             inputFormatters: formatters,
-            style: const TextStyle(color: Color(0xFF283618), fontSize: 15),
+            style: GoogleFonts.poppins(color: forestDark, fontSize: 14, fontWeight: FontWeight.w500),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: const TextStyle(fontSize: 14, color: Colors.grey),
-              prefixIcon: Icon(icon, color: const Color(0xFF606C38).withOpacity(0.5), size: 20),
+              hintStyle: GoogleFonts.poppins(fontSize: 14, color: Colors.black26),
+              prefixIcon: Icon(icon, color: Colors.black38, size: 20),
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 18, horizontal: 20),
+              contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
             ),
           ),
         ),
@@ -1091,27 +1170,60 @@ class _SignUpPageState extends State<SignUpPage> {
     return Container(
       height: 58,
       decoration: BoxDecoration(
-        gradient: LinearGradient(colors: colors),
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [BoxShadow(color: colors.last.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 8))],
-      ),
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        gradient: LinearGradient(
+          colors: colors,
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
         ),
-        child: Text(text, style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: colors.last.withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onPressed,
+          borderRadius: BorderRadius.circular(20),
+          child: Center(
+            child: Text(
+              text, 
+              style: GoogleFonts.poppins(
+                color: Colors.white, 
+                fontWeight: FontWeight.w600, 
+                fontSize: 15,
+                letterSpacing: 0.5,
+              )
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildLogo({required double size}) {
     return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-      child: Icon(Icons.favorite, size: size, color: const Color(0xFF283618)),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFF606C38),
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF606C38).withOpacity(0.3),
+            blurRadius: 20,
+            offset: const Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Icon(
+        Icons.local_hospital_rounded, 
+        size: size * 0.6, 
+        color: Colors.white,
+      ),
     );
   }
 
@@ -1119,7 +1231,10 @@ class _SignUpPageState extends State<SignUpPage> {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(size / 3)),
+      decoration: BoxDecoration(
+        color: color, 
+        shape: BoxShape.circle,
+      ),
     );
   }
 }
