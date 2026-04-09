@@ -11,6 +11,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'support_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +32,7 @@ class Medicine {
   bool isTaken;
   Medicine({required this.name, required this.dosage, required this.time, this.isTaken = false});
 }
+
 class ChatMessage {
   String text;
   bool isUser;
@@ -54,7 +56,7 @@ class TereaApp extends StatelessWidget {
         '/': (context) => const StartupPage(),
         '/login': (context) => const LoginPage(),
         '/signup': (context) => const SignUpPage(),
-        '/home': (context) => const DashboardPage(),
+        '/dashboard': (context) => const DashboardPage(), // Changed from '/home' to match your navigation pushes
         '/assess': (context) => const AssessmentPage(),
         '/meds': (context) => const MedsPage(),
         '/followup': (context) => const FollowUpPage(),
@@ -62,6 +64,7 @@ class TereaApp extends StatelessWidget {
         '/settings': (context) => const SettingsPage(),
         '/result': (context) => const RiskResultPage(),
         '/facilities': (context) => const FacilitiesPage(),
+        '/support': (context) => const SupportPage(), // Added the Support Page route here
       },
     );
   }
@@ -251,7 +254,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
               ),
             );
           } else {
-            Navigator.pushNamed(context, '/home');
+            // FIXED: Removed the space and added pushReplacementNamed
+            Navigator.pushReplacementNamed(context, '/dashboard');
           }
         }
       }
@@ -276,9 +280,9 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    const Color forestDark = Color(0xFF2D3B1E); // Updated to your new Deep Forest
-    const Color forestLight = Color(0xFF606C38); // Moss Green
-    const Color bgOffWhite = Color(0xFFF4F7F4); // Clean modern background
+    const Color forestDark = Color(0xFF2D3B1E); 
+    const Color forestLight = Color(0xFF606C38); 
+    const Color bgOffWhite = Color(0xFFF4F7F4); 
 
     return Scaffold(
       backgroundColor: bgOffWhite,
@@ -503,7 +507,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FA), // Very subtle gray input background
+            color: const Color(0xFFF8F9FA), 
             borderRadius: BorderRadius.circular(16),
             border: Border.all(color: Colors.black.withOpacity(0.05)),
           ),
@@ -548,7 +552,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
-        borderRadius: BorderRadius.circular(20), // More rounded like the inspo image
+        borderRadius: BorderRadius.circular(20), 
         boxShadow: [
           BoxShadow(
             color: colors.last.withOpacity(0.3),
@@ -584,8 +588,8 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: const Color(0xFF606C38), // Solid Moss Green block
-        borderRadius: BorderRadius.circular(24), // Squircle shape
+        color: const Color(0xFF606C38), 
+        borderRadius: BorderRadius.circular(24), 
         boxShadow: [
           BoxShadow(
             color: const Color(0xFF606C38).withOpacity(0.3),
@@ -595,7 +599,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
         ],
       ),
       child: Icon(
-        Icons.local_hospital_rounded, // Changed to a more medical/health icon to match the vibe
+        Icons.local_hospital_rounded, 
         size: size * 0.6,
         color: Colors.white,
       ),
@@ -789,7 +793,7 @@ class _SignUpPageState extends State<SignUpPage> {
           'id_attachment_url': idUrl, 
         });
 
-        if (mounted) Navigator.pushNamed(context, '/home');
+        if (mounted) Navigator.pushNamed(context, '/ dashboard');
       }
     } catch (e) {
       if (mounted) {
@@ -2207,7 +2211,6 @@ class _MedsPageState extends State<MedsPage> {
   bool _isLoading = true;
   DateTime _selectedDate = DateTime.now();
   String _viewType = 'Week';
-  int _selectedIndex = 2; 
 
   DateTime? _treatmentStartDate;
   String? _connectionStatus;
@@ -2456,8 +2459,6 @@ class _MedsPageState extends State<MedsPage> {
       floatingActionButton: isUnlocked 
         ? FloatingActionButton(backgroundColor: primaryGreen, onPressed: _handleAddNewMed, child: const Icon(Icons.add, color: Colors.white))
         : null,
-
-      bottomNavigationBar: BottomNavigationBar(currentIndex: _selectedIndex, onTap: (index) { if (index == _selectedIndex) return; switch (index) { case 0: Navigator.pushReplacementNamed(context, '/dashboard'); break; case 1: Navigator.pushNamed(context, '/assess'); break; case 3: Navigator.pushNamed(context, '/followup'); break; case 4: Navigator.pushNamed(context, '/chat'); break; } setState(() => _selectedIndex = index); }, type: BottomNavigationBarType.fixed, backgroundColor: surfaceWhite, selectedItemColor: accentGreen, unselectedItemColor: Colors.grey, items: const [BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: 'Home'), BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: 'Assess'), BottomNavigationBarItem(icon: Icon(Icons.medication_rounded), label: 'Meds'), BottomNavigationBarItem(icon: Icon(Icons.calendar_month_outlined), label: 'Follow-up'), BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline_rounded), label: 'Chat')]),
     );
   }
 
@@ -2857,8 +2858,8 @@ class _FollowUpPageState extends State<FollowUpPage> {
         });
       }
 
-      // 3. Load content if unlocked
-      if (_connectionStatus == 'active' && _treatmentStartDate != null) {
+      // 3. Load content if unlocked (now only requires active connection)
+      if (_connectionStatus == 'active') {
         await Future.wait([
           _fetchStreak(),
           _fetchNotes(), 
@@ -2905,7 +2906,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   // --- CRUD OPERATIONS ---
   Future<void> _addNote() async {
-    if (_treatmentStartDate == null) return; 
     if (_noteController.text.isEmpty) return;
     final text = _noteController.text;
     final category = _selectedCategory;
@@ -2918,13 +2918,11 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   Future<void> _deleteNote(String id) async { 
-    if (_treatmentStartDate == null) return; 
     await _supabase.from('doctor_notes').delete().eq('id', id); 
     _fetchNotes(); 
   }
 
   Future<void> _toggleNote(int index) async {
-    if (_treatmentStartDate == null) return; 
     setState(() { _doctorNotes[index]['is_checked'] = true; });
     await Future.delayed(const Duration(milliseconds: 500));
     final noteId = _doctorNotes[index]['id'];
@@ -2933,13 +2931,11 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   Future<void> _deleteAppointment(String id) async { 
-    if (_treatmentStartDate == null) return; 
     await _supabase.from('roadmap').delete().eq('id', id);
     _fetchAppointments(); 
   }
 
   Future<void> _editNoteDialog(Map<String, dynamic> note) async {
-    if (_treatmentStartDate == null) return; 
     final editController = TextEditingController(text: note['note_text']);
     String editCategory = note['category'] ?? 'Question';
     
@@ -2998,7 +2994,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) { 
-    if (_treatmentStartDate == null) return; 
     final isEditing = apptToEdit != null;
     
     // Changed to handle the actual title of the milestone
@@ -3091,7 +3086,8 @@ class _FollowUpPageState extends State<FollowUpPage> {
   // --- UI BUILD ---
   @override
   Widget build(BuildContext context) {
-    bool isUnlocked = _connectionStatus == 'active' && _treatmentStartDate != null;
+    // Page is now unlocked immediately when connection is active
+    bool isUnlocked = _connectionStatus == 'active';
 
     return Scaffold(
       backgroundColor: kWhite,
@@ -3210,16 +3206,32 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   // --- UI COMPONENTS ---
   Widget _buildRecoveryRoadmap() {
-    int daysPassed = 0;
-    if (_treatmentStartDate != null) { daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays; }
+    // Specific message if Roadmap is not yet set
+    if (_treatmentStartDate == null) {
+      return Container(
+        padding: const EdgeInsets.all(20), 
+        decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), 
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start, 
+          children: [
+            Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), 
+            const SizedBox(height: 10),
+            const Text("Roadmap hasn't been set by your doctor yet.", style: TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic)),
+          ]
+        )
+      );
+    }
+
+    int daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays;
     double progress = (daysPassed / 180).clamp(0.0, 1.0); 
     int month = (daysPassed / 30).ceil().clamp(1, 6);
+    
     return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), 
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), 
-            Text("Started: ${DateFormat('MMM dd, yyyy').format(_treatmentStartDate ?? DateTime.now())}", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))
+            Text("Started: ${DateFormat('MMM dd, yyyy').format(_treatmentStartDate!)}", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))
           ]), 
           Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(10)), child: Text("Month $month of 6", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kSecondaryGreen)))
         ]), 
@@ -3393,7 +3405,10 @@ class _ChatPageState extends State<ChatPage> {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Colors.transparent, elevation: 0,
-        automaticallyImplyLeading: false,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF283618), size: 20),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Row(children: [_buildLogo(size: 32), const SizedBox(width: 10), const Text('TEREA Chat')]),
       ),
       body: Column(
@@ -3426,7 +3441,6 @@ class _ChatPageState extends State<ChatPage> {
           _buildInputArea(),
         ],
       ),
-      bottomNavigationBar: _buildBottomNav(4, context),
     );
   }
 
@@ -3991,7 +4005,7 @@ class _RiskResultPageState extends State<RiskResultPage> {
                   // 3. Return to Dashboard (Visible for ALL risks)
                   _primaryBtn("Return to Dashboard", () async {
                     await _saveToHistory(score, riskLabel);
-                    Navigator.pushNamedAndRemoveUntil(context, '/home', (r) => false);
+                    Navigator.pushNamedAndRemoveUntil(context, '/dashboard', (r) => false);
                   }),
 
                   const SizedBox(height: 40),
@@ -4310,7 +4324,7 @@ Widget _buildBottomNav(int idx, BuildContext context) {
     type: BottomNavigationBarType.fixed,
     selectedItemColor: const Color(0xFF606C38),
     onTap: (i) {
-      if (i == 0) Navigator.pushNamed(context, '/home');
+      if (i == 0) Navigator.pushNamed(context, '/dashboard');
       if (i == 1) Navigator.pushNamed(context, '/assess');
       if (i == 2) Navigator.pushNamed(context, '/meds');
       if (i == 3) Navigator.pushNamed(context, '/followup');
