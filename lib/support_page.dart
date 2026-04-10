@@ -90,8 +90,6 @@ class _SupportPageState extends State<SupportPage> {
             const SizedBox(height: 15),
             Row(
               children: [
-                Expanded(child: _buildContactCard(Icons.call_rounded, "Call Clinic", "Available 8AM-5PM")),
-                const SizedBox(width: 15),
                 Expanded(child: _buildContactCard(Icons.email_rounded, "Email Us", "Expect a reply in 24h")),
               ],
             ),

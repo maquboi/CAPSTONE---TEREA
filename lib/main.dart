@@ -1485,12 +1485,12 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: softWhite, // Modern off-white background
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: softWhite, // Matches scaffold
         elevation: 4,
-        shadowColor: Colors.black.withOpacity(0.05),
-        surfaceTintColor: Colors.white, 
+        shadowColor: Colors.black.withOpacity(0.02), // Softer shadow
+        surfaceTintColor: softWhite, 
         automaticallyImplyLeading: false,
         title: Row(
           children: [
@@ -1575,13 +1575,14 @@ class _DashboardPageState extends State<DashboardPage> {
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
                         crossAxisCount: 2,
-                        crossAxisSpacing: 15,
-                        mainAxisSpacing: 15,
-                        children: [
-                          _buildActionCard(context, Icons.assignment_rounded, 'Risk Assessment', 'Check your TB risk', '/assess', forestMed, paleGreen),
-                          _buildActionCard(context, Icons.chat_bubble_rounded, 'Chatbot', 'Support', '/chat', forestMed, paleGreen),
-                          _buildActionCard(context, Icons.settings_rounded, 'Settings', 'Preferences', '/settings', forestMed, paleGreen),
-                          _buildActionCard(context, Icons.help_outline_rounded, 'Support', 'Contact Us', '/support', forestMed, paleGreen),
+                        crossAxisSpacing: 16,
+                        mainAxisSpacing: 16,
+                        childAspectRatio: 0.9, 
+                        children: const [
+                          _HoverActionCard(icon: Icons.assignment_rounded, title: 'Risk\nAssessment', subtitle: 'Check your TB risk', route: '/assess'),
+                          _HoverActionCard(icon: Icons.chat_bubble_rounded, title: 'TEREA\nChatbot', subtitle: '24/7 AI Support', route: '/chat'),
+                          _HoverActionCard(icon: Icons.settings_rounded, title: 'Account\nSettings', subtitle: 'Preferences', route: '/settings'),
+                          _HoverActionCard(icon: Icons.help_outline_rounded, title: 'Help &\nSupport', subtitle: 'Contact Us', route: '/support'),
                         ],
                       ),
                     ],
@@ -1787,57 +1788,6 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Widget _buildActionCard(BuildContext context, IconData icon, String title, String subtitle, String route, Color iconColor, Color bgColor) {
-    return Container(
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.08), 
-            blurRadius: 12, 
-            offset: const Offset(0, 6)
-          )
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () => Navigator.pushNamed(context, route),
-          borderRadius: BorderRadius.circular(24),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.6), 
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                        BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 4)
-                    ]
-                  ),
-                  child: Icon(icon, color: iconColor, size: 26),
-                ),
-                const SizedBox(height: 15),
-                Text(title, 
-                  style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: forestDark)
-                ),
-                const SizedBox(height: 4),
-                Text(subtitle, 
-                  style: const TextStyle(color: Colors.black54, fontSize: 11, fontWeight: FontWeight.w500, height: 1.2)
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   Widget _buildBlob(double size, Color color) {
     return Container(
       width: size,
@@ -1889,6 +1839,96 @@ class _DashboardPageState extends State<DashboardPage> {
           BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Roadmap'),
           BottomNavigationBarItem(icon: Icon(Icons.person_rounded), label: 'Profile'),
         ],
+      ),
+    );
+  }
+}
+
+// --- NEW STATEFUL WIDGET FOR HOVER EFFECTS ---
+class _HoverActionCard extends StatefulWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final String route;
+
+  const _HoverActionCard({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.route,
+  });
+
+  @override
+  State<_HoverActionCard> createState() => _HoverActionCardState();
+}
+
+class _HoverActionCardState extends State<_HoverActionCard> {
+  bool _isHovering = false;
+  final Color forestDark = const Color(0xFF283618);
+  final Color forestMed = const Color(0xFF606C38);
+
+  @override
+  Widget build(BuildContext context) {
+    return MouseRegion(
+      onEnter: (_) => setState(() => _isHovering = true),
+      onExit: (_) => setState(() => _isHovering = false),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeInOut,
+        transform: Matrix4.identity()..translate(0.0, _isHovering ? -6.0 : 0.0), // Smooth lift effect
+        decoration: BoxDecoration(
+          color: Colors.white, // Now starkly contrasts the softWhite Scaffold
+          borderRadius: BorderRadius.circular(24),
+          border: Border.all(
+            color: _isHovering ? forestMed.withOpacity(0.5) : Colors.black.withOpacity(0.03), 
+            width: 1.5
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: forestDark.withOpacity(_isHovering ? 0.08 : 0.02),
+              blurRadius: _isHovering ? 20 : 10,
+              offset: Offset(0, _isHovering ? 8 : 4),
+            )
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: () => Navigator.pushNamed(context, widget.route),
+            borderRadius: BorderRadius.circular(24),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      // Modernized icon background instead of the overly bright pale green
+                      color: _isHovering ? forestMed : forestMed.withOpacity(0.08), 
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Icon(
+                      widget.icon, 
+                      color: _isHovering ? Colors.white : forestMed, 
+                      size: 28
+                    ),
+                  ),
+                  const Spacer(),
+                  Text(widget.title, 
+                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: forestDark, height: 1.2)
+                  ),
+                  const SizedBox(height: 6),
+                  Text(widget.subtitle, 
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontWeight: FontWeight.w500, height: 1.3)
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -3094,7 +3134,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
       appBar: AppBar(
         backgroundColor: kWhite, elevation: 0, centerTitle: true,
         leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: kPrimaryGreen, size: 20), onPressed: () => Navigator.of(context).pop()),
-        title: Text('Follow-up Care', style: TextStyle(fontWeight: FontWeight.w900, color: kPrimaryGreen, fontSize: 20)),
+        title: Text('Roadmap Milestone', style: TextStyle(fontWeight: FontWeight.w900, color: kPrimaryGreen, fontSize: 20)),
       ),
       body: _isLoading 
         ? Center(child: CircularProgressIndicator(color: kSecondaryGreen)) 
