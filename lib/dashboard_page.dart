@@ -477,8 +477,9 @@ class _DashboardPageState extends State<DashboardPage> {
     String displayText = isNotAssessed ? "Not Yet Tested" : _riskLevel;
 
     Color bgColor = const Color(0xFF606C38);
-    if (_riskLevel.toLowerCase().contains("high")) bgColor = const Color.fromARGB(222, 203, 5, 38);
-    else if (_riskLevel.toLowerCase().contains("medium")) bgColor = const Color(0xFFF9C74F);
+    if (_riskLevel.toLowerCase().contains("high")) {
+      bgColor = const Color.fromARGB(222, 203, 5, 38);
+    } else if (_riskLevel.toLowerCase().contains("medium")) bgColor = const Color(0xFFF9C74F);
     else if (_riskLevel.toLowerCase().contains("low")) bgColor = const Color(0xFF43AA8B);
 
     BoxDecoration boxDecoration;

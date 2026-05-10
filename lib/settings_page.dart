@@ -153,7 +153,7 @@ class _SettingsPageState extends State<SettingsPage> {
                   _buildSettingsTile(Icons.notifications_none_rounded, "Notifications", 
                       trailing: Switch(
                         value: true, 
-                        activeColor: Colors.white, 
+                        activeThumbColor: Colors.white, 
                         activeTrackColor: accentGreen,
                         onChanged: (v){}
                       )),

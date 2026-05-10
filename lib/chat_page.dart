@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import 'shared_widgets.dart';
 import 'app_models.dart';
 
-// --- 8. CHATBOT PAGE ---
 class ChatPage extends StatefulWidget {
   const ChatPage({super.key});
 
@@ -15,25 +16,66 @@ class _ChatPageState extends State<ChatPage> {
     ChatMessage(text: "Hello! I am TEREA, your health assistant. How can I help you today?", isUser: false),
   ];
   final TextEditingController _controller = TextEditingController();
+  bool _isLoading = false;
 
-  void _sendMessage() {
-    if (_controller.text.isEmpty) return;
+  // YOUR WORKER URL IS HERE
+  final String apiUrl = 'https://chatbot.richoffgrandmas04.workers.dev';
+
+  void _sendMessage() async {
+    if (_controller.text.isEmpty || _isLoading) return;
+    
+    final userMessage = _controller.text;
+    
+    // Add user message
     setState(() {
-      _messages.add(ChatMessage(text: _controller.text, isUser: true));
-      Future.delayed(const Duration(seconds: 1), () {
-        setState(() {
-          _messages.add(ChatMessage(text: "I understand. Let me look into that for you.", isUser: false));
-        });
-      });
+      _messages.add(ChatMessage(text: userMessage, isUser: true));
+      _isLoading = true;
     });
     _controller.clear();
+    
+    // Add typing indicator
+    setState(() {
+      _messages.add(ChatMessage(text: "✍️", isUser: false));
+    });
+
+    try {
+      // Call your Cloudflare Worker
+      final response = await http.post(
+        Uri.parse(apiUrl),
+        headers: {'Content-Type': 'application/json'},
+        body: jsonEncode({'message': userMessage}),
+      ).timeout(const Duration(seconds: 15));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        setState(() {
+          _messages.removeLast(); // Remove typing indicator
+          _messages.add(ChatMessage(text: data['reply'], isUser: false));
+        });
+      } else {
+        throw Exception('API returned ${response.statusCode}');
+      }
+    } catch (e) {
+      setState(() {
+        _messages.removeLast();
+        _messages.add(ChatMessage(
+          text: "Sorry, I'm having trouble connecting. Please check your internet and try again.",
+          isUser: false
+        ));
+      });
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: Colors.transparent, elevation: 0,
+        backgroundColor: Colors.transparent, 
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF283618), size: 20),
           onPressed: () => Navigator.of(context).pop(),
@@ -61,7 +103,13 @@ class _ChatPageState extends State<ChatPage> {
                         bottomLeft: msg.isUser ? const Radius.circular(15) : Radius.zero,
                       ),
                     ),
-                    child: Text(msg.text, style: TextStyle(color: msg.isUser ? Colors.white : Colors.black87)),
+                    child: Text(
+                      msg.text, 
+                      style: TextStyle(
+                        color: msg.isUser ? Colors.white : Colors.black87,
+                        fontSize: 14,
+                      ),
+                    ),
                   ),
                 );
               },
@@ -82,18 +130,30 @@ class _ChatPageState extends State<ChatPage> {
           Expanded(
             child: TextField(
               controller: _controller,
+              enabled: !_isLoading,
               decoration: InputDecoration(
-                hintText: "Ask something...",
-                filled: true, fillColor: const Color(0xFFFEFAE0),
+                hintText: "Ask about TB symptoms, treatment, or prevention...",
+                hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+                filled: true, 
+                fillColor: const Color(0xFFFEFAE0),
                 border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20),
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
               ),
             ),
           ),
           const SizedBox(width: 10),
           CircleAvatar(
             backgroundColor: const Color(0xFF606C38),
-            child: IconButton(icon: const Icon(Icons.send, color: Colors.white), onPressed: _sendMessage),
+            child: _isLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                  )
+                : IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white, size: 20), 
+                    onPressed: _sendMessage,
+                  ),
           )
         ],
       ),
