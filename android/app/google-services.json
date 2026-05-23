@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "232774356529",
+    "project_id": "terea-tb-app",
+    "storage_bucket": "terea-tb-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:232774356529:android:0235b9cb9a8bdd4d710f10",
+        "android_client_info": {
+          "package_name": "com.example.capstone_mob"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDjdbG-QbYwfYrOQjdkm9AJSbJg0X8Sg5A"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
