@@ -26,12 +26,12 @@ class _DashboardPageState extends State<DashboardPage> {
   final _codeController = TextEditingController();
   bool _isLinking = false;
 
-  // Theme Palette
+  // Theme Palette (Strictly Green, White, Grey, Light Green, Forest Green, Black)
   final Color forestDark = const Color(0xFF283618); 
   final Color forestMed = const Color(0xFF606C38);  
   final Color mossGreen = const Color(0xFFADC178); 
   final Color paleGreen = const Color(0xFFDDE5B6); 
-  final Color softWhite = const Color(0xFFF8F9FA);
+  final Color softWhite = const Color(0xFFF9FBF9); // Clean, light background
 
   @override
   void initState() {
@@ -137,7 +137,7 @@ class _DashboardPageState extends State<DashboardPage> {
           .maybeSingle();
 
       if (doctor == null) {
-        _showToast("Invalid Clinic Code. Please check again.", Colors.redAccent);
+        _showToast("Invalid Clinic Code. Please check again.", Colors.black87);
         setState(() => _isLinking = false);
         return;
       }
@@ -151,7 +151,7 @@ class _DashboardPageState extends State<DashboardPage> {
           .maybeSingle();
 
       if (existing != null) {
-        _showToast("You are already connected or pending with this doctor.", Colors.orange);
+        _showToast("You are already connected or pending with this doctor.", Colors.grey.shade700);
         setState(() => _isLinking = false);
         return;
       }
@@ -170,15 +170,15 @@ class _DashboardPageState extends State<DashboardPage> {
           _isLinking = false;
         });
         Navigator.pop(context); // Close dialog
-        _showToast("Request sent to Dr. ${doctor['full_name']}!", const Color(0xFF606C38));
+        _showToast("Request sent to Dr. ${doctor['full_name']}!", forestMed);
       }
 
     } catch (e) {
       debugPrint("Linking Error: $e");
       if (e.toString().contains("duplicate")) {
-         _showToast("You have already sent a request.", Colors.orange);
+         _showToast("You have already sent a request.", Colors.grey.shade700);
       } else {
-         _showToast("Error linking to clinic: $e", Colors.redAccent);
+         _showToast("Error linking to clinic: $e", Colors.black87);
       }
       setState(() => _isLinking = false);
     }
@@ -188,27 +188,29 @@ class _DashboardPageState extends State<DashboardPage> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text("Enter Clinic Code", style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold)),
+        title: const Text("Enter Clinic Code", style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               "Please enter the code provided by your doctor in Carmona (e.g., CMC-001).",
-              style: TextStyle(fontSize: 14, color: Colors.grey),
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
             ),
             const SizedBox(height: 20),
             TextField(
               controller: _codeController,
               decoration: InputDecoration(
                 hintText: "Clinic Code",
+                hintStyle: TextStyle(color: Colors.grey.shade400),
                 filled: true,
-                fillColor: const Color(0xFFF9FAFB),
+                fillColor: softWhite,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(12),
                   borderSide: BorderSide.none,
                 ),
-                prefixIcon: const Icon(Icons.qr_code, color: Color(0xFF606C38)),
+                prefixIcon: Icon(Icons.qr_code, color: forestMed),
               ),
             ),
           ],
@@ -220,7 +222,7 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF606C38),
+              backgroundColor: forestMed,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: _isLinking ? null : _submitClinicCode,
@@ -235,7 +237,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
   void _showToast(String msg, Color bg) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: bg, behavior: SnackBarBehavior.floating),
+      SnackBar(content: Text(msg), backgroundColor: bg, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
     );
   }
 
@@ -243,19 +245,18 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: softWhite, // Modern off-white background
+      backgroundColor: softWhite, 
       appBar: AppBar(
-        backgroundColor: softWhite, // Matches scaffold
-        elevation: 4,
-        shadowColor: Colors.black.withOpacity(0.02), // Softer shadow
-        surfaceTintColor: softWhite, 
+        backgroundColor: softWhite, 
+        elevation: 0,
+        scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
             buildLogo(size: 32),
             const SizedBox(width: 10),
             Text('TEREA', 
-              style: TextStyle(fontWeight: FontWeight.w900, color: forestDark, letterSpacing: 1.1)
+              style: TextStyle(fontWeight: FontWeight.w900, color: forestDark, fontSize: 22, letterSpacing: 0.5)
             )
           ],
         ),
@@ -265,14 +266,11 @@ class _DashboardPageState extends State<DashboardPage> {
             child: Container(
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(color: Colors.black.withOpacity(0.1), blurRadius: 8, offset: const Offset(0, 2))
-                ],
-                border: Border.all(color: mossGreen, width: 2),
+                border: Border.all(color: paleGreen, width: 2),
               ),
               child: CircleAvatar(
                 radius: 18,
-                backgroundColor: paleGreen,
+                backgroundColor: Colors.white,
                 backgroundImage: _avatarUrl != null ? NetworkImage(_avatarUrl!) : null,
                 child: _avatarUrl == null ? Icon(Icons.person, size: 20, color: forestDark) : null,
               ),
@@ -280,75 +278,69 @@ class _DashboardPageState extends State<DashboardPage> {
           )
         ],
       ),
-      body: Stack(
-        children: [
-          // Background Blobs
-          Positioned(top: -50, right: -30, child: _buildBlob(200, mossGreen)),
-          Positioned(bottom: 100, left: -50, child: _buildBlob(250, forestMed)),
-          
-          _isLoading 
-            ? Center(child: CircularProgressIndicator(color: forestMed))
-            : RefreshIndicator(
-                onRefresh: _fetchUserData,
-                color: forestMed,
-                child: SingleChildScrollView(
-                  padding: const EdgeInsets.all(25),
-                  physics: const AlwaysScrollableScrollPhysics(),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Hello, $_username', 
-                        style: TextStyle(fontSize: 28, fontWeight: FontWeight.w900, color: forestDark, letterSpacing: -0.5)
-                      ),
-                      Text(
-                        'How are you feeling today?', 
-                        style: TextStyle(color: forestMed, fontSize: 16, fontWeight: FontWeight.w600)
-                      ),
-                      const SizedBox(height: 25),
+      body: _isLoading 
+        ? Center(child: CircularProgressIndicator(color: forestMed))
+        : RefreshIndicator(
+            onRefresh: _fetchUserData,
+            color: forestMed,
+            backgroundColor: Colors.white,
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              physics: const AlwaysScrollableScrollPhysics(),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Hello, ${_username.split(' ')[0]}', 
+                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.black87, letterSpacing: -0.5)
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'How are you feeling today?', 
+                    style: TextStyle(color: Colors.grey.shade600, fontSize: 15, fontWeight: FontWeight.w500)
+                  ),
+                  const SizedBox(height: 30),
 
-                      // --- CONNECTION STATUS LOGIC ---
-                      if (_connectionStatus == null) ...[
-                        _buildConnectCard(),
-                        const SizedBox(height: 20),
-                      ] else if (_connectionStatus == 'pending') ...[
-                        _buildPendingCard(),
-                        const SizedBox(height: 20),
-                      ] else if (_connectionStatus == 'active') ...[
-                        _buildVerifiedCard(),
-                        const SizedBox(height: 20),
-                      ],
-                      // -------------------------------
-                      
-                      _buildTreatmentBanner(),
-                      
-                      const SizedBox(height: 35),
-                      Text(
-                        'QUICK ACTIONS', 
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: forestMed, letterSpacing: 1.5)
-                      ),
-                      const SizedBox(height: 15),
-                      
-                      GridView.count(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        crossAxisCount: 2,
-                        crossAxisSpacing: 16,
-                        mainAxisSpacing: 16,
-                        childAspectRatio: 0.9, 
-                        children: const [
-                          _HoverActionCard(icon: Icons.assignment_rounded, title: 'Risk\nAssessment', subtitle: 'Check your TB risk', route: '/assess'),
-                          _HoverActionCard(icon: Icons.chat_bubble_rounded, title: 'TEREA\nChatbot', subtitle: '24/7 AI Support', route: '/chat'),
-                          _HoverActionCard(icon: Icons.settings_rounded, title: 'Account\nSettings', subtitle: 'Preferences', route: '/settings'),
-                          _HoverActionCard(icon: Icons.help_outline_rounded, title: 'Help &\nSupport', subtitle: 'Contact Us', route: '/support'),
-                        ],
-                      ),
+                  // --- CONNECTION STATUS LOGIC ---
+                  if (_connectionStatus == null) ...[
+                    _buildConnectCard(),
+                    const SizedBox(height: 20),
+                  ] else if (_connectionStatus == 'pending') ...[
+                    _buildPendingCard(),
+                    const SizedBox(height: 20),
+                  ] else if (_connectionStatus == 'active') ...[
+                    _buildVerifiedCard(),
+                    const SizedBox(height: 20),
+                  ],
+                  // -------------------------------
+                  
+                  _buildTreatmentBanner(),
+                  
+                  const SizedBox(height: 35),
+                  Text(
+                    'QUICK ACTIONS', 
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.grey.shade500, letterSpacing: 1.5)
+                  ),
+                  const SizedBox(height: 16),
+                  
+                  GridView.count(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    crossAxisCount: 2,
+                    crossAxisSpacing: 16,
+                    mainAxisSpacing: 16,
+                    childAspectRatio: 0.95, 
+                    children: const [
+                      _HoverActionCard(icon: Icons.assignment_outlined, title: 'Risk\nAssessment', subtitle: 'Check your TB risk', route: '/assess'),
+                      _HoverActionCard(icon: Icons.chat_bubble_outline, title: 'TEREA\nChatbot', subtitle: '24/7 AI Support', route: '/chat'),
+                      _HoverActionCard(icon: Icons.settings_outlined, title: 'Account\nSettings', subtitle: 'Preferences', route: '/settings'),
+                      _HoverActionCard(icon: Icons.help_outline_rounded, title: 'Help &\nSupport', subtitle: 'Contact Us', route: '/support'),
                     ],
                   ),
-                ),
+                ],
               ),
-        ],
-      ),
+            ),
+          ),
       bottomNavigationBar: buildBottomNav(0, context),
     );
   }
@@ -360,10 +352,10 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF283618), // Dark Forest
+        color: forestDark,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF283618).withOpacity(0.4), blurRadius: 15, offset: const Offset(0, 8))
+          BoxShadow(color: forestDark.withOpacity(0.2), blurRadius: 15, offset: const Offset(0, 8))
         ],
       ),
       child: Column(
@@ -373,29 +365,31 @@ class _DashboardPageState extends State<DashboardPage> {
             children: [
               Container(
                 padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-                child: const Icon(Icons.link_rounded, color: Colors.white, size: 24),
+                decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), shape: BoxShape.circle),
+                child: const Icon(Icons.link_rounded, color: Colors.white, size: 20),
               ),
               const SizedBox(width: 12),
               const Text("Verified Treatment", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           const Text(
             "Link with your Carmona doctor to unlock your full Medication Diary.",
-            style: TextStyle(color: Colors.white70, fontSize: 13),
+            style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4),
           ),
-          const SizedBox(height: 15),
+          const SizedBox(height: 20),
           SizedBox(
             width: double.infinity,
+            height: 48,
             child: ElevatedButton(
               onPressed: _showClinicCodeDialog,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.white,
-                foregroundColor: const Color(0xFF283618),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                foregroundColor: forestDark,
+                elevation: 0,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
               ),
-              child: const Text("Enter Clinic Code", style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text("Enter Clinic Code", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
             ),
           ),
         ],
@@ -403,27 +397,29 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 2. PENDING
+  // 2. PENDING 
   Widget _buildPendingCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFFF9C74F), // Amber/Yellow
+        color: Colors.grey.shade200, 
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(color: Colors.orange.withOpacity(0.2), blurRadius: 10, offset: const Offset(0, 4))
-        ],
       ),
       child: Row(
-        children: const [
-          Icon(Icons.hourglass_top_rounded, color: Color(0xFF283618), size: 30),
-          SizedBox(width: 15),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
+            child: Icon(Icons.hourglass_empty_rounded, color: Colors.grey.shade700, size: 24),
+          ),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Approval Pending", style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold, fontSize: 15)),
-                Text("Waiting for your doctor to verify your request.", style: TextStyle(color: Color(0xFF283618), fontSize: 12)),
+                const Text("Approval Pending", style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 15)),
+                const SizedBox(height: 4),
+                Text("Waiting for your doctor to verify your request.", style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
               ],
             ),
           ),
@@ -437,25 +433,25 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF606C38), // Forest Medium (Success Green)
+        color: forestMed, 
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(color: const Color(0xFF606C38).withOpacity(0.3), blurRadius: 10, offset: const Offset(0, 6))
+          BoxShadow(color: forestMed.withOpacity(0.25), blurRadius: 15, offset: const Offset(0, 8))
         ],
       ),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(10),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle),
-            child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 28),
+            child: const Icon(Icons.verified_user_rounded, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text("Verified Patient", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                const Text("Verified Patient", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 4),
                 Text(
                   _doctorName != null 
@@ -476,82 +472,64 @@ class _DashboardPageState extends State<DashboardPage> {
     bool isNotAssessed = _riskLevel == "Not yet assessed";
     String displayText = isNotAssessed ? "Not Yet Tested" : _riskLevel;
 
-    Color bgColor = const Color(0xFF606C38);
+    // Updated Risk Level Colors (Muted Red, Orange, Grey)
+    Color bgColor = Colors.grey.shade500; // Default (Low)
     if (_riskLevel.toLowerCase().contains("high")) {
-      bgColor = const Color.fromARGB(222, 203, 5, 38);
-    } else if (_riskLevel.toLowerCase().contains("medium")) bgColor = const Color(0xFFF9C74F);
-    else if (_riskLevel.toLowerCase().contains("low")) bgColor = const Color(0xFF43AA8B);
+      bgColor = const Color(0xFFD9534F); // Muted Red
+    } else if (_riskLevel.toLowerCase().contains("medium")) {
+      bgColor = const Color(0xFFE67E22); // Muted Orange
+    } else if (_riskLevel.toLowerCase().contains("low")) {
+      bgColor = Colors.grey.shade600; // Muted Grey
+    }
 
     BoxDecoration boxDecoration;
     if (isNotAssessed) {
       boxDecoration = BoxDecoration(
-        gradient: LinearGradient(
-          colors: [paleGreen, Colors.white],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        color: paleGreen.withOpacity(0.4),
         borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: paleGreen.withOpacity(0.5), 
-            blurRadius: 20, 
-            offset: const Offset(0, 10)
-          )
-        ],
       );
     } else {
       boxDecoration = BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
-          BoxShadow(
-            color: bgColor.withOpacity(0.4), 
-            blurRadius: 20, 
-            offset: const Offset(0, 10)
-          )
+          BoxShadow(color: bgColor.withOpacity(0.3), blurRadius: 15, offset: const Offset(0, 8))
         ],
       );
     }
 
     Color titleColor = isNotAssessed ? forestDark : Colors.white;
-    Color subtitleColor = isNotAssessed ? forestDark.withOpacity(0.7) : Colors.white70;
-    Color iconColor = isNotAssessed ? forestDark : Colors.white;
-    Color iconBgColor = isNotAssessed ? forestDark.withOpacity(0.1) : Colors.white.withOpacity(0.25);
+    Color subtitleColor = isNotAssessed ? forestDark.withOpacity(0.6) : Colors.white70;
+    Color iconColor = isNotAssessed ? forestMed : Colors.white;
+    Color iconBgColor = isNotAssessed ? Colors.white : Colors.white.withOpacity(0.2);
 
     return Container(
-      padding: const EdgeInsets.all(22),
+      padding: const EdgeInsets.all(24),
       decoration: boxDecoration,
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(color: iconBgColor, shape: BoxShape.circle),
-            child: Icon(Icons.monitor_heart_rounded, color: iconColor, size: 30),
+            child: Icon(Icons.monitor_heart_rounded, color: iconColor, size: 28),
           ),
-          const SizedBox(width: 15),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('Treatment Status', 
-                  style: TextStyle(color: subtitleColor, fontWeight: FontWeight.bold, fontSize: 13)
+                  style: TextStyle(color: subtitleColor, fontWeight: FontWeight.w600, fontSize: 12, letterSpacing: 0.5)
                 ),
+                const SizedBox(height: 4),
                 Text(displayText, 
-                  style: TextStyle(color: titleColor, fontSize: 20, fontWeight: FontWeight.w900)
+                  style: TextStyle(color: titleColor, fontSize: 18, fontWeight: FontWeight.w800)
                 ),
               ],
             ),
           )
         ],
       ),
-    );
-  }
-
-  Widget _buildBlob(double size, Color color) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(size / 2.5)),
     );
   }
 }
@@ -578,6 +556,7 @@ class _HoverActionCardState extends State<_HoverActionCard> {
   bool _isHovering = false;
   final Color forestDark = const Color(0xFF283618);
   final Color forestMed = const Color(0xFF606C38);
+  final Color paleGreen = const Color(0xFFDDE5B6);
 
   @override
   Widget build(BuildContext context) {
@@ -586,20 +565,16 @@ class _HoverActionCardState extends State<_HoverActionCard> {
       onExit: (_) => setState(() => _isHovering = false),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        curve: Curves.easeInOut,
-        transform: Matrix4.identity()..translate(0.0, _isHovering ? -6.0 : 0.0), // Smooth lift effect
+        curve: Curves.easeOutQuart,
+        transform: Matrix4.identity()..translate(0.0, _isHovering ? -4.0 : 0.0), 
         decoration: BoxDecoration(
-          color: Colors.white, // Now starkly contrasts the softWhite Scaffold
+          color: Colors.white, 
           borderRadius: BorderRadius.circular(24),
-          border: Border.all(
-            color: _isHovering ? forestMed.withOpacity(0.5) : Colors.black.withOpacity(0.03), 
-            width: 1.5
-          ),
           boxShadow: [
             BoxShadow(
-              color: forestDark.withOpacity(_isHovering ? 0.08 : 0.02),
+              color: Colors.black.withOpacity(_isHovering ? 0.08 : 0.03),
               blurRadius: _isHovering ? 20 : 10,
-              offset: Offset(0, _isHovering ? 8 : 4),
+              offset: Offset(0, _isHovering ? 10 : 4),
             )
           ],
         ),
@@ -612,29 +587,26 @@ class _HoverActionCardState extends State<_HoverActionCard> {
               padding: const EdgeInsets.all(20),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.all(12),
+                  Container(
+                    padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      // Modernized icon background instead of the overly bright pale green
-                      color: _isHovering ? forestMed : forestMed.withOpacity(0.08), 
-                      borderRadius: BorderRadius.circular(16),
+                      color: paleGreen.withOpacity(0.5), 
+                      shape: BoxShape.circle,
                     ),
                     child: Icon(
                       widget.icon, 
-                      color: _isHovering ? Colors.white : forestMed, 
-                      size: 28
+                      color: forestMed, 
+                      size: 24
                     ),
                   ),
                   const Spacer(),
                   Text(widget.title, 
-                    style: TextStyle(fontWeight: FontWeight.w800, fontSize: 15, color: forestDark, height: 1.2)
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87, height: 1.2)
                   ),
                   const SizedBox(height: 6),
                   Text(widget.subtitle, 
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 11, fontWeight: FontWeight.w500, height: 1.3)
+                    style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500)
                   ),
                 ],
               ),

@@ -311,14 +311,15 @@ class _ChatPageState extends State<ChatPage> {
             child: ActionChip(
               label: Text(
                 questions[index]["text"]!,
-                style: const TextStyle(fontSize: 13),
+                style: const TextStyle(fontSize: 13, color: Color(0xFF606C38), fontWeight: FontWeight.w600),
               ),
               onPressed: _isLoading ? null : () {
                 _sendMessage(predefinedMessage: questions[index]["question"]!);
               },
               backgroundColor: const Color(0xFFFEFAE0),
               elevation: 0,
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: const BorderSide(color: Color(0xFFDDE5B6))),
             ),
           );
         },
@@ -329,14 +330,25 @@ class _ChatPageState extends State<ChatPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF9FBF9), // Light clean background
       appBar: AppBar(
-        backgroundColor: Colors.transparent, 
-        elevation: 0,
+        backgroundColor: Colors.white, 
+        elevation: 1,
+        shadowColor: Colors.black12,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF283618), size: 20),
           onPressed: () => Navigator.of(context).pop(),
         ),
-        title: Row(children: [buildLogo(size: 32), const SizedBox(width: 10), const Text('TEREA Chat')]),
+        title: Row(
+          children: [
+            buildLogo(size: 32), 
+            const SizedBox(width: 10), 
+            const Text(
+              'TEREA Chat',
+              style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.share_outlined, color: Color(0xFF283618)),
@@ -354,22 +366,20 @@ class _ChatPageState extends State<ChatPage> {
         children: [
           Expanded(
             child: ListView.builder(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 25),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
                 final msg = _messages[index];
                 final isTyping = msg.text == "___TYPING___" && !msg.isUser;
                 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.only(bottom: 16),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Bot avatar (left side)
-                      if (!msg.isUser && !isTyping)
-                        _botAvatar,
-                      if (!msg.isUser && !isTyping)
-                        const SizedBox(width: 8),
+                      if (!msg.isUser && !isTyping) _botAvatar,
+                      if (!msg.isUser && !isTyping) const SizedBox(width: 8),
                       
                       // Message bubble
                       Expanded(
@@ -378,36 +388,46 @@ class _ChatPageState extends State<ChatPage> {
                           child: Container(
                             margin: const EdgeInsets.symmetric(vertical: 2),
                             padding: isTyping
-                                ? EdgeInsets.zero
-                                : const EdgeInsets.symmetric(horizontal: 15, vertical: 10),
+                                ? const EdgeInsets.symmetric(horizontal: 16, vertical: 12)
+                                : const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
                             constraints: BoxConstraints(
                               maxWidth: MediaQuery.of(context).size.width * 0.65,
                             ),
                             decoration: BoxDecoration(
                               color: msg.isUser ? const Color(0xFF606C38) : Colors.white,
-                              borderRadius: BorderRadius.circular(15).copyWith(
-                                bottomRight: msg.isUser ? Radius.zero : const Radius.circular(15),
-                                bottomLeft: msg.isUser ? const Radius.circular(15) : Radius.zero,
+                              borderRadius: BorderRadius.circular(20).copyWith(
+                                bottomRight: msg.isUser ? const Radius.circular(4) : const Radius.circular(20),
+                                bottomLeft: msg.isUser ? const Radius.circular(20) : const Radius.circular(4),
                               ),
+                              boxShadow: [
+                                if (!msg.isUser)
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.04),
+                                    blurRadius: 10,
+                                    offset: const Offset(0, 4),
+                                  ),
+                              ],
                             ),
                             child: isTyping
                                 ? const TypingIndicator()
                                 : Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment: msg.isUser ? CrossAxisAlignment.end : CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         msg.text, 
                                         style: TextStyle(
-                                          color: msg.isUser ? Colors.white : Colors.black87,
-                                          fontSize: 14,
+                                          color: msg.isUser ? Colors.white : const Color(0xFF283618),
+                                          fontSize: 15,
+                                          height: 1.4,
                                         ),
                                       ),
-                                      const SizedBox(height: 4),
+                                      const SizedBox(height: 6),
                                       Text(
                                         msg.formattedTime,
                                         style: TextStyle(
-                                          color: msg.isUser ? Colors.white70 : Colors.grey[500],
-                                          fontSize: 9,
+                                          color: msg.isUser ? Colors.white.withOpacity(0.7) : Colors.grey.shade500,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w500,
                                         ),
                                       ),
                                     ],
@@ -417,8 +437,7 @@ class _ChatPageState extends State<ChatPage> {
                       ),
                       
                       // User avatar (right side)
-                      if (msg.isUser && !isTyping)
-                        const SizedBox(width: 8),
+                      if (msg.isUser && !isTyping) const SizedBox(width: 8),
                       if (msg.isUser && !isTyping)
                         CircleAvatar(
                           radius: 16,
@@ -448,25 +467,28 @@ class _ChatPageState extends State<ChatPage> {
       context: context,
       builder: (BuildContext context) {
         return AlertDialog(
-          title: const Text('Clear Chat History'),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('Clear Chat History', style: TextStyle(color: Color(0xFF283618), fontWeight: FontWeight.bold)),
           content: const Text('Are you sure you want to delete all messages? This cannot be undone.'),
           actions: [
             TextButton(
               onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Cancel'),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
             ),
             TextButton(
               onPressed: () {
                 _clearChatHistory();
                 Navigator.of(context).pop();
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text('Chat history cleared'),
-                    duration: Duration(seconds: 2),
+                  SnackBar(
+                    content: const Text('Chat history cleared'),
+                    behavior: SnackBarBehavior.floating,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                    backgroundColor: const Color(0xFF606C38),
                   ),
                 );
               },
-              child: const Text('Clear', style: TextStyle(color: Colors.red)),
+              child: const Text('Clear', style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
             ),
           ],
         );
@@ -476,8 +498,17 @@ class _ChatPageState extends State<ChatPage> {
 
   Widget _buildInputArea() {
     return Container(
-      padding: const EdgeInsets.all(20),
-      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 30), // Extra bottom padding for safe area
+      decoration: BoxDecoration(
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 20,
+            offset: const Offset(0, -5),
+          )
+        ],
+      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
@@ -485,37 +516,42 @@ class _ChatPageState extends State<ChatPage> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: _controller,
-                  enabled: !_isLoading,
-                  maxLength: _maxChars,
-                  maxLines: null,
-                  minLines: 1,
-                  style: const TextStyle(color: Colors.black87),
-                  decoration: InputDecoration(
-                    hintText: _isTagalog 
-                        ? "Magtanong tungkol sa TB..."
-                        : "Ask about TB symptoms, treatment, or prevention...",
-                    hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
-                    filled: true, 
-                    fillColor: const Color(0xFFFEFAE0),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(25), borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                    counterText: "",
+                Container(
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF4F7F4),
+                    borderRadius: BorderRadius.circular(25),
                   ),
-                  onChanged: (text) => _updateCharCount(),
+                  child: TextField(
+                    controller: _controller,
+                    enabled: !_isLoading,
+                    maxLength: _maxChars,
+                    maxLines: 4,
+                    minLines: 1,
+                    style: const TextStyle(color: Color(0xFF283618), fontSize: 15),
+                    decoration: InputDecoration(
+                      hintText: _isTagalog 
+                          ? "Magtanong tungkol sa TB..."
+                          : "Ask about TB symptoms, treatment, or prevention...",
+                      hintStyle: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                      border: InputBorder.none,
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                      counterText: "",
+                    ),
+                    onChanged: (text) => _updateCharCount(),
+                  ),
                 ),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Padding(
-                    padding: const EdgeInsets.only(top: 4, right: 12),
+                    padding: const EdgeInsets.only(top: 6, right: 12),
                     child: Text(
                       '$_charCount / $_maxChars',
                       style: TextStyle(
-                        fontSize: 11,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w500,
                         color: _charCount > _maxChars 
                             ? Colors.red 
-                            : Colors.grey[500],
+                            : Colors.grey.shade400,
                       ),
                     ),
                   ),
@@ -523,17 +559,32 @@ class _ChatPageState extends State<ChatPage> {
               ],
             ),
           ),
-          const SizedBox(width: 10),
-          CircleAvatar(
-            backgroundColor: const Color(0xFF606C38),
+          const SizedBox(width: 12),
+          Container(
+            margin: const EdgeInsets.only(bottom: 20), // Align with the bottom of the textfield, above the counter
+            decoration: BoxDecoration(
+              color: const Color(0xFF606C38),
+              shape: BoxShape.circle,
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFF606C38).withOpacity(0.3),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                )
+              ],
+            ),
             child: _isLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                ? const Padding(
+                    padding: EdgeInsets.all(14.0),
+                    child: SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
+                    ),
                   )
                 : IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white, size: 20), 
+                    icon: const Icon(Icons.send_rounded, color: Colors.white, size: 20), 
+                    padding: const EdgeInsets.all(14),
                     onPressed: _charCount > 0 && _charCount <= _maxChars && !_isLoading
                         ? () => _sendMessage()
                         : null,

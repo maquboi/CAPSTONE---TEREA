@@ -59,24 +59,65 @@ Widget buildActionCard(BuildContext context, IconData icon, String title, String
   );
 }
 
+// Modernized Floating Pill-Shaped Bottom Navigation
 Widget buildBottomNav(int idx, BuildContext context) {
-  return BottomNavigationBar(
-    currentIndex: idx,
-    type: BottomNavigationBarType.fixed,
-    selectedItemColor: const Color(0xFF606C38),
-    onTap: (i) {
-      if (i == 0) Navigator.pushNamed(context, '/dashboard');
-      if (i == 1) Navigator.pushNamed(context, '/assess');
-      if (i == 2) Navigator.pushNamed(context, '/meds');
-      if (i == 3) Navigator.pushNamed(context, '/followup');
-      if (i == 4) Navigator.pushNamed(context, '/chat');
-    },
-    items: const [
-      BottomNavigationBarItem(icon: Icon(Icons.home_outlined), label: "Home"),
-      BottomNavigationBarItem(icon: Icon(Icons.assignment_outlined), label: "Assess"),
-      BottomNavigationBarItem(icon: Icon(Icons.medication_outlined), label: "Meds"),
-      BottomNavigationBarItem(icon: Icon(Icons.calendar_today_outlined), label: "Follow-up"),
-      BottomNavigationBarItem(icon: Icon(Icons.chat_bubble_outline), label: "Chat"),
-    ],
+  final List<IconData> icons = [
+    Icons.home_outlined,
+    Icons.assignment_outlined,
+    Icons.medication_outlined,
+    Icons.calendar_today_outlined,
+    Icons.chat_bubble_outline,
+  ];
+
+  return SafeArea(
+    child: Container(
+      margin: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(35),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 15,
+            offset: const Offset(0, 5),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceAround,
+        children: List.generate(icons.length, (index) {
+          bool isActive = idx == index;
+          return GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () {
+              if (index == 0) Navigator.pushNamed(context, '/dashboard');
+              if (index == 1) Navigator.pushNamed(context, '/assess');
+              if (index == 2) Navigator.pushNamed(context, '/meds');
+              if (index == 3) Navigator.pushNamed(context, '/followup');
+              if (index == 4) Navigator.pushNamed(context, '/chat');
+            },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: isActive 
+                    ? const Color(0xFF606C38).withOpacity(0.15) 
+                    : Colors.transparent,
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                icons[index],
+                color: isActive 
+                    ? const Color(0xFF606C38) 
+                    : Colors.grey.shade500,
+                size: 26,
+              ),
+            ),
+          );
+        }),
+      ),
+    ),
   );
 }
