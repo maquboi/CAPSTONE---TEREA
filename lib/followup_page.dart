@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart'; // Needed for DateFormat
+import 'package:intl/intl.dart'; 
 
 //FOLLOWUP PAGE
 class FollowUpPage extends StatefulWidget {
@@ -16,6 +16,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   // CONNECTION STATE
   String? _connectionStatus;
+  String? _patientStatus;
   String? _linkedDoctorId;
   String? _doctorName;
   DateTime? _treatmentStartDate; 
@@ -94,16 +95,17 @@ class _FollowUpPageState extends State<FollowUpPage> {
           .eq('patient_id', user.id)
           .maybeSingle();
 
-      // 2. Check treatment dates (Prescription)
+      // 2. Check treatment dates & status (Prescription / Cured State)
       final profileData = await _supabase
           .from('profiles')
-          .select('treatment_start_date') 
+          .select('treatment_start_date, status') 
           .eq('id', user.id)
           .maybeSingle(); 
 
       if (mounted) {
         setState(() {
           _connectionStatus = connectionData?['status'];
+          _patientStatus = profileData?['status'];
 
           if (connectionData != null) {
             _linkedDoctorId = connectionData['doctor_id'];
@@ -122,8 +124,8 @@ class _FollowUpPageState extends State<FollowUpPage> {
         });
       }
 
-      // 3. Load content if unlocked (now only requires active connection)
-      if (_connectionStatus == 'active') {
+      // 3. Load content if unlocked (now requires active connection OR cured state)
+      if (_connectionStatus == 'active' || _patientStatus == 'cured') {
         await Future.wait([
           _fetchStreak(),
           _fetchNotes(), 
@@ -260,7 +262,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
   void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) { 
     final isEditing = apptToEdit != null;
     
-    // Changed to handle the actual title of the milestone
     final titleController = TextEditingController(text: isEditing ? (apptToEdit['title'] ?? "") : "Follow-up Checkup");
     final locController = TextEditingController(text: isEditing ? (apptToEdit['location'] ?? "") : "");
     
@@ -323,12 +324,12 @@ class _FollowUpPageState extends State<FollowUpPage> {
                       final Map<String, dynamic> appointmentData = {
                         'patient_id': _supabase.auth.currentUser!.id, 
                         'doctor_id': _linkedDoctorId, 
-                        'title': titleController.text, // Now correctly saving the title
+                        'title': titleController.text,
                         'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!), 
                         'appointment_time': timeString, 
                         'location': locController.text, 
                         'status': 'scheduled',
-                        'type': isEditing ? apptToEdit['type'] : 'manual' // Preserve type if editing
+                        'type': isEditing ? apptToEdit['type'] : 'manual' 
                       }; 
                       if (isEditing) { await _supabase.from('roadmap').update(appointmentData).eq('id', apptToEdit['id']); } 
                       else { await _supabase.from('roadmap').insert(appointmentData); } 
@@ -350,8 +351,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
   // --- UI BUILD ---
   @override
   Widget build(BuildContext context) {
-    // Page is now unlocked immediately when connection is active
-    bool isUnlocked = _connectionStatus == 'active';
+    bool isUnlocked = _connectionStatus == 'active' || _patientStatus == 'cured';
 
     return Scaffold(
       backgroundColor: kWhite,
@@ -367,33 +367,59 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   Widget _buildUnlockedContent() {
+    bool isCured = _patientStatus == 'cured';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildRecoveryRoadmap(), 
+          if (isCured)
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(20),
+              margin: const EdgeInsets.only(bottom: 25),
+              decoration: BoxDecoration(
+                color: Colors.green.shade50,
+                border: Border.all(color: Colors.green.shade200, width: 2),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.verified_rounded, color: Colors.green.shade700, size: 40),
+                  const SizedBox(height: 10),
+                  Text("TREATMENT COMPLETED", style: TextStyle(fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
+                  const SizedBox(height: 5),
+                  Text("Congratulations! You are officially cleared. Please attend your scheduled post-treatment clearances below.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+                ],
+              )
+            )
+          else
+            _buildRecoveryRoadmap(), 
+
           const SizedBox(height: 25),
-          _buildStreakCard(),
-          const SizedBox(height: 35),
+          
+          if (!isCured) _buildStreakCard(),
+          if (!isCured) const SizedBox(height: 35),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Roadmap Milestones", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
-              GestureDetector(
-                onTap: () => _showAppointmentModal(),
-                child: Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: kSecondaryGreen, shape: BoxShape.circle),
-                  child: const Icon(Icons.add, color: Colors.white, size: 20),
+              Text(isCured ? "Post-Care clearanaces" : "Roadmap Milestones", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
+              if (!isCured)
+                GestureDetector(
+                  onTap: () => _showAppointmentModal(),
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(color: kSecondaryGreen, shape: BoxShape.circle),
+                    child: const Icon(Icons.add, color: Colors.white, size: 20),
+                  ),
                 ),
-              ),
             ],
           ),
           const SizedBox(height: 15),
-          if (_appointments.isEmpty) _buildEmptyState("No milestones scheduled yet."),
+          if (_appointments.isEmpty) _buildEmptyState(isCured ? "You have no scheduled follow-ups." : "No milestones scheduled yet."),
           
-          // Updated to pass the correct parameters, including title and type
           ..._appointments.map((appt) => _buildDismissibleWrapper(
             id: appt['id'].toString(), 
             onDismiss: () => _deleteAppointment(appt['id'].toString()), 
@@ -409,19 +435,22 @@ class _FollowUpPageState extends State<FollowUpPage> {
             )
           )),
           const SizedBox(height: 40),
-          Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-          const SizedBox(height: 15),
-          _buildNoteInputArea(), 
-          const SizedBox(height: 25),
-          if (_doctorNotes.isEmpty) _buildEmptyState("No notes added yet."),
-          ListView.builder(
-            shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-            itemCount: _doctorNotes.length,
-            itemBuilder: (context, index) {
-              final note = _doctorNotes[index];
-              return InkWell(onLongPress: () => _editNoteDialog(note), child: _buildNoteTile(note, index));
-            },
-          ),
+          
+          if (!isCured) ...[
+            Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+            const SizedBox(height: 15),
+            _buildNoteInputArea(), 
+            const SizedBox(height: 25),
+            if (_doctorNotes.isEmpty) _buildEmptyState("No notes added yet."),
+            ListView.builder(
+              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+              itemCount: _doctorNotes.length,
+              itemBuilder: (context, index) {
+                final note = _doctorNotes[index];
+                return InkWell(onLongPress: () => _editNoteDialog(note), child: _buildNoteTile(note, index));
+              },
+            ),
+          ],
           const SizedBox(height: 100),
         ],
       ),
@@ -470,7 +499,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   // --- UI COMPONENTS ---
   Widget _buildRecoveryRoadmap() {
-    // Specific message if Roadmap is not yet set
     if (_treatmentStartDate == null) {
       return Container(
         padding: const EdgeInsets.all(20), 
@@ -526,11 +554,10 @@ class _FollowUpPageState extends State<FollowUpPage> {
       ]));
   }
 
-  // Updated to include DOH Protocol UI styling
   Widget _buildAppointmentCard(String title, String date, String time, String loc, String type) {
     bool isProtocol = type == 'protocol';
+    bool isPostCare = type == 'post-treatment';
     
-    // Formatting time safely
     String displayTime = time;
     if (time.contains(':')) {
       final parts = time.split(':');
@@ -550,7 +577,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
         color: kWhite, 
         borderRadius: BorderRadius.circular(25), 
         border: Border.all(
-          color: isProtocol ? kSecondaryGreen.withOpacity(0.5) : kSoftGrey, 
+          color: isProtocol ? kSecondaryGreen.withOpacity(0.5) : (isPostCare ? Colors.green.shade200 : kSoftGrey), 
           width: 2
         )
       ), 
@@ -558,12 +585,12 @@ class _FollowUpPageState extends State<FollowUpPage> {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), 
           decoration: BoxDecoration(
-            color: isProtocol ? kSecondaryGreen.withOpacity(0.1) : kCreamAccent, 
+            color: isProtocol ? kSecondaryGreen.withOpacity(0.1) : (isPostCare ? Colors.green.shade50 : kCreamAccent), 
             borderRadius: BorderRadius.circular(15)
           ), 
           child: Column(children: [
-            Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
-            Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: kSecondaryGreen))
+            Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isPostCare ? Colors.green.shade800 : kPrimaryGreen)), 
+            Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isPostCare ? Colors.green.shade700 : kSecondaryGreen))
           ])
         ), 
         const SizedBox(width: 15), 
@@ -588,6 +615,13 @@ class _FollowUpPageState extends State<FollowUpPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(6)),
                       child: Text("DOH Protocol", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
+                    ),
+                  if (isPostCare) 
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(6)),
+                      child: Text("Clearance", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
                     )
                 ],
               ),
