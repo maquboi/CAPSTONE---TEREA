@@ -163,7 +163,16 @@ class _DashboardPageState extends State<DashboardPage> {
         'status': 'pending', 
       });
 
-      // 4. Update UI
+      // 4. Send Notification to Doctor
+      await _supabase.from('notifications').insert({
+        'doctor_id': doctor['id'],
+        'patient_id': user.id,
+        'title': 'New Patient Request',
+        'message': '${_username} is waiting for verification.',
+        'type': 'request'
+      });
+
+      // 5. Update UI
       if (mounted) {
         setState(() {
           _connectionStatus = 'pending';

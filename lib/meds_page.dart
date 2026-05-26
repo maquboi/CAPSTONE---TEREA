@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart'; // Needed for DateFormat
+import 'package:intl/intl.dart'; 
 
 // --- 6. MEDS PAGE (STRICT UI LOCK APPLIED) ---
 class MedsPage extends StatefulWidget {
@@ -12,6 +12,7 @@ class MedsPage extends StatefulWidget {
 
 class _MedsPageState extends State<MedsPage> {
   List<dynamic> myMeds = [];
+  List<dynamic> myMedLogs = []; // NEW: State for medication logs
   bool _isLoading = true;
   DateTime _selectedDate = DateTime.now();
   String _viewType = 'Week';
@@ -20,7 +21,6 @@ class _MedsPageState extends State<MedsPage> {
   String? _connectionStatus;
   String _riskLevel = "Not yet assessed";
   
-  // New variable for Option 4
   Map<String, dynamic>? _latestDoctorNote;
 
   final Color primaryGreen = const Color(0xFF2D3B1E); 
@@ -62,7 +62,13 @@ class _MedsPageState extends State<MedsPage> {
           filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'user_id', value: user.id),
           callback: (payload) => _fetchData(),
         )
-        // Listener for Option 4: Doctor Notes
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'medication_logs',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+          callback: (payload) => _fetchData(),
+        )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
@@ -95,7 +101,12 @@ class _MedsPageState extends State<MedsPage> {
           .select()
           .eq('user_id', user.id);
 
-      // Option 4 Fetch: Get the latest note from the doctor
+      // Fetch the daily logs for timing status
+      final logsData = await Supabase.instance.client
+          .from('medication_logs')
+          .select()
+          .eq('patient_id', user.id);
+
       final noteData = await Supabase.instance.client
           .from('doctor_notes')
           .select('note_text, created_at')
@@ -115,6 +126,7 @@ class _MedsPageState extends State<MedsPage> {
           }
           
           myMeds = medsData as List<dynamic>;
+          myMedLogs = logsData as List<dynamic>; 
           _isLoading = false;
         });
       }
@@ -124,11 +136,9 @@ class _MedsPageState extends State<MedsPage> {
     }
   }
 
-  // Determination of Treatment Phase (Option 5)
   String _getCurrentPhase() {
     if (_treatmentStartDate == null) return "Phase Not Set";
     final daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays;
-    // TB Intensive Phase is usually the first 2 months (60 days)
     return daysPassed <= 60 ? "Intensive Phase" : "Continuation Phase";
   }
 
@@ -152,9 +162,54 @@ class _MedsPageState extends State<MedsPage> {
     catch (e) { debugPrint("Error deleting med: $e"); }
   }
 
-  Future<void> _toggleMed(bool currentValue, String medId) async {
-    try { await Supabase.instance.client.from('medications').update({'is_taken': !currentValue}).eq('id', medId); _fetchData(); } 
-    catch (e) { debugPrint("Error toggling med: $e"); }
+  // REWRITTEN: Now interacts with medication_logs table and calculates early/late timing
+  Future<void> _toggleMed(bool isCurrentlyTaken, String medId, String targetTimeStr) async {
+    final user = Supabase.instance.client.auth.currentUser;
+    if (user == null) return;
+
+    final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+
+    if (isCurrentlyTaken) {
+      try {
+        await Supabase.instance.client
+            .from('medication_logs')
+            .delete()
+            .eq('medication_id', medId)
+            .eq('log_date', dateStr);
+        _fetchData();
+      } catch (e) { debugPrint("Error deleting log: $e"); }
+    } else {
+      final now = DateTime.now();
+      String timingStatus = 'on-time';
+      
+      try {
+        final targetFormat = DateFormat("h:mm a");
+        final targetTime = targetFormat.parse(targetTimeStr);
+        final targetDateTime = DateTime(now.year, now.month, now.day, targetTime.hour, targetTime.minute);
+        
+        final diffMinutes = now.difference(targetDateTime).inMinutes;
+        
+        // 60 minute threshold for early/late
+        if (diffMinutes < -60) timingStatus = 'early';
+        else if (diffMinutes > 60) timingStatus = 'late';
+      } catch (e) {
+        debugPrint("Error parsing time for timing check: $e");
+      }
+
+      final timeTakenStr = DateFormat('HH:mm:ss').format(now);
+
+      try {
+        await Supabase.instance.client.from('medication_logs').upsert({
+          'medication_id': medId,
+          'patient_id': user.id,
+          'log_date': dateStr,
+          'time_taken': timeTakenStr,
+          'status': 'taken',
+          'timing_status': timingStatus,
+        });
+        _fetchData();
+      } catch (e) { debugPrint("Error inserting log: $e"); }
+    }
   }
 
   void _showMedDialog({Map<String, dynamic>? existingMed}) async {
@@ -299,7 +354,6 @@ class _MedsPageState extends State<MedsPage> {
     return Column(
       children: [
         _buildModernHeader(), 
-        // Option 4: Latest Doctor's Advice Card
         if (_latestDoctorNote != null) _buildDoctorAdviceCard(),
         const SizedBox(height: 15), 
         _buildViewSelector(), 
@@ -317,7 +371,6 @@ class _MedsPageState extends State<MedsPage> {
     );
   }
 
-  // --- OPTION 4 UI COMPONENT ---
   Widget _buildDoctorAdviceCard() {
     return Container(
       margin: const EdgeInsets.fromLTRB(20, 15, 20, 0),
@@ -456,7 +509,6 @@ class _MedsPageState extends State<MedsPage> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const Text('Medication Diary', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
-              // Option 5: Treatment Phase Indicator
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
@@ -577,7 +629,15 @@ class _MedsPageState extends State<MedsPage> {
       itemCount: filteredMeds.length, 
       itemBuilder: (context, index) { 
         final med = filteredMeds[index]; 
-        bool isTaken = med['is_taken'] ?? false; 
+        final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+        
+        // Find if there is a log for THIS specific medicine on THIS specific day
+        final logs = myMedLogs.where((l) => l['medication_id'] == med['id'] && l['log_date'] == dateStr);
+        final currentLog = logs.isNotEmpty ? logs.first : null;
+        
+        bool isTaken = currentLog != null && currentLog['status'] == 'taken'; 
+        String? timing = currentLog != null ? currentLog['timing_status'] : null;
+
         return Container(
           margin: const EdgeInsets.only(bottom: 16), 
           padding: const EdgeInsets.all(12), 
@@ -589,7 +649,7 @@ class _MedsPageState extends State<MedsPage> {
           child: Row(
             children: [
               GestureDetector(
-                onTap: () => _toggleMed(isTaken, med['id'].toString()), 
+                onTap: () => _toggleMed(isTaken, med['id'].toString(), med['time'].toString()), 
                 child: Container(
                   padding: const EdgeInsets.all(10), 
                   decoration: BoxDecoration(color: isTaken ? accentGreen : lightBg, shape: BoxShape.circle), 
@@ -602,7 +662,29 @@ class _MedsPageState extends State<MedsPage> {
                   crossAxisAlignment: CrossAxisAlignment.start, 
                   children: [
                     Text(med['name'], style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, decoration: isTaken ? TextDecoration.lineThrough : null, color: isTaken ? Colors.grey : primaryGreen)), 
-                    Text('${med['dosage']} • ${med['time']}', style: TextStyle(fontSize: 13, color: isTaken ? Colors.grey[400] : Colors.grey[600]))
+                    Row(
+                      children: [
+                        Text('${med['dosage']} • ${med['time']}', style: TextStyle(fontSize: 13, color: isTaken ? Colors.grey[400] : Colors.grey[600])),
+                        if (isTaken && timing != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: timing == 'early' ? Colors.blue[50] : (timing == 'late' ? Colors.orange[50] : Colors.green[50]),
+                              borderRadius: BorderRadius.circular(6)
+                            ),
+                            child: Text(
+                              timing.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: timing == 'early' ? Colors.blue[700] : (timing == 'late' ? Colors.orange[700] : Colors.green[700])
+                              )
+                            )
+                          )
+                        ]
+                      ],
+                    )
                   ]
                 )
               ), 
