@@ -20,17 +20,17 @@ class _DashboardPageState extends State<DashboardPage> {
   
   // CONNECTION TRACKING
   // null = no connection, 'pending' = waiting, 'active' = Verified
-  String? _connectionStatus; 
-  String? _doctorName; 
+  String? _connectionStatus;
+  String? _doctorName;
   
   final _codeController = TextEditingController();
   bool _isLinking = false;
 
   // Theme Palette (Strictly Green, White, Grey, Light Green, Forest Green, Black)
-  final Color forestDark = const Color(0xFF283618); 
+  final Color forestDark = const Color(0xFF283618);
   final Color forestMed = const Color(0xFF606C38);  
-  final Color mossGreen = const Color(0xFFADC178); 
-  final Color paleGreen = const Color(0xFFDDE5B6); 
+  final Color mossGreen = const Color(0xFFADC178);
+  final Color paleGreen = const Color(0xFFDDE5B6);
   final Color softWhite = const Color(0xFFF9FBF9); // Clean, light background
 
   @override
@@ -90,7 +90,7 @@ class _DashboardPageState extends State<DashboardPage> {
         // 2. Fetch Connection Status & Doctor Name
         final connectionData = await _supabase
             .from('connections')
-            .select('status, profiles!fk_doctor(full_name)') 
+            .select('status, profiles!fk_doctor(full_name)')
             .eq('patient_id', user.id)
             .maybeSingle();
 
@@ -160,7 +160,7 @@ class _DashboardPageState extends State<DashboardPage> {
       await _supabase.from('connections').insert({
         'patient_id': user.id,
         'doctor_id': doctor['id'],
-        'status': 'pending', 
+        'status': 'pending',
       });
 
       // 4. Send Notification to Doctor
@@ -168,7 +168,7 @@ class _DashboardPageState extends State<DashboardPage> {
         'doctor_id': doctor['id'],
         'patient_id': user.id,
         'title': 'New Patient Request',
-        'message': '${_username} is waiting for verification.',
+        'message': '$_username is waiting for verification.',
         'type': 'request'
       });
 
@@ -235,7 +235,7 @@ class _DashboardPageState extends State<DashboardPage> {
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
             ),
             onPressed: _isLinking ? null : _submitClinicCode,
-            child: _isLinking 
+            child: _isLinking
               ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
               : const Text("Connect", style: TextStyle(color: Colors.white)),
           ),
@@ -254,9 +254,9 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: softWhite, 
+      backgroundColor: softWhite,
       appBar: AppBar(
-        backgroundColor: softWhite, 
+        backgroundColor: softWhite,
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
@@ -264,7 +264,7 @@ class _DashboardPageState extends State<DashboardPage> {
           children: [
             buildLogo(size: 32),
             const SizedBox(width: 10),
-            Text('TEREA', 
+            Text('TEREA',
               style: TextStyle(fontWeight: FontWeight.w900, color: forestDark, fontSize: 22, letterSpacing: 0.5)
             )
           ],
@@ -287,7 +287,7 @@ class _DashboardPageState extends State<DashboardPage> {
           )
         ],
       ),
-      body: _isLoading 
+      body: _isLoading
         ? Center(child: CircularProgressIndicator(color: forestMed))
         : RefreshIndicator(
             onRefresh: _fetchUserData,
@@ -300,12 +300,12 @@ class _DashboardPageState extends State<DashboardPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Hello, ${_username.split(' ')[0]}', 
+                    'Hello, ${_username.split(' ')[0]}',
                     style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800, color: Colors.black87, letterSpacing: -0.5)
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'How are you feeling today?', 
+                    'How are you feeling today?',
                     style: TextStyle(color: Colors.grey.shade600, fontSize: 15, fontWeight: FontWeight.w500)
                   ),
                   const SizedBox(height: 30),
@@ -327,7 +327,7 @@ class _DashboardPageState extends State<DashboardPage> {
                   
                   const SizedBox(height: 35),
                   Text(
-                    'QUICK ACTIONS', 
+                    'QUICK ACTIONS',
                     style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: Colors.grey.shade500, letterSpacing: 1.5)
                   ),
                   const SizedBox(height: 16),
@@ -338,7 +338,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     crossAxisCount: 2,
                     crossAxisSpacing: 16,
                     mainAxisSpacing: 16,
-                    childAspectRatio: 0.95, 
+                    childAspectRatio: 0.95,
                     children: const [
                       _HoverActionCard(icon: Icons.assignment_outlined, title: 'Risk\nAssessment', subtitle: 'Check your TB risk', route: '/assess'),
                       _HoverActionCard(icon: Icons.chat_bubble_outline, title: 'TEREA\nChatbot', subtitle: '24/7 AI Support', route: '/chat'),
@@ -406,12 +406,12 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // 2. PENDING 
+  // 2. PENDING
   Widget _buildPendingCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.grey.shade200, 
+        color: Colors.grey.shade200,
         borderRadius: BorderRadius.circular(24),
       ),
       child: Row(
@@ -442,7 +442,7 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: forestMed, 
+        color: forestMed,
         borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(color: forestMed.withOpacity(0.25), blurRadius: 15, offset: const Offset(0, 8))
@@ -463,9 +463,9 @@ class _DashboardPageState extends State<DashboardPage> {
                 const Text("Verified Patient", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                 const SizedBox(height: 4),
                 Text(
-                  _doctorName != null 
+                  _doctorName != null
                     ? "You are under the care of $_doctorName."
-                    : "You are officially linked to the clinic.", 
+                    : "You are officially linked to the clinic.",
                   style: const TextStyle(color: Colors.white70, fontSize: 12)
                 ),
               ],
@@ -527,11 +527,11 @@ class _DashboardPageState extends State<DashboardPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Treatment Status', 
+                Text('Treatment Status',
                   style: TextStyle(color: subtitleColor, fontWeight: FontWeight.w600, fontSize: 12, letterSpacing: 0.5)
                 ),
                 const SizedBox(height: 4),
-                Text(displayText, 
+                Text(displayText,
                   style: TextStyle(color: titleColor, fontSize: 18, fontWeight: FontWeight.w800)
                 ),
               ],
@@ -575,9 +575,9 @@ class _HoverActionCardState extends State<_HoverActionCard> {
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
         curve: Curves.easeOutQuart,
-        transform: Matrix4.identity()..translate(0.0, _isHovering ? -4.0 : 0.0), 
+        transform: Matrix4.identity()..translate(0.0, _isHovering ? -4.0 : 0.0),
         decoration: BoxDecoration(
-          color: Colors.white, 
+          color: Colors.white,
           borderRadius: BorderRadius.circular(24),
           boxShadow: [
             BoxShadow(
@@ -600,21 +600,21 @@ class _HoverActionCardState extends State<_HoverActionCard> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: paleGreen.withOpacity(0.5), 
+                      color: paleGreen.withOpacity(0.5),
                       shape: BoxShape.circle,
                     ),
                     child: Icon(
-                      widget.icon, 
-                      color: forestMed, 
+                      widget.icon,
+                      color: forestMed,
                       size: 24
                     ),
                   ),
                   const Spacer(),
-                  Text(widget.title, 
+                  Text(widget.title,
                     style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.black87, height: 1.2)
                   ),
                   const SizedBox(height: 6),
-                  Text(widget.subtitle, 
+                  Text(widget.subtitle,
                     style: TextStyle(color: Colors.grey.shade500, fontSize: 11, fontWeight: FontWeight.w500)
                   ),
                 ],
