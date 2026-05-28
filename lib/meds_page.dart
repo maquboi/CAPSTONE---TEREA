@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart'; 
 
-// --- 6. MEDS PAGE (STRICT UI LOCK APPLIED) ---
 class MedsPage extends StatefulWidget {
   const MedsPage({super.key});
 
@@ -12,8 +11,9 @@ class MedsPage extends StatefulWidget {
 
 class _MedsPageState extends State<MedsPage> {
   List<dynamic> myMeds = [];
-  List<dynamic> myMedLogs = []; // NEW: State for medication logs
+  List<dynamic> myMedLogs = []; 
   bool _isLoading = true;
+  bool _showHistoryLog = false; // Controls display of history log card
   DateTime _selectedDate = DateTime.now();
   String _viewType = 'Week';
 
@@ -23,10 +23,15 @@ class _MedsPageState extends State<MedsPage> {
   
   Map<String, dynamic>? _latestDoctorNote;
 
+  // Track items undergoing fade-out animation and optimistically hide them
+  final Map<String, bool> _fadingMedIds = {};
+  final Set<String> _optimisticTakenMeds = {};
+
   final Color primaryGreen = const Color(0xFF2D3B1E); 
   final Color accentGreen = const Color(0xFF606C38);  
   final Color lightBg = const Color(0xFFF9F9F7);      
   final Color surfaceWhite = Colors.white;
+  final Color emeraldGreen = const Color(0xFF059669); 
 
   @override
   void initState() {
@@ -101,11 +106,11 @@ class _MedsPageState extends State<MedsPage> {
           .select()
           .eq('user_id', user.id);
 
-      // Fetch the daily logs for timing status
       final logsData = await Supabase.instance.client
           .from('medication_logs')
           .select()
-          .eq('patient_id', user.id);
+          .eq('patient_id', user.id)
+          .order('log_date', ascending: false);
 
       final noteData = await Supabase.instance.client
           .from('doctor_notes')
@@ -162,7 +167,6 @@ class _MedsPageState extends State<MedsPage> {
     catch (e) { debugPrint("Error deleting med: $e"); }
   }
 
-  // REWRITTEN: Now interacts with medication_logs table and calculates early/late timing
   Future<void> _toggleMed(bool isCurrentlyTaken, String medId, String targetTimeStr) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
@@ -176,9 +180,18 @@ class _MedsPageState extends State<MedsPage> {
             .delete()
             .eq('medication_id', medId)
             .eq('log_date', dateStr);
+        setState(() {
+          _optimisticTakenMeds.remove('${medId}_$dateStr');
+          _fadingMedIds.remove(medId);
+        });
         _fetchData();
       } catch (e) { debugPrint("Error deleting log: $e"); }
     } else {
+      // Trigger the local fade transition
+      setState(() {
+        _fadingMedIds[medId] = true;
+      });
+
       final now = DateTime.now();
       String timingStatus = 'on-time';
       
@@ -189,7 +202,6 @@ class _MedsPageState extends State<MedsPage> {
         
         final diffMinutes = now.difference(targetDateTime).inMinutes;
         
-        // 60 minute threshold for early/late
         if (diffMinutes < -60) timingStatus = 'early';
         else if (diffMinutes > 60) timingStatus = 'late';
       } catch (e) {
@@ -198,8 +210,20 @@ class _MedsPageState extends State<MedsPage> {
 
       final timeTakenStr = DateFormat('HH:mm:ss').format(now);
 
+      // Wait briefly to allow the user to see the complete fade effect animation cleanly
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      if (!mounted) return;
+
+      // Optimistically hide the medication from the UI immediately to prevent popping back
+      setState(() {
+        _optimisticTakenMeds.add('${medId}_$dateStr');
+        _fadingMedIds.remove(medId);
+      });
+
       try {
-        await Supabase.instance.client.from('medication_logs').upsert({
+        // FIX: Changed from .upsert() to .insert() to prevent Postgres conflict errors
+        await Supabase.instance.client.from('medication_logs').insert({
           'medication_id': medId,
           'patient_id': user.id,
           'log_date': dateStr,
@@ -207,8 +231,17 @@ class _MedsPageState extends State<MedsPage> {
           'status': 'taken',
           'timing_status': timingStatus,
         });
-        _fetchData();
-      } catch (e) { debugPrint("Error inserting log: $e"); }
+        
+        await _fetchData();
+      } catch (e) { 
+        debugPrint("Error inserting log: $e"); 
+        // Revert UI optimistic hiding on backend failure
+        if (mounted) {
+          setState(() {
+            _optimisticTakenMeds.remove('${medId}_$dateStr');
+          });
+        }
+      }
     }
   }
 
@@ -277,8 +310,8 @@ class _MedsPageState extends State<MedsPage> {
                     } 
                   }
                 ), 
-              ]
-            )
+              ],
+            ),
           ), 
           actions: [
             TextButton(
@@ -304,9 +337,9 @@ class _MedsPageState extends State<MedsPage> {
               }, 
               child: const Text("Save Task", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))
             )
-          ]
-        )
-      )
+          ],
+        ),
+      ),
     );
   }
 
@@ -334,17 +367,25 @@ class _MedsPageState extends State<MedsPage> {
             Icon(Icons.favorite_rounded, color: accentGreen, size: 28), 
             const SizedBox(width: 10), 
             Text('TB HealthCare', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20))
-          ]
+          ],
         ),
+        actions: [
+          if (isUnlocked)
+            IconButton(
+              icon: Icon(_showHistoryLog ? Icons.assignment_rounded : Icons.history_toggle_off_rounded, color: primaryGreen),
+              tooltip: "View Logs History",
+              onPressed: () => setState(() => _showHistoryLog = !_showHistoryLog),
+            )
+        ],
       ),
       
       body: _isLoading 
         ? Center(child: CircularProgressIndicator(color: accentGreen)) 
         : isUnlocked 
-            ? _buildUnlockedContent() 
+            ? _showHistoryLog ? _buildHistoryLogsContent() : _buildUnlockedContent() 
             : _buildLockedUI(hasTakenAssessment, isVerifiedByDoctor),
 
-      floatingActionButton: isUnlocked 
+      floatingActionButton: isUnlocked && !_showHistoryLog
         ? FloatingActionButton(backgroundColor: primaryGreen, onPressed: _handleAddNewMed, child: const Icon(Icons.add, color: Colors.white))
         : null,
     );
@@ -365,16 +406,97 @@ class _MedsPageState extends State<MedsPage> {
             width: double.infinity, 
             decoration: BoxDecoration(color: surfaceWhite, borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]), 
             child: _buildMedList()
-          )
-        )
-      ]
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildHistoryLogsContent() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("Medication Compliance Logs", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryGreen)),
+              TextButton.icon(
+                onPressed: () => setState(() => _showHistoryLog = false),
+                icon: Icon(Icons.arrow_back, size: 16, color: accentGreen),
+                label: Text("Back Diary", style: TextStyle(color: accentGreen, fontWeight: FontWeight.bold)),
+              )
+            ],
+          ),
+          const SizedBox(height: 10),
+          Expanded(
+            child: myMedLogs.isEmpty
+                ? Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.history_edu_rounded, size: 50, color: Colors.grey[300]),
+                        const SizedBox(height: 10),
+                        Text("No recorded logs history yet.", style: TextStyle(color: Colors.grey[500])),
+                      ],
+                    ),
+                  )
+                : ListView.builder(
+                    itemCount: myMedLogs.length,
+                    itemBuilder: (context, index) {
+                      final log = myMedLogs[index];
+                      final medMatch = myMeds.where((m) => m['id'].toString() == log['medication_id'].toString());
+                      final String medName = medMatch.isNotEmpty ? medMatch.first['name'] : "Medication";
+                      final String dosage = medMatch.isNotEmpty ? medMatch.first['dosage'] : "";
+                      
+                      DateTime parsedDate = DateTime.parse(log['log_date']);
+                      String formattedLogDay = DateFormat('EEEE, MMM d').format(parsedDate);
+                      String timingStatus = log['timing_status'] ?? 'on-time';
+
+                      return Card(
+                        color: surfaceWhite,
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16), side: BorderSide(color: Colors.grey.withOpacity(0.1))),
+                        margin: const EdgeInsets.only(bottom: 12),
+                        child: ListTile(
+                          leading: CircleAvatar(
+                            backgroundColor: accentGreen.withOpacity(0.1),
+                            child: Icon(Icons.check_circle_rounded, color: accentGreen, size: 22),
+                          ),
+                          title: Text(medName, style: TextStyle(fontWeight: FontWeight.bold, color: primaryGreen)),
+                          subtitle: Text("$dosage • Taken at ${log['time_taken']} \n$formattedLogDay", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                          isThreeLine: true,
+                          trailing: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: timingStatus == 'early' ? Colors.blue[50] : (timingStatus == 'late' ? Colors.orange[50] : Colors.green[50]),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              timingStatus.toUpperCase(),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: timingStatus == 'early' ? Colors.blue[700] : (timingStatus == 'late' ? Colors.orange[700] : Colors.green[700])
+                              ),
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildDoctorAdviceCard() {
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 15, 20, 0),
       padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(20, 15, 20, 0),
       decoration: BoxDecoration(
         color: accentGreen.withOpacity(0.1),
         borderRadius: BorderRadius.circular(20),
@@ -527,10 +649,10 @@ class _MedsPageState extends State<MedsPage> {
               const Icon(Icons.calendar_today, color: Colors.white, size: 14), 
               const SizedBox(width: 8), 
               Text(DateFormat('MMMM dd, yyyy').format(_selectedDate), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))
-            ]
+            ],
           )
-        ]
-      )
+        ],
+      ),
     ); 
   }
 
@@ -597,20 +719,42 @@ class _MedsPageState extends State<MedsPage> {
               date.day.toString(), 
               style: TextStyle(fontSize: compact ? 14 : 18, fontWeight: FontWeight.w700, color: isSelected ? Colors.white : primaryGreen)
             )
-          ]
-        )
-      )
+          ],
+        ),
+      ),
     ); 
   }
 
   Widget _buildMedList() { 
+    final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
+
     final filteredMeds = myMeds.where((med) { 
       DateTime start = DateTime.parse(med['start_date']); 
       DateTime end = DateTime.parse(med['end_date']); 
       DateTime startDate = DateTime(start.year, start.month, start.day); 
       DateTime endDate = DateTime(end.year, end.month, end.day); 
       DateTime selectedDate = DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day); 
-      return !selectedDate.isBefore(startDate) && !selectedDate.isAfter(endDate); 
+      
+      bool dateInRange = !selectedDate.isBefore(startDate) && !selectedDate.isAfter(endDate);
+      if (!dateInRange) return false;
+
+      // Instantly hide using optimistic UI tracker
+      if (_optimisticTakenMeds.contains('${med['id']}_$dateStr')) return false;
+
+      // FIX: Robust Date Check for Supabase database variations
+      final takenLog = myMedLogs.where((l) {
+        if (l['medication_id'].toString() != med['id'].toString()) return false;
+        if (l['status'] != 'taken') return false;
+        
+        String dbDate = l['log_date'].toString();
+        // Ensure we strictly extract the 'yyyy-MM-dd' piece regardless of timezones/timestamps appended by Postgres
+        if (dbDate.length >= 10) dbDate = dbDate.substring(0, 10);
+        
+        return dbDate == dateStr;
+      });
+      
+      // If marked as taken by backend database, hide completely from layout list loop
+      return takenLog.isEmpty;
     }).toList(); 
 
     if (filteredMeds.isEmpty) {
@@ -619,8 +763,8 @@ class _MedsPageState extends State<MedsPage> {
         children: [
           Icon(Icons.spa_outlined, size: 60, color: Colors.grey[300]), 
           const SizedBox(height: 10), 
-          Text("Rest easy. No meds today.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))
-        ]
+          Text("Rest easy. No uncompleted meds today.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))
+        ],
       ); 
     }
 
@@ -629,80 +773,76 @@ class _MedsPageState extends State<MedsPage> {
       itemCount: filteredMeds.length, 
       itemBuilder: (context, index) { 
         final med = filteredMeds[index]; 
-        final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
-        
-        // Find if there is a log for THIS specific medicine on THIS specific day
-        final logs = myMedLogs.where((l) => l['medication_id'] == med['id'] && l['log_date'] == dateStr);
-        final currentLog = logs.isNotEmpty ? logs.first : null;
-        
-        bool isTaken = currentLog != null && currentLog['status'] == 'taken'; 
-        String? timing = currentLog != null ? currentLog['timing_status'] : null;
+        final String medIdStr = med['id'].toString();
+        final bool isFading = _fadingMedIds[medIdStr] ?? false;
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 16), 
-          padding: const EdgeInsets.all(12), 
-          decoration: BoxDecoration(
-            color: isTaken ? lightBg.withOpacity(0.5) : surfaceWhite, 
-            borderRadius: BorderRadius.circular(20), 
-            border: Border.all(color: isTaken ? Colors.transparent : Colors.grey.withOpacity(0.1))
-          ), 
-          child: Row(
-            children: [
-              GestureDetector(
-                onTap: () => _toggleMed(isTaken, med['id'].toString(), med['time'].toString()), 
-                child: Container(
-                  padding: const EdgeInsets.all(10), 
-                  decoration: BoxDecoration(color: isTaken ? accentGreen : lightBg, shape: BoxShape.circle), 
-                  child: Icon(isTaken ? Icons.check : Icons.medication_rounded, color: isTaken ? Colors.white : accentGreen, size: 24)
-                )
-              ), 
-              const SizedBox(width: 15), 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start, 
-                  children: [
-                    Text(med['name'], style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16, decoration: isTaken ? TextDecoration.lineThrough : null, color: isTaken ? Colors.grey : primaryGreen)), 
-                    Row(
-                      children: [
-                        Text('${med['dosage']} • ${med['time']}', style: TextStyle(fontSize: 13, color: isTaken ? Colors.grey[400] : Colors.grey[600])),
-                        if (isTaken && timing != null) ...[
-                          const SizedBox(width: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: timing == 'early' ? Colors.blue[50] : (timing == 'late' ? Colors.orange[50] : Colors.green[50]),
-                              borderRadius: BorderRadius.circular(6)
-                            ),
-                            child: Text(
-                              timing.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.bold,
-                                color: timing == 'early' ? Colors.blue[700] : (timing == 'late' ? Colors.orange[700] : Colors.green[700])
-                              )
-                            )
-                          )
-                        ]
-                      ],
-                    )
-                  ]
-                )
-              ), 
-              PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Colors.grey), 
-                onSelected: (value) { 
-                  if (value == 'edit') _showMedDialog(existingMed: med); 
-                  if (value == 'delete') _deleteMed(med['id'].toString()); 
-                }, 
-                itemBuilder: (context) => [
-                  const PopupMenuItem(value: 'edit', child: Text('Edit')), 
-                  const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red)))
-                ]
-              )
-            ]
-          )
+        return AnimatedOpacity(
+          duration: const Duration(milliseconds: 300),
+          opacity: isFading ? 0.0 : 1.0,
+          curve: Curves.easeOut,
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 16), 
+            padding: const EdgeInsets.all(12), 
+            decoration: BoxDecoration(
+              color: surfaceWhite, 
+              borderRadius: BorderRadius.circular(20), 
+              border: Border.all(color: Colors.grey.withOpacity(0.1))
+            ), 
+            child: Row(
+              children: [
+                GestureDetector(
+                  onTap: isFading ? null : () => _toggleMed(false, medIdStr, med['time'].toString()), 
+                  child: AnimatedContainer(
+                    duration: const Duration(milliseconds: 200),
+                    padding: const EdgeInsets.all(10), 
+                    decoration: BoxDecoration(
+                      color: isFading ? emeraldGreen : lightBg, 
+                      shape: BoxShape.circle,
+                    ), 
+                    child: Icon(
+                      isFading ? Icons.check_circle_outline : Icons.radio_button_unchecked_rounded, 
+                      color: isFading ? Colors.white : accentGreen, 
+                      size: 24
+                    ),
+                  ),
+                ), 
+                const SizedBox(width: 15), 
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start, 
+                    children: [
+                      Text(
+                        med['name'], 
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700, 
+                          fontSize: 16, 
+                          color: primaryGreen
+                        ),
+                      ), 
+                      Row(
+                        children: [
+                          Text('${med['dosage']} • ${med['time']}', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
+                        ],
+                      ),
+                    ],
+                  ),
+                ), 
+                PopupMenuButton<String>(
+                  icon: const Icon(Icons.more_vert, color: Colors.grey), 
+                  onSelected: (value) { 
+                    if (value == 'edit') _showMedDialog(existingMed: med); 
+                    if (value == 'delete') _deleteMed(medIdStr); 
+                  }, 
+                  itemBuilder: (context) => [
+                    const PopupMenuItem(value: 'edit', child: Text('Edit')), 
+                    const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red)))
+                  ],
+                ),
+              ],
+            ),
+          ),
         ); 
-      }
+      },
     ); 
   }
 }
