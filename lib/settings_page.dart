@@ -125,6 +125,126 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
+  // --- LEGAL OVERLAYS FOR PRESENTATION & DEFENSE ---
+  void _showPrivacyPolicy() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: surfaceWhite,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+      builder: (context) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.75,
+        maxChildSize: 0.9,
+        builder: (context, scrollController) => ListView(
+          controller: scrollController,
+          padding: const EdgeInsets.all(24),
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
+            const SizedBox(height: 24),
+            Text("Privacy Policy & Legal Framework", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: primaryGreen)),
+            const SizedBox(height: 4),
+            Text("In accordance with Philippine Healthcare Statutes", style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.bold)),
+            const Divider(height: 30),
+            
+            _buildLegalSection(
+              "1. RA 10173: Data Privacy Act of 2012",
+              "Tuberculosis logs, assessment diagnostics, and profile records are strictly treated as Sensitive Personal Information. TEREA employs database-level encapsulation to guarantee data isolation.",
+            ),
+            _buildLegalSection(
+              "2. Data Minimization & Proportionality",
+              "Our platform adheres to the proportionality principles of the National Privacy Commission (NPC). Users only interact with elements vital to their adherence. Row Level Security (RLS) restricts records away from unauthorized clients.",
+            ),
+            _buildLegalSection(
+              "3. Patient Handshake Authorization",
+              "A patient’s diary is entirely invisible to a clinic provider until a direct handshake is performed by typing a unique Clinic Code. The patient maintains complete digital control over who oversees their lifecycle timeline.",
+            ),
+            _buildLegalSection(
+              "4. Data Rights & Security Retention",
+              "Patients hold the right to be informed and object to improper processing under the law. Regimen tracking data is held actively across the 6-month DOTS treatment lifecycle and safely archived once verified as 'Cured' by an authorized clinician.",
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(context),
+              style: ElevatedButton.styleFrom(backgroundColor: primaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 16)),
+              child: const Text("Understand & Accept", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAboutTEREA() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: surfaceWhite,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(30))),
+      builder: (context) => Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: accentGreen.withOpacity(0.1), shape: BoxShape.circle),
+                  child: Icon(Icons.health_and_safety_rounded, color: accentGreen, size: 30),
+                ),
+                const SizedBox(width: 16),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("About TEREA", style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, color: primaryGreen)),
+                    Text("Version 1.0.0 (Capstone Deployment)", style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500)),
+                  ],
+                )
+              ],
+            ),
+            const Divider(height: 35),
+            Text(
+              "TEREA is designed as a localized medication adherence tracker and support utility for individuals navigating their Tuberculosis treatment journey.",
+              style: TextStyle(fontSize: 14, color: primaryGreen, height: 1.4, fontWeight: FontWeight.w500),
+            ),
+            const SizedBox(height: 16),
+            _buildLegalSection(
+              "RA 11332 Compliance Statement",
+              "In strict adherence to the Law on Reporting of Notifiable Diseases (RA 11332), this platform does not replace, bypass, or conceal diagnostic cases from the Department of Health (DOH). It acts exclusively as a patient companion and Barangay Health Worker monitoring tool. Mandated reporting to the national Integrated Tuberculosis Information System (ITIS) remains strictly executed by accredited institutional partners.",
+            ),
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton(
+                onPressed: () => Navigator.pop(context),
+                style: OutlinedButton.styleFrom(side: BorderSide(color: primaryGreen), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 16)),
+                child: Text("Close Window", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildLegalSection(String header, String body) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(header, style: TextStyle(fontSize: 14, fontWeight: FontWeight.w800, color: primaryGreen)),
+          const SizedBox(height: 6),
+          Text(body, style: TextStyle(fontSize: 13, color: Colors.grey[700], height: 1.4, fontWeight: FontWeight.w500)),
+        ],
+      ),
+    );
+  }
+
   // --- UI BUILD ---
   @override
   Widget build(BuildContext context) {
@@ -161,9 +281,9 @@ class _SettingsPageState extends State<SettingsPage> {
                 ]),
                 const SizedBox(height: 25),
                 _buildSettingsGroup("Privacy & Support", [
-                  _buildSettingsTile(Icons.lock_outline_rounded, "Privacy Policy"),
+                  _buildSettingsTile(Icons.lock_outline_rounded, "Privacy Policy", onTap: _showPrivacyPolicy),
                   _buildSettingsTile(Icons.help_outline_rounded, "Help Center"),
-                  _buildSettingsTile(Icons.info_outline_rounded, "About TEREA"),
+                  _buildSettingsTile(Icons.info_outline_rounded, "About TEREA", onTap: _showAboutTEREA),
                 ]),
                 const SizedBox(height: 40),
                 _buildPrimaryButton(context, "Log Out", () => Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false)),

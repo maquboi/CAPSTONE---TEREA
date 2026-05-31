@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:url_launcher/url_launcher.dart';
 
-// --- 7. FACILITIES PAGE (MAP + LIST) ---
 class FacilitiesPage extends StatefulWidget {
   const FacilitiesPage({super.key});
 
@@ -11,38 +10,38 @@ class FacilitiesPage extends StatefulWidget {
 }
 
 class _FacilitiesPageState extends State<FacilitiesPage> {
-  static const LatLng _carmonaCenter = LatLng(14.3135, 121.0574);
-  late GoogleMapController mapController;
+  bool _isLoading = true;
+  List<Map<String, dynamic>> _facilities = [];
 
-  // MARKERS: Polished coordinates for Carmona TB Centers
-  final Set<Marker> _markers = {
-    const Marker(
-      markerId: MarkerId('rhu_dots'),
-      position: LatLng(14.3121, 121.0558),
-      infoWindow: InfoWindow(title: 'Rural Health Unit (RHU)', snippet: 'Primary TB-DOTS Center'),
-    ),
-    const Marker(
-      markerId: MarkerId('super_health'),
-      position: LatLng(14.3145, 121.0620),
-      infoWindow: InfoWindow(title: 'Super Health Center', snippet: 'Primary Care'),
-    ),
-    const Marker(
-      markerId: MarkerId('hospital_medical'),
-      position: LatLng(14.3015, 121.0485),
-      infoWindow: InfoWindow(title: 'Carmona Hospital & Medical Center', snippet: 'Diagnostics'),
-    ),
-    const Marker(
-      markerId: MarkerId('pagamutang_bayan'),
-      position: LatLng(14.3072, 121.0423),
-      infoWindow: InfoWindow(title: 'Pagamutang Bayan ng Carmona', snippet: 'Public Hospital'),
-    ),
-  };
-
-  void _onMapCreated(GoogleMapController controller) {
-    mapController = controller;
+  @override
+  void initState() {
+    super.initState();
+    _fetchFacilities();
   }
 
-  // FIXED: Standard Google Maps URL Scheme for Directions
+  // Fetch from the new Admin-controlled Supabase table
+  Future<void> _fetchFacilities() async {
+    try {
+      final data = await Supabase.instance.client
+          .from('facilities')
+          .select()
+          .order('name', ascending: true);
+          
+      if (mounted) {
+        setState(() {
+          _facilities = List<Map<String, dynamic>>.from(data);
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint("Error fetching facilities: $e");
+      if (mounted) {
+        setState(() => _isLoading = false);
+        _showNotificationPopup("Failed to load facilities: $e");
+      }
+    }
+  }
+
   Future<void> _launchMaps(double lat, double lng) async {
     final String googleMapsUrl = "https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&travelmode=driving";
     final Uri url = Uri.parse(googleMapsUrl);
@@ -50,10 +49,94 @@ class _FacilitiesPageState extends State<FacilitiesPage> {
     try {
       if (await canLaunchUrl(url)) {
         await launchUrl(url, mode: LaunchMode.externalApplication);
+      } else {
+        if (mounted) _showNotificationPopup("Could not open the maps application.");
       }
     } catch (e) {
       debugPrint("Maps Error: $e");
     }
+  }
+
+  // --- MODERN CENTERED POPUP ANIMATION ---
+  void _showNotificationPopup(String message) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+      transitionBuilder: (context, a1, a2, child) {
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(a1.value),
+          child: FadeTransition(
+            opacity: a1,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              contentPadding: const EdgeInsets.all(24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.error_outline_rounded,
+                      color: Colors.redAccent,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  const Text(
+                    "Notice",
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Color(0xFF2D3B1E), 
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF606C38), 
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text(
+                        "Got it",
+                        style: TextStyle(
+                          color: Colors.white, 
+                          fontWeight: FontWeight.w600, 
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -72,94 +155,140 @@ class _FacilitiesPageState extends State<FacilitiesPage> {
           onPressed: () => Navigator.pop(context),
         ),
       ),
-      body: Column(
-        children: [
-          // MAP SECTION
-          SizedBox(
-            height: 300,
-            child: GoogleMap(
-              onMapCreated: _onMapCreated,
-              initialCameraPosition: const CameraPosition(target: _carmonaCenter, zoom: 14),
-              markers: _markers,
-              myLocationButtonEnabled: true,
-              zoomControlsEnabled: true,
-            ),
+      body: _isLoading 
+        ? const Center(child: CircularProgressIndicator(color: forestMed))
+        : Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Padding(
+                padding: EdgeInsets.fromLTRB(20, 10, 20, 15),
+                child: Text(
+                  "Official TB Centers and Hospitals. Tap 'Get Directions' to open your maps application for live routing.", 
+                  style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic, color: forestDark, height: 1.4)
+                ),
+              ),
+              
+              Expanded(
+                child: _facilities.isEmpty 
+                  ? const Center(child: Text("No facilities have been added by the admin yet.", style: TextStyle(color: Colors.grey)))
+                  : ListView.builder(
+                      padding: const EdgeInsets.symmetric(horizontal: 15),
+                      itemCount: _facilities.length,
+                      itemBuilder: (context, index) {
+                        final facility = _facilities[index];
+                        return _buildFacilityCard(facility);
+                      },
+                  ),
+              ),
+            ],
           ),
-          
-          const Padding(
-            padding: EdgeInsets.all(16.0),
-            child: Text("Official TB Centers and Hospitals in Carmona.", 
-              style: TextStyle(fontSize: 12, fontStyle: FontStyle.italic, color: forestDark)),
-          ),
-          
-          // LIST SECTION
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.symmetric(horizontal: 15),
-              children: [
-                _buildFacilityCard('Rural Health Unit (RHU)', 'Primary TB-DOTS Center', 'J.M. Loyola St., Brgy. 4', '14.3121', '121.0558'),
-                _buildFacilityCard('Super Health Center', 'Primary Care & Consultation', 'Carmona City (New Facility)', '14.3145', '121.0620'),
-                _buildFacilityCard('Hospital & Medical Center', 'Private Referral / Diagnostics', 'Sugar Road, Brgy. Maduya', '14.3015', '121.0485'),
-                _buildFacilityCard('Pagamutang Bayan ng Carmona', 'Public Hospital Support', 'Brgy. Mabuhay', '14.3072', '121.0423'),
-              ],
-            ),
-          ),
-        ],
-      ),
-      bottomNavigationBar: _buildBottomNav(3, context),
     );
   }
 
-  Widget _buildFacilityCard(String name, String type, String addr, String lat, String lng) {
+  Widget _buildFacilityCard(Map<String, dynamic> facility) {
     const Color forestMed = Color(0xFF606C38);
+    const Color forestDark = Color(0xFF283618);
+    
+    final double lat = double.tryParse(facility['latitude'].toString()) ?? 0.0;
+    final double lng = double.tryParse(facility['longitude'].toString()) ?? 0.0;
+    
+    List<dynamic> rawServices = facility['services'] ?? [];
+    List<String> services = rawServices.map((e) => e.toString()).toList();
+    
+    bool isPublic = facility['ownership']?.toString().toLowerCase() == 'public';
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(15),
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white, 
-        borderRadius: BorderRadius.circular(15),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10)]
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.04), blurRadius: 12, offset: const Offset(0, 4))]
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-          Text(type, style: const TextStyle(color: forestMed, fontSize: 13, fontWeight: FontWeight.w600)),
-          const SizedBox(height: 5),
-          Text(addr, style: const TextStyle(color: Colors.grey, fontSize: 12)),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(child: Text(facility['name'] ?? 'Unknown Facility', style: const TextStyle(fontWeight: FontWeight.w900, fontSize: 18, color: forestDark))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isPublic ? Colors.blue.shade50 : Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8)
+                ),
+                child: Text(
+                  facility['ownership'] ?? 'Unknown', 
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isPublic ? Colors.blue.shade700 : Colors.orange.shade800)
+                ),
+              )
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(facility['category'] ?? 'General', style: const TextStyle(color: forestMed, fontSize: 13, fontWeight: FontWeight.w700)),
           const SizedBox(height: 12),
+          
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.location_on_rounded, size: 16, color: Colors.grey),
+              const SizedBox(width: 6),
+              Expanded(child: Text(facility['address'] ?? 'No address provided', style: const TextStyle(color: Colors.grey, fontSize: 13, height: 1.3))),
+            ],
+          ),
+          
+          if (facility['operating_hours'] != null || facility['contact_number'] != null) ...[
+            const SizedBox(height: 8),
+            if (facility['operating_hours'] != null)
+              Row(
+                children: [
+                  const Icon(Icons.access_time_rounded, size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Text(facility['operating_hours'], style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                ],
+              ),
+            if (facility['contact_number'] != null)
+              Row(
+                children: [
+                  const Icon(Icons.phone_rounded, size: 16, color: Colors.grey),
+                  const SizedBox(width: 6),
+                  Text(facility['contact_number'], style: const TextStyle(color: Colors.grey, fontSize: 12)),
+                ],
+              ),
+          ],
+          
+          if (services.isNotEmpty) ...[
+            const SizedBox(height: 15),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: services.map((service) => Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(color: const Color(0xFFFEFAE0), borderRadius: BorderRadius.circular(6)),
+                child: Text(service, style: const TextStyle(fontSize: 10, color: forestDark, fontWeight: FontWeight.w600)),
+              )).toList(),
+            ),
+          ],
+
+          const SizedBox(height: 18),
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
-              onPressed: () => _launchMaps(double.parse(lat), double.parse(lng)),
-              icon: const Icon(Icons.directions, color: Colors.white),
-              label: const Text("Directions", style: TextStyle(color: Colors.white)),
-              style: ElevatedButton.styleFrom(backgroundColor: forestMed, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8))),
+              onPressed: () => _launchMaps(lat, lng),
+              icon: const Icon(Icons.directions_rounded, color: Colors.white, size: 20),
+              label: const Text("Get Directions", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: forestMed, 
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                elevation: 0,
+              ),
             ),
           ),
         ],
       ),
     );
   }
-
-  Widget _buildBottomNav(int index, BuildContext context) {
-    return BottomNavigationBar(
-      currentIndex: index,
-      selectedItemColor: const Color(0xFF283618),
-      unselectedItemColor: Colors.grey,
-      type: BottomNavigationBarType.fixed,
-      items: const [
-        BottomNavigationBarItem(icon: Icon(Icons.home_rounded), label: 'Home'),
-        BottomNavigationBarItem(icon: Icon(Icons.medication_rounded), label: 'Meds'),
-        BottomNavigationBarItem(icon: Icon(Icons.calendar_month_rounded), label: 'Follow-up'),
-        BottomNavigationBarItem(icon: Icon(Icons.map_rounded), label: 'Facilities'),
-      ],
-      onTap: (i) {
-        if (i == 0) Navigator.pushReplacementNamed(context, '/dashboard');
-      },
-    );
-  }
 }
-
-

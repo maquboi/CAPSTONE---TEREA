@@ -38,7 +38,7 @@ class _SignUpPageState extends State<SignUpPage> {
         });
       }
     } catch (e) {
-      _showSnackBar("Failed to pick image: $e");
+      _showNotificationPopup("Failed to pick image: $e");
     }
   }
 
@@ -94,58 +94,129 @@ class _SignUpPageState extends State<SignUpPage> {
     if (_nameController.text.isEmpty ||
         _nameController.text.length > 50 ||
         !nameRegex.hasMatch(_nameController.text)) {
-      _showSnackBar("Name must contain letters only and be under 50 characters.");
+      _showNotificationPopup("Name must contain letters only and be under 50 characters.");
       return false;
     }
 
     final age = int.tryParse(_ageController.text);
     if (age == null || age < 1 || age > 100) {
-      _showSnackBar("Age must be a valid number between 1 and 100.");
+      _showNotificationPopup("Age must be a valid number between 1 and 100.");
       return false;
     }
 
     if (!_contactController.text.startsWith('09') ||
         _contactController.text.length != 11) {
-      _showSnackBar("Contact number must start with '09' and be 11 digits.");
+      _showNotificationPopup("Contact number must start with '09' and be 11 digits.");
       return false;
     }
 
     if (!_emailController.text.contains('@')) {
-      _showSnackBar("Please enter a valid email address.");
+      _showNotificationPopup("Please enter a valid email address.");
       return false;
     }
 
     if (_passwordController.text.length < 10) {
-      _showSnackBar("Password must be at least 10 characters long.");
+      _showNotificationPopup("Password must be at least 10 characters long.");
       return false;
     }
 
     if (_selectedGender == null) {
-      _showSnackBar("Please select a gender.");
+      _showNotificationPopup("Please select a gender.");
       return false;
     }
 
     if (_idAttachment == null) {
-      _showSnackBar("Please attach a valid ID to confirm your residence in Carmona.");
+      _showNotificationPopup("Please attach a valid ID to confirm your residence in Carmona.");
       return false;
     }
 
     if (!_acceptedTerms) {
-      _showSnackBar("You must acknowledge the terms and conditions to proceed.");
+      _showNotificationPopup("You must acknowledge the terms and conditions to proceed.");
       return false;
     }
 
     return true;
   }
 
-  void _showSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message, style: GoogleFonts.poppins(fontWeight: FontWeight.w500)),
-        backgroundColor: Colors.redAccent,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
+  // --- MODERN CENTERED POPUP ANIMATION ---
+  void _showNotificationPopup(String message) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+      transitionBuilder: (context, a1, a2, child) {
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(a1.value),
+          child: FadeTransition(
+            opacity: a1,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              contentPadding: const EdgeInsets.all(24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.error_outline_rounded,
+                      color: Colors.redAccent,
+                      size: 32,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    "Notice",
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: const Color(0xFF2D3B1E), // forestDark matching
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF606C38), // forestLight matching
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(
+                        "Got it",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white, 
+                          fontWeight: FontWeight.w600, 
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -193,7 +264,7 @@ class _SignUpPageState extends State<SignUpPage> {
       }
     } catch (e) {
       if (mounted) {
-        _showSnackBar("Registration Error: $e");
+        _showNotificationPopup("Registration Error: $e");
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -239,12 +310,12 @@ class _SignUpPageState extends State<SignUpPage> {
               physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
-                  // Header Section (Modernized text, no heavy background)
+                  // Header Section (Modernized text, matched spacing)
                   Padding(
                     padding: const EdgeInsets.only(top: 20, bottom: 30, left: 24, right: 24),
                     child: Column(
                       children: [
-                        _buildLogo(size: 50),
+                        _buildLogo(size: 70), // Updated to size 70 to match Login
                         const SizedBox(height: 20),
                         Text(
                           'Join TEREA',
@@ -605,24 +676,27 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
+  // Updated to match the NoBackgroundLogo.png style from login_page.dart
   Widget _buildLogo({required double size}) {
     return Container(
-      padding: const EdgeInsets.all(16),
+      width: size * 1.4,
+      height: size * 1.4,
       decoration: BoxDecoration(
-        color: const Color(0xFF606C38),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF606C38).withOpacity(0.3),
+            color: Colors.black.withOpacity(0.15),
             blurRadius: 20,
-            offset: const Offset(0, 8),
+            offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Icon(
-        Icons.local_hospital_rounded, 
-        size: size * 0.6, 
-        color: Colors.white,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Image.asset(
+          'assets/NoBackgroundLogo.png',
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }

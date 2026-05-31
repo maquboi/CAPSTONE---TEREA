@@ -12,6 +12,7 @@ import 'settings_page.dart';
 import 'risk_result_page.dart';
 import 'facilities_page.dart';
 import 'support_page.dart';
+import 'mydoctor_page.dart'; // Added import
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -52,6 +53,7 @@ class TereaApp extends StatelessWidget {
         '/result': (context) => const RiskResultPage(),
         '/facilities': (context) => const FacilitiesPage(),
         '/support': (context) => const SupportPage(),
+        '/my_doctor': (context) => const MyDoctorPage(), // Added route
       },
     );
   }

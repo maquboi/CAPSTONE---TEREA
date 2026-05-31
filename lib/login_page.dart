@@ -41,6 +41,87 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  // --- MODERN CENTERED POPUP ANIMATION ---
+  void _showNotificationPopup(String message, {bool isSuccess = false}) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+      transitionBuilder: (context, a1, a2, child) {
+        final color = isSuccess ? const Color(0xFF606C38) : Colors.redAccent;
+        final icon = isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded;
+        
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(a1.value),
+          child: FadeTransition(
+            opacity: a1,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              contentPadding: const EdgeInsets.all(24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 32),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    isSuccess ? "Success" : "Notice",
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: const Color(0xFF2D3B1E), 
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF606C38),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(
+                        "Got it",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white, 
+                          fontWeight: FontWeight.w600, 
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
     try {
@@ -65,37 +146,15 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
           // 3. ROLE GATEKEEPER
           if (role == 'doctor') {
             await Supabase.instance.client.auth.signOut();
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(
-                  "Access Denied: Doctors must use the Web Portal.",
-                  style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-                ),
-                backgroundColor: Colors.redAccent,
-                duration: const Duration(seconds: 4),
-                behavior: SnackBarBehavior.floating,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-            );
+            _showNotificationPopup("Access Denied: Doctors must use the Web Portal.");
           } else {
-            // FIXED: Removed the space and added pushReplacementNamed
             Navigator.pushReplacementNamed(context, '/dashboard');
           }
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              "Login Failed: $e",
-              style: GoogleFonts.poppins(fontWeight: FontWeight.w500),
-            ),
-            backgroundColor: Colors.redAccent,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-          ),
-        );
+        _showNotificationPopup("Login Failed: $e");
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -408,24 +467,27 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
+  // Updated to load your custom logo with a modern rounded-square clipping
   Widget _buildLogo({required double size}) {
     return Container(
-      padding: const EdgeInsets.all(18),
+      width: size * 1.4,
+      height: size * 1.4,
       decoration: BoxDecoration(
-        color: const Color(0xFF606C38), 
-        borderRadius: BorderRadius.circular(24), 
+        borderRadius: BorderRadius.circular(24),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFF606C38).withOpacity(0.3),
+            color: Colors.black.withOpacity(0.15),
             blurRadius: 20,
             offset: const Offset(0, 10),
           ),
         ],
       ),
-      child: Icon(
-        Icons.local_hospital_rounded, 
-        size: size * 0.6,
-        color: Colors.white,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: Image.asset(
+          'assets/NoBackgroundLogo.png',
+          fit: BoxFit.cover,
+        ),
       ),
     );
   }

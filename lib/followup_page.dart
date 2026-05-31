@@ -51,6 +51,87 @@ class _FollowUpPageState extends State<FollowUpPage> {
     super.dispose();
   }
 
+  // --- MODERN CENTERED POPUP ANIMATION ---
+  void _showNotificationPopup(String message, {bool isSuccess = false}) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+      transitionBuilder: (context, a1, a2, child) {
+        final color = isSuccess ? const Color(0xFF606C38) : Colors.redAccent;
+        final icon = isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded;
+        
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(a1.value),
+          child: FadeTransition(
+            opacity: a1,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              contentPadding: const EdgeInsets.all(24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 32),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    isSuccess ? "Success" : "Notice",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Color(0xFF2D3B1E), 
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF606C38),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text(
+                        "Got it",
+                        style: TextStyle(
+                          color: Colors.white, 
+                          fontWeight: FontWeight.w600, 
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // --- REAL-TIME LISTENER ---
   void _setupRealtimeListener() {
     final user = _supabase.auth.currentUser;
@@ -180,25 +261,46 @@ class _FollowUpPageState extends State<FollowUpPage> {
     try {
       await _supabase.from('doctor_notes').insert({'note_text': text, 'category': category, 'user_id': _supabase.auth.currentUser!.id, 'is_checked': false});
       _fetchNotes();
-    } catch (e) { debugPrint('Add Note Error: $e'); }
+    } catch (e) { 
+      debugPrint('Add Note Error: $e'); 
+      if (mounted) _showNotificationPopup("Failed to add note: $e");
+    }
   }
 
   Future<void> _deleteNote(String id) async { 
-    await _supabase.from('doctor_notes').delete().eq('id', id); 
-    _fetchNotes(); 
+    try {
+      await _supabase.from('doctor_notes').delete().eq('id', id); 
+      _fetchNotes(); 
+    } catch (e) {
+      debugPrint('Delete Note Error: $e');
+      if (mounted) _showNotificationPopup("Failed to delete note: $e");
+    }
   }
 
   Future<void> _toggleNote(int index) async {
     setState(() { _doctorNotes[index]['is_checked'] = true; });
     await Future.delayed(const Duration(milliseconds: 500));
     final noteId = _doctorNotes[index]['id'];
-    await _supabase.from('doctor_notes').update({'is_checked': true}).eq('id', noteId);
-    if (mounted) { setState(() { _doctorNotes.removeAt(index); }); }
+    try {
+      await _supabase.from('doctor_notes').update({'is_checked': true}).eq('id', noteId);
+      if (mounted) { setState(() { _doctorNotes.removeAt(index); }); }
+    } catch (e) {
+      debugPrint('Toggle Note Error: $e');
+      if (mounted) {
+        setState(() { _doctorNotes[index]['is_checked'] = false; });
+        _showNotificationPopup("Failed to update note: $e");
+      }
+    }
   }
 
   Future<void> _deleteAppointment(String id) async { 
-    await _supabase.from('roadmap').delete().eq('id', id);
-    _fetchAppointments(); 
+    try {
+      await _supabase.from('roadmap').delete().eq('id', id);
+      _fetchAppointments(); 
+    } catch (e) {
+      debugPrint('Delete Appt Error: $e');
+      if (mounted) _showNotificationPopup("Failed to delete appointment: $e");
+    }
   }
 
   Future<void> _editNoteDialog(Map<String, dynamic> note) async {
@@ -245,11 +347,15 @@ class _FollowUpPageState extends State<FollowUpPage> {
             ElevatedButton(
               style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), 
               onPressed: () async { 
-                if (editController.text.isNotEmpty) { 
-                  await _supabase.from('doctor_notes').update({'note_text': editController.text, 'category': editCategory}).eq('id', note['id']); 
-                  _fetchNotes(); 
-                  if (context.mounted) Navigator.pop(context); 
-                } 
+                try {
+                  if (editController.text.isNotEmpty) { 
+                    await _supabase.from('doctor_notes').update({'note_text': editController.text, 'category': editCategory}).eq('id', note['id']); 
+                    _fetchNotes(); 
+                    if (context.mounted) Navigator.pop(context); 
+                  }
+                } catch (e) {
+                  if (context.mounted) _showNotificationPopup("Failed to save changes: $e");
+                }
               }, 
               child: const Text("Save Changes", style: TextStyle(color: Colors.white))
             )
@@ -335,7 +441,10 @@ class _FollowUpPageState extends State<FollowUpPage> {
                       else { await _supabase.from('roadmap').insert(appointmentData); } 
                       await _fetchAppointments(); 
                       if (context.mounted) Navigator.pop(context); 
-                    } catch (e) { setModalState(() => isSaving = false); } 
+                    } catch (e) { 
+                      setModalState(() => isSaving = false); 
+                      if (mounted) _showNotificationPopup("Failed to save milestone: $e");
+                    } 
                   } 
                 }, 
                 child: isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(isEditing ? "Update Milestone" : "Add Milestone", style: TextStyle(color: kWhite, fontWeight: FontWeight.bold))

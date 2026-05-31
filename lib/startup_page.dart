@@ -25,23 +25,6 @@ class StartupPage extends StatelessWidget {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              // Logo with shadow/glow
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 30,
-                      offset: const Offset(0, 10),
-                    ),
-                  ],
-                ),
-                child: _buildLogo(size: 120),
-              ),
-              const SizedBox(height: 30),
-              
               // TEREA Header
               const Text(
                 'TEREA',
@@ -93,15 +76,6 @@ class StartupPage extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  // FIXED: Using 'Icons.eco' which is a standard leaf icon
-  Widget _buildLogo({required double size}) {
-    return Icon(
-      Icons.eco, // Standard Material leaf icon
-      size: size, 
-      color: const Color(0xFFFEFAE0),
     );
   }
 }

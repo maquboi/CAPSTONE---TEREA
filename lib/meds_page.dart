@@ -18,7 +18,9 @@ class _MedsPageState extends State<MedsPage> {
   String _viewType = 'Week';
 
   DateTime? _treatmentStartDate;
+  DateTime? _treatmentEndDate;
   String? _connectionStatus;
+  String? _patientStatus;
   String _riskLevel = "Not yet assessed";
   
   Map<String, dynamic>? _latestDoctorNote;
@@ -38,6 +40,87 @@ class _MedsPageState extends State<MedsPage> {
     super.initState();
     _fetchData();
     _setupRealtimeListener();
+  }
+
+  // --- MODERN CENTERED POPUP ANIMATION ---
+  void _showNotificationPopup(String message, {bool isSuccess = false}) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+      transitionBuilder: (context, a1, a2, child) {
+        final color = isSuccess ? const Color(0xFF606C38) : Colors.redAccent;
+        final icon = isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded;
+        
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(a1.value),
+          child: FadeTransition(
+            opacity: a1,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              contentPadding: const EdgeInsets.all(24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 32),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    isSuccess ? "Success" : "Notice",
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: Color(0xFF2D3B1E), 
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF606C38),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text(
+                        "Got it",
+                        style: TextStyle(
+                          color: Colors.white, 
+                          fontWeight: FontWeight.w600, 
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
   }
 
   void _setupRealtimeListener() {
@@ -91,7 +174,7 @@ class _MedsPageState extends State<MedsPage> {
 
       final profileData = await Supabase.instance.client
           .from('profiles')
-          .select('treatment_start_date, risk_level')
+          .select('treatment_start_date, treatment_end_date, risk_level, status')
           .eq('id', user.id)
           .maybeSingle();
 
@@ -123,11 +206,15 @@ class _MedsPageState extends State<MedsPage> {
       if (mounted) {
         setState(() {
           _connectionStatus = connectionData?['status'];
+          _patientStatus = profileData?['status'];
           _riskLevel = profileData?['risk_level'] ?? "Not yet assessed";
           _latestDoctorNote = noteData;
           
           if (profileData != null && profileData['treatment_start_date'] != null) {
             _treatmentStartDate = DateTime.parse(profileData['treatment_start_date'].toString());
+          }
+          if (profileData != null && profileData['treatment_end_date'] != null) {
+            _treatmentEndDate = DateTime.parse(profileData['treatment_end_date'].toString());
           }
           
           myMeds = medsData as List<dynamic>;
@@ -142,6 +229,10 @@ class _MedsPageState extends State<MedsPage> {
   }
 
   String _getCurrentPhase() {
+    if (_patientStatus == 'cured' || _patientStatus == 'treatment_completed') {
+      return "Post-Care Archival"; 
+    }
+    
     if (_treatmentStartDate == null) return "Phase Not Set";
     final daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays;
     return daysPassed <= 60 ? "Intensive Phase" : "Continuation Phase";
@@ -159,12 +250,20 @@ class _MedsPageState extends State<MedsPage> {
       if (medId == null) { await Supabase.instance.client.from('medications').insert(medData); } 
       else { await Supabase.instance.client.from('medications').update(medData).eq('id', medId); }
       _fetchData();
-    } catch (e) { debugPrint("Error saving med: $e"); }
+    } catch (e) { 
+      debugPrint("Error saving med: $e"); 
+      if (mounted) _showNotificationPopup("Error saving medication: $e");
+    }
   }
 
   Future<void> _deleteMed(String medId) async {
-    try { await Supabase.instance.client.from('medications').delete().eq('id', medId); _fetchData(); } 
-    catch (e) { debugPrint("Error deleting med: $e"); }
+    try { 
+      await Supabase.instance.client.from('medications').delete().eq('id', medId); 
+      _fetchData(); 
+    } catch (e) { 
+      debugPrint("Error deleting med: $e"); 
+      if (mounted) _showNotificationPopup("Error deleting medication: $e");
+    }
   }
 
   Future<void> _toggleMed(bool isCurrentlyTaken, String medId, String targetTimeStr) async {
@@ -185,7 +284,10 @@ class _MedsPageState extends State<MedsPage> {
           _fadingMedIds.remove(medId);
         });
         _fetchData();
-      } catch (e) { debugPrint("Error deleting log: $e"); }
+      } catch (e) { 
+        debugPrint("Error deleting log: $e"); 
+        if (mounted) _showNotificationPopup("Error updating status: $e");
+      }
     } else {
       // Trigger the local fade transition
       setState(() {
@@ -222,7 +324,6 @@ class _MedsPageState extends State<MedsPage> {
       });
 
       try {
-        // FIX: Changed from .upsert() to .insert() to prevent Postgres conflict errors
         await Supabase.instance.client.from('medication_logs').insert({
           'medication_id': medId,
           'patient_id': user.id,
@@ -240,6 +341,7 @@ class _MedsPageState extends State<MedsPage> {
           setState(() {
             _optimisticTakenMeds.remove('${medId}_$dateStr');
           });
+          _showNotificationPopup("Failed to log medication: $e");
         }
       }
     }
@@ -352,6 +454,8 @@ class _MedsPageState extends State<MedsPage> {
     bool hasTakenAssessment = _riskLevel != "Not yet assessed";
     bool isVerifiedByDoctor = _connectionStatus == 'active';
     bool isUnlocked = hasTakenAssessment && isVerifiedByDoctor;
+    
+    bool isCured = _patientStatus == 'cured' || _patientStatus == 'treatment_completed';
 
     return Scaffold(
       backgroundColor: lightBg,
@@ -385,7 +489,7 @@ class _MedsPageState extends State<MedsPage> {
             ? _showHistoryLog ? _buildHistoryLogsContent() : _buildUnlockedContent() 
             : _buildLockedUI(hasTakenAssessment, isVerifiedByDoctor),
 
-      floatingActionButton: isUnlocked && !_showHistoryLog
+      floatingActionButton: (isUnlocked && !_showHistoryLog && !isCured)
         ? FloatingActionButton(backgroundColor: primaryGreen, onPressed: _handleAddNewMed, child: const Icon(Icons.add, color: Colors.white))
         : null,
     );
@@ -741,7 +845,6 @@ class _MedsPageState extends State<MedsPage> {
       // Instantly hide using optimistic UI tracker
       if (_optimisticTakenMeds.contains('${med['id']}_$dateStr')) return false;
 
-      // FIX: Robust Date Check for Supabase database variations
       final takenLog = myMedLogs.where((l) {
         if (l['medication_id'].toString() != med['id'].toString()) return false;
         if (l['status'] != 'taken') return false;
@@ -791,7 +894,10 @@ class _MedsPageState extends State<MedsPage> {
             child: Row(
               children: [
                 GestureDetector(
-                  onTap: isFading ? null : () => _toggleMed(false, medIdStr, med['time'].toString()), 
+                  // Disable tapping if fading OR if the patient is discharged
+                  onTap: (isFading || _patientStatus == 'cured' || _patientStatus == 'treatment_completed') 
+                      ? null 
+                      : () => _toggleMed(false, medIdStr, med['time'].toString()), 
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.all(10), 

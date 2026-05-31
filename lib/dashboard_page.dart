@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'shared_widgets.dart';
 
 //DASHBOARD
@@ -119,6 +120,87 @@ class _DashboardPageState extends State<DashboardPage> {
     }
   }
 
+  // --- MODERN CENTERED POPUP ANIMATION ---
+  void _showNotificationPopup(String message, {bool isSuccess = false}) {
+    showGeneralDialog(
+      context: context,
+      barrierDismissible: true,
+      barrierLabel: 'Dismiss',
+      barrierColor: Colors.black.withOpacity(0.4),
+      transitionDuration: const Duration(milliseconds: 300),
+      pageBuilder: (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+      transitionBuilder: (context, a1, a2, child) {
+        final color = isSuccess ? const Color(0xFF606C38) : Colors.redAccent;
+        final icon = isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded;
+        
+        return Transform.scale(
+          scale: Curves.easeOutBack.transform(a1.value),
+          child: FadeTransition(
+            opacity: a1,
+            child: AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              backgroundColor: Colors.white,
+              contentPadding: const EdgeInsets.all(24),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.1),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(icon, color: color, size: 32),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    isSuccess ? "Success" : "Notice",
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: const Color(0xFF2D3B1E), 
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    message,
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.poppins(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF606C38),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: Text(
+                        "Got it",
+                        style: GoogleFonts.poppins(
+                          color: Colors.white, 
+                          fontWeight: FontWeight.w600, 
+                          fontSize: 14,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   // --- UPDATED CLINIC CODE LOGIC (Prevents Duplicates) ---
   Future<void> _submitClinicCode() async {
     if (_codeController.text.trim().isEmpty) return;
@@ -137,7 +219,7 @@ class _DashboardPageState extends State<DashboardPage> {
           .maybeSingle();
 
       if (doctor == null) {
-        _showToast("Invalid Clinic Code. Please check again.", Colors.black87);
+        _showNotificationPopup("Invalid Clinic Code. Please check again.");
         setState(() => _isLinking = false);
         return;
       }
@@ -151,7 +233,7 @@ class _DashboardPageState extends State<DashboardPage> {
           .maybeSingle();
 
       if (existing != null) {
-        _showToast("You are already connected or pending with this doctor.", Colors.grey.shade700);
+        _showNotificationPopup("You are already connected or pending with this doctor.");
         setState(() => _isLinking = false);
         return;
       }
@@ -179,15 +261,15 @@ class _DashboardPageState extends State<DashboardPage> {
           _isLinking = false;
         });
         Navigator.pop(context); // Close dialog
-        _showToast("Request sent to Dr. ${doctor['full_name']}!", forestMed);
+        _showNotificationPopup("Request sent to Dr. ${doctor['full_name']}!", isSuccess: true);
       }
 
     } catch (e) {
       debugPrint("Linking Error: $e");
       if (e.toString().contains("duplicate")) {
-         _showToast("You have already sent a request.", Colors.grey.shade700);
+         _showNotificationPopup("You have already sent a request.");
       } else {
-         _showToast("Error linking to clinic: $e", Colors.black87);
+         _showNotificationPopup("Error linking to clinic: $e");
       }
       setState(() => _isLinking = false);
     }
@@ -241,12 +323,6 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
         ],
       ),
-    );
-  }
-
-  void _showToast(String msg, Color bg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(msg), backgroundColor: bg, behavior: SnackBarBehavior.floating, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
     );
   }
 
@@ -340,6 +416,7 @@ class _DashboardPageState extends State<DashboardPage> {
                     mainAxisSpacing: 16,
                     childAspectRatio: 0.95,
                     children: const [
+                      _HoverActionCard(icon: Icons.medical_services_outlined, title: 'My\nDoctor', subtitle: 'View physician info', route: '/my_doctor'),
                       _HoverActionCard(icon: Icons.assignment_outlined, title: 'Risk\nAssessment', subtitle: 'Check your TB risk', route: '/assess'),
                       _HoverActionCard(icon: Icons.chat_bubble_outline, title: 'TEREA\nChatbot', subtitle: '24/7 AI Support', route: '/chat'),
                       _HoverActionCard(icon: Icons.settings_outlined, title: 'Account\nSettings', subtitle: 'Preferences', route: '/settings'),
