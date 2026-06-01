@@ -122,6 +122,170 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
+  // --- FORGOT PASSWORD MODAL FLOW ---
+  void _showForgotPasswordDialog() {
+    final resetEmailController = TextEditingController();
+    
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            bool isSubmitting = false;
+            String? errorMsg;
+            bool success = false;
+
+            Future<void> submitRequest() async {
+              final email = resetEmailController.text.trim();
+              if (email.isEmpty || !email.contains('@')) {
+                setState(() => errorMsg = "Please enter a valid email address.");
+                return;
+              }
+
+              setState(() {
+                isSubmitting = true;
+                errorMsg = null;
+              });
+
+              try {
+                await Supabase.instance.client.from('support_tickets').insert({
+                  'email': email,
+                  'issue_type': 'Password Reset Request',
+                  'message': 'Patient requested a password reset from the TEREA Mobile App.',
+                  'status': 'Pending',
+                });
+
+                setState(() {
+                  success = true;
+                  isSubmitting = false;
+                });
+              } catch (e) {
+                setState(() {
+                  errorMsg = "Failed to send request. Please try again.";
+                  isSubmitting = false;
+                });
+              }
+            }
+
+            return Dialog(
+              backgroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              child: Padding(
+                padding: const EdgeInsets.all(24.0),
+                child: success 
+                  ? Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.check_circle_outline, color: Color(0xFF606C38), size: 48),
+                        const SizedBox(height: 16),
+                        Text(
+                          "Request Sent",
+                          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF2D3B1E)),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "IT Support has received your request. You will receive an email with a secure reset link shortly.",
+                          textAlign: TextAlign.center,
+                          style: GoogleFonts.poppins(color: Colors.black54, fontSize: 14),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF606C38),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            onPressed: () => Navigator.pop(context),
+                            child: Text("Okay", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        )
+                      ],
+                    )
+                  : Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              "Reset Password",
+                              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF2D3B1E)),
+                            ),
+                            IconButton(
+                              icon: const Icon(Icons.close, color: Colors.black54),
+                              onPressed: () => Navigator.pop(context),
+                            )
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          "Enter the email associated with your account to request a password reset.",
+                          style: GoogleFonts.poppins(color: Colors.black54, fontSize: 14),
+                        ),
+                        const SizedBox(height: 20),
+                        if (errorMsg != null)
+                          Container(
+                            width: double.infinity,
+                            padding: const EdgeInsets.all(10),
+                            margin: const EdgeInsets.only(bottom: 16),
+                            decoration: BoxDecoration(
+                              color: Colors.red.shade50,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.red.shade100),
+                            ),
+                            child: Text(
+                              errorMsg!,
+                              style: GoogleFonts.poppins(color: Colors.red.shade700, fontSize: 12),
+                            ),
+                          ),
+                        TextField(
+                          controller: resetEmailController,
+                          keyboardType: TextInputType.emailAddress,
+                          decoration: InputDecoration(
+                            hintText: "Email Address",
+                            hintStyle: GoogleFonts.poppins(color: Colors.black26),
+                            filled: true,
+                            fillColor: const Color(0xFFF4F7F4),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF606C38)),
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFF606C38),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            onPressed: isSubmitting ? null : submitRequest,
+                            child: isSubmitting
+                                ? const SizedBox(
+                                    height: 20,
+                                    width: 20,
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                  )
+                                : Text("Send Request", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                          ),
+                        )
+                      ],
+                    ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
     try {
@@ -293,7 +457,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(
-                                onPressed: () {},
+                                onPressed: _showForgotPasswordDialog, // Wired up here!
                                 style: TextButton.styleFrom(
                                   padding: EdgeInsets.zero,
                                   minimumSize: Size.zero,
@@ -320,7 +484,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ? const Center(
                             child: CircularProgressIndicator(color: forestDark))
                         : _buildGradientButton(
-                            text: "Sign in securely",
+                            text: "Sign in",
                             onPressed: _signIn,
                             colors: [forestLight, forestDark],
                           ),

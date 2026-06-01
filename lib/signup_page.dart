@@ -318,7 +318,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         _buildLogo(size: 70), // Updated to size 70 to match Login
                         const SizedBox(height: 20),
                         Text(
-                          'Join TEREA',
+                          'Creation of Account',
                           style: GoogleFonts.poppins(
                             fontSize: 32,
                             fontWeight: FontWeight.w700,
@@ -328,7 +328,7 @@ class _SignUpPageState extends State<SignUpPage> {
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Start your wellness journey today',
+                          'Create your Patient Identity',
                           style: GoogleFonts.poppins(
                             color: Colors.black45,
                             fontSize: 14,

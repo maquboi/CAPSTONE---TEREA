@@ -466,13 +466,7 @@ class _MedsPageState extends State<MedsPage> {
           icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen), 
           onPressed: () => Navigator.of(context).pop()
         ), 
-        title: Row(
-          children: [
-            Icon(Icons.favorite_rounded, color: accentGreen, size: 28), 
-            const SizedBox(width: 10), 
-            Text('TB HealthCare', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20))
-          ],
-        ),
+        title: Text('', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20)),
         actions: [
           if (isUnlocked)
             IconButton(
