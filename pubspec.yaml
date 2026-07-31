@@ -39,6 +39,7 @@ dependencies:
 
   # Other
   flutter_tts: ^4.2.5
+  mobile_scanner: ^5.2.3
 
 dev_dependencies:
   flutter_test:

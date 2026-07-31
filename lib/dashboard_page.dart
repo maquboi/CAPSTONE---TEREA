@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'shared_widgets.dart';
+import 'qr_scanner_page.dart'; // IMPORT THE NEW SCANNER PAGE
 
 //DASHBOARD
 class DashboardPage extends StatefulWidget {
@@ -177,12 +178,12 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  Future<void> _submitClinicCode() async {
-    // ... [KEEP YOUR EXISTING CODE LOGIC HERE] ...
-    if (_codeController.text.trim().isEmpty) return;
+  // MODIFIED: Accepts an optional scanned code parameter
+  Future<void> _submitClinicCode([String? scannedCode]) async {
+    final code = scannedCode ?? _codeController.text.trim();
+    if (code.isEmpty) return;
 
     setState(() => _isLinking = true);
-    final code = _codeController.text.trim();
     final user = _supabase.auth.currentUser;
 
     try {
@@ -210,7 +211,8 @@ class _DashboardPageState extends State<DashboardPage> {
           _connectionStatus = 'pending';
           _isLinking = false;
         });
-        Navigator.pop(context);
+        // Close dialog only if we triggered this from the manual input dialog
+        if (scannedCode == null) Navigator.pop(context);
         _showNotificationPopup("Request sent to Dr. ${doctor['full_name']}!", isSuccess: true);
       }
     } catch (e) {
@@ -224,7 +226,6 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _showClinicCodeDialog() {
-    // ... [KEEP YOUR EXISTING DIALOG LOGIC HERE] ...
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -253,7 +254,7 @@ class _DashboardPageState extends State<DashboardPage> {
           TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.grey))),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: forestMed, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-            onPressed: _isLinking ? null : _submitClinicCode,
+            onPressed: _isLinking ? null : () => _submitClinicCode(),
             child: _isLinking ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text("Connect", style: TextStyle(color: Colors.white)),
           ),
         ],
@@ -378,10 +379,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         onLockedTap: () => _showNotificationPopup("Clinic verification required to view appointments.", customIcon: Icons.lock_outline),
                       ),
                       _HoverActionCard(
-                        icon: Icons.chat_bubble_outline, 
-                        title: 'TEREA\nChatbot', 
-                        subtitle: '24/7 AI Support', 
-                        route: '/chat',
+                        icon: Icons.menu_book_rounded, 
+                        title: 'FAQ', 
+                        subtitle: 'TB Info & Diet', 
+                        route: '/faq',
                         isLocked: false,
                       ),
                       _HoverActionCard(
@@ -493,6 +494,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   // --- WIDGETS ---
+  // MODIFIED to include the QR Scan Button
   Widget _buildConnectCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -514,13 +516,46 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(height: 16),
           const Text("Link with your Carmona doctor to unlock your Medication Diary and Calendar.", style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4)),
           const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity, height: 48,
-            child: ElevatedButton(
-              onPressed: _showClinicCodeDialog,
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: forestDark, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
-              child: const Text("Enter Clinic Code", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-            ),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: ElevatedButton(
+                    onPressed: _showClinicCodeDialog,
+                    style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: forestDark, elevation: 0, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+                    child: const Text("Enter Code Manually", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 12),
+              SizedBox(
+                height: 48,
+                width: 48,
+                child: ElevatedButton(
+                  onPressed: () async {
+                    // Navigate to the scanner page and wait for a result
+                    final scannedCode = await Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (context) => const QRScannerPage()),
+                    );
+                    
+                    // If the user scanned something successfully, submit it!
+                    if (scannedCode != null && scannedCode is String) {
+                      _submitClinicCode(scannedCode);
+                    }
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: paleGreen, 
+                    foregroundColor: forestDark, 
+                    elevation: 0, 
+                    padding: EdgeInsets.zero,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))
+                  ),
+                  child: const Icon(Icons.qr_code_scanner, size: 22),
+                ),
+              ),
+            ],
           ),
         ],
       ),

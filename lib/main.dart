@@ -7,12 +7,12 @@ import 'dashboard_page.dart';
 import 'assessment_page.dart';
 import 'meds_page.dart';
 import 'followup_page.dart';
-import 'chat_page.dart';
+import 'faq_page.dart'; // Added import for FAQ page
 import 'settings_page.dart';
 import 'risk_result_page.dart';
 import 'facilities_page.dart';
 import 'support_page.dart';
-import 'mydoctor_page.dart'; // Added import
+import 'mydoctor_page.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,12 +48,12 @@ class TereaApp extends StatelessWidget {
         '/assess': (context) => const AssessmentPage(),
         '/meds': (context) => const MedsPage(),
         '/followup': (context) => const FollowUpPage(),
-        '/chat': (context) => const ChatPage(),
+        '/faq': (context) => const FaqPage(), // Replaced chat route with faq route
         '/settings': (context) => const SettingsPage(),
         '/result': (context) => const RiskResultPage(),
         '/facilities': (context) => const FacilitiesPage(),
         '/support': (context) => const SupportPage(),
-        '/my_doctor': (context) => const MyDoctorPage(), // Added route
+        '/my_doctor': (context) => const MyDoctorPage(),
       },
     );
   }
