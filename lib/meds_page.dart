@@ -289,7 +289,6 @@ class _MedsPageState extends State<MedsPage> {
         if (mounted) _showNotificationPopup("Error updating status: $e");
       }
     } else {
-      // Trigger the local fade transition
       setState(() {
         _fadingMedIds[medId] = true;
       });
@@ -312,12 +311,10 @@ class _MedsPageState extends State<MedsPage> {
 
       final timeTakenStr = DateFormat('HH:mm:ss').format(now);
 
-      // Wait briefly to allow the user to see the complete fade effect animation cleanly
       await Future.delayed(const Duration(milliseconds: 300));
 
       if (!mounted) return;
 
-      // Optimistically hide the medication from the UI immediately to prevent popping back
       setState(() {
         _optimisticTakenMeds.add('${medId}_$dateStr');
         _fadingMedIds.remove(medId);
@@ -336,7 +333,6 @@ class _MedsPageState extends State<MedsPage> {
         await _fetchData();
       } catch (e) { 
         debugPrint("Error inserting log: $e"); 
-        // Revert UI optimistic hiding on backend failure
         if (mounted) {
           setState(() {
             _optimisticTakenMeds.remove('${medId}_$dateStr');
@@ -792,7 +788,18 @@ class _MedsPageState extends State<MedsPage> {
     ); 
   }
 
+  // --- MODIFIED: ADDED VISUAL ADHERENCE TICK-BOX INDICATOR ---
   Widget _buildDateCard(DateTime date, bool isSelected, {bool compact = false}) { 
+    String formattedDate = DateFormat('yyyy-MM-dd').format(date);
+    
+    // Check if the patient has taken ANY medicine on this specific date.
+    // This perfectly mimics the daily grid checkmark on the DOH TB DOTS Form 4
+    bool isCompletedDay = myMedLogs.any((log) {
+      String dbDate = log['log_date'].toString();
+      if (dbDate.length >= 10) dbDate = dbDate.substring(0, 10);
+      return dbDate == formattedDate && log['status'] == 'taken';
+    });
+
     return GestureDetector(
       onTap: () => setState(() => _selectedDate = date), 
       child: AnimatedContainer(
@@ -803,20 +810,36 @@ class _MedsPageState extends State<MedsPage> {
           color: isSelected ? accentGreen : surfaceWhite, 
           borderRadius: BorderRadius.circular(16), 
           boxShadow: isSelected ? [BoxShadow(color: accentGreen.withOpacity(0.3), blurRadius: 8, offset: const Offset(0, 4))] : [], 
-          border: Border.all(color: isSelected ? accentGreen : Colors.grey.withOpacity(0.1))
+          border: Border.all(color: isSelected ? accentGreen : (isCompletedDay ? emeraldGreen.withOpacity(0.5) : Colors.grey.withOpacity(0.1))),
         ), 
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center, 
+        child: Stack(
+          alignment: Alignment.center,
           children: [
-            Text(
-              DateFormat('E').format(date).toUpperCase(), 
-              style: TextStyle(fontSize: compact ? 8 : 10, fontWeight: FontWeight.w800, color: isSelected ? Colors.white70 : Colors.grey)
-            ), 
-            const SizedBox(height: 2), 
-            Text(
-              date.day.toString(), 
-              style: TextStyle(fontSize: compact ? 14 : 18, fontWeight: FontWeight.w700, color: isSelected ? Colors.white : primaryGreen)
-            )
+            Column(
+              mainAxisAlignment: MainAxisAlignment.center, 
+              children: [
+                Text(
+                  DateFormat('E').format(date).toUpperCase(), 
+                  style: TextStyle(fontSize: compact ? 8 : 10, fontWeight: FontWeight.w800, color: isSelected ? Colors.white70 : Colors.grey)
+                ), 
+                const SizedBox(height: 2), 
+                Text(
+                  date.day.toString(), 
+                  style: TextStyle(fontSize: compact ? 14 : 18, fontWeight: FontWeight.w700, color: isSelected ? Colors.white : primaryGreen)
+                )
+              ],
+            ),
+            // The DOH Form 4 Checkmark overlay
+            if (isCompletedDay)
+              Positioned(
+                bottom: compact ? 2 : 4,
+                right: compact ? 2 : 6,
+                child: Icon(
+                  Icons.check_circle_rounded, 
+                  color: isSelected ? Colors.white : emeraldGreen, 
+                  size: compact ? 10 : 14
+                ),
+              )
           ],
         ),
       ),
@@ -836,7 +859,6 @@ class _MedsPageState extends State<MedsPage> {
       bool dateInRange = !selectedDate.isBefore(startDate) && !selectedDate.isAfter(endDate);
       if (!dateInRange) return false;
 
-      // Instantly hide using optimistic UI tracker
       if (_optimisticTakenMeds.contains('${med['id']}_$dateStr')) return false;
 
       final takenLog = myMedLogs.where((l) {
@@ -844,13 +866,11 @@ class _MedsPageState extends State<MedsPage> {
         if (l['status'] != 'taken') return false;
         
         String dbDate = l['log_date'].toString();
-        // Ensure we strictly extract the 'yyyy-MM-dd' piece regardless of timezones/timestamps appended by Postgres
         if (dbDate.length >= 10) dbDate = dbDate.substring(0, 10);
         
         return dbDate == dateStr;
       });
       
-      // If marked as taken by backend database, hide completely from layout list loop
       return takenLog.isEmpty;
     }).toList(); 
 
@@ -888,7 +908,6 @@ class _MedsPageState extends State<MedsPage> {
             child: Row(
               children: [
                 GestureDetector(
-                  // Disable tapping if fading OR if the patient is discharged
                   onTap: (isFading || _patientStatus == 'cured' || _patientStatus == 'treatment_completed') 
                       ? null 
                       : () => _toggleMed(false, medIdStr, med['time'].toString()), 
