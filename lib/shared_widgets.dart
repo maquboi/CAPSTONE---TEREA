@@ -66,7 +66,6 @@ Widget buildBottomNav(int idx, BuildContext context) {
     Icons.assignment_outlined,
     Icons.medication_outlined,
     Icons.calendar_today_outlined,
-    Icons.chat_bubble_outline,
   ];
 
   return SafeArea(
@@ -95,7 +94,6 @@ Widget buildBottomNav(int idx, BuildContext context) {
               if (index == 1) Navigator.pushNamed(context, '/assess');
               if (index == 2) Navigator.pushNamed(context, '/meds');
               if (index == 3) Navigator.pushNamed(context, '/followup');
-              if (index == 4) Navigator.pushNamed(context, '/chat');
             },
             child: AnimatedContainer(
               duration: const Duration(milliseconds: 300),

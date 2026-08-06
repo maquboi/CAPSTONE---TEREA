@@ -15,6 +15,8 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
   bool _hasDoctor = false;
   Map<String, dynamic>? _doctorData;
   String? _errorMessage;
+  
+  RealtimeChannel? _doctorSubscription;
 
   // Colors adapted for the modern reference layout while keeping TEREA identity
   final Color _bgColor = const Color(0xFFF4F6F9); 
@@ -25,6 +27,12 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
   void initState() {
     super.initState();
     _fetchDoctorInfo();
+  }
+
+  @override
+  void dispose() {
+    _doctorSubscription?.unsubscribe();
+    super.dispose();
   }
 
   Future<void> _fetchDoctorInfo() async {
@@ -50,6 +58,22 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
       }
 
       final doctorId = connectionResponse['doctor_id'];
+
+      // Setup Realtime Subscription to Doctor's Profile for Live Hour Updates
+      if (_doctorSubscription == null) {
+        _doctorSubscription = supabase
+            .channel('public:profiles:doctor_hours')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.update,
+              schema: 'public',
+              table: 'profiles',
+              filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: doctorId),
+              callback: (payload) {
+                _fetchDoctorInfo(); // Re-fetch data silently when doctor updates settings
+              },
+            )
+            .subscribe();
+      }
 
       final doctorProfile = await supabase
           .from('profiles')
@@ -89,7 +113,14 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
             decoration: BoxDecoration(
               color: Colors.white,
               shape: BoxShape.circle,
-              border: Border.all(color: Colors.grey.shade300),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                )
+              ],
+              border: Border.all(color: Colors.grey.shade200),
             ),
             child: IconButton(
               icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 20),
@@ -102,8 +133,9 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
           'Doctor Detail',
           style: TextStyle(
             color: Colors.black87,
-            fontWeight: FontWeight.w700,
-            fontSize: 16,
+            fontWeight: FontWeight.w800,
+            fontSize: 18,
+            letterSpacing: -0.5,
           ),
         ),
       ),
@@ -146,8 +178,13 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
             const SizedBox(height: 32),
             ElevatedButton(
               onPressed: () => Navigator.pop(context),
-              style: ElevatedButton.styleFrom(backgroundColor: _primaryGreen, padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14)),
-              child: const Text("Go Back", style: TextStyle(color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _primaryGreen, 
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                elevation: 0,
+              ),
+              child: const Text("Go Back", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -163,6 +200,33 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
     final String clinic = _doctorData?['clinic_name'] ?? 'Carmona TB DOTS Center';
     final String formattedName = fullName.startsWith('Dr.') ? fullName : 'Dr. $fullName';
 
+    // Helper function to convert 24hr "17:00" to "5:00 PM" format
+    String formatTimeString(String timeStr) {
+      try {
+        if (timeStr.toLowerCase().contains('am') || timeStr.toLowerCase().contains('pm')) {
+          return timeStr.toUpperCase();
+        }
+        
+        final parts = timeStr.split(':');
+        if (parts.isEmpty) return timeStr;
+        
+        int hr = int.parse(parts[0]);
+        final min = parts.length > 1 ? parts[1] : '00';
+        final ampm = hr >= 12 ? 'PM' : 'AM';
+        
+        hr = hr % 12;
+        if (hr == 0) hr = 12; 
+        
+        return '$hr:$min $ampm';
+      } catch (e) {
+        return timeStr;
+      }
+    }
+
+    final String startHour = _doctorData?['start_hour'] ?? '08:00';
+    final String endHour = _doctorData?['end_hour'] ?? '17:00';
+    final String availability = '${formatTimeString(startHour)} - ${formatTimeString(endHour)}';
+
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
       padding: const EdgeInsets.all(16.0),
@@ -170,41 +234,56 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
+            width: double.infinity,
             decoration: BoxDecoration(
               color: Colors.white,
-              borderRadius: BorderRadius.circular(24),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 15, offset: const Offset(0, 5))],
+              borderRadius: BorderRadius.circular(32),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.04), 
+                  blurRadius: 24, 
+                  offset: const Offset(0, 8)
+                )
+              ],
             ),
             child: Column(
               children: [
                 Container(
-                  height: 220,
+                  height: 240,
                   width: double.infinity,
-                  margin: const EdgeInsets.all(12),
+                  margin: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    color: const Color(0xFFE8ECEF),
+                    borderRadius: BorderRadius.circular(24),
+                    color: const Color(0xFFF8FAFC),
                     image: avatarUrl.isNotEmpty ? DecorationImage(image: NetworkImage(avatarUrl), fit: BoxFit.cover) : null,
                   ),
-                  child: avatarUrl.isEmpty ? const Center(child: Icon(Icons.person, size: 80, color: Colors.black26)) : null,
+                  child: avatarUrl.isEmpty ? const Center(child: Icon(Icons.person, size: 80, color: Colors.black12)) : null,
                 ),
-                Text(formattedName, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800, color: Colors.black87)),
-                const Text("Attending Physician", style: TextStyle(color: Colors.black54, fontSize: 14, fontWeight: FontWeight.w500)),
-                const SizedBox(height: 32),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
+                  child: Text(
+                    formattedName, 
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.black87, letterSpacing: -0.5)
+                  ),
+                ),
+                const SizedBox(height: 24),
               ],
             ),
           ),
-          const SizedBox(height: 24),
+          const SizedBox(height: 32),
           const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 4.0),
-            child: Text("Contact & Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black87)),
+            padding: EdgeInsets.symmetric(horizontal: 8.0),
+            child: Text("Contact & Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black87, letterSpacing: -0.5)),
           ),
+          const SizedBox(height: 16),
+          _buildDetailCard(statusText: 'Real-time', title: "Availability Hours", subtitle: availability, icon: Icons.access_time_rounded),
+          const SizedBox(height: 12),
+          _buildDetailCard(statusText: 'Primary Location', title: "Clinic Workspace", subtitle: clinic, icon: Icons.business_outlined),
           const SizedBox(height: 12),
           _buildDetailCard(statusText: 'Verified Contact', title: "Email Address", subtitle: email, icon: Icons.email_outlined),
           const SizedBox(height: 12),
           _buildDetailCard(statusText: 'Active', title: "Phone Number", subtitle: phone, icon: Icons.phone_outlined),
-          const SizedBox(height: 12),
-          _buildDetailCard(statusText: 'Primary Location', title: "Clinic Workspace", subtitle: clinic, icon: Icons.business_outlined),
           const SizedBox(height: 40),
         ],
       ),
@@ -215,8 +294,14 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
     return Container(
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 10, offset: const Offset(0, 4))],
+        borderRadius: BorderRadius.circular(24),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03), 
+            blurRadius: 16, 
+            offset: const Offset(0, 4)
+          )
+        ],
       ),
       padding: const EdgeInsets.all(20),
       child: Row(
@@ -226,17 +311,25 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(statusText, style: TextStyle(color: _primaryGreen, fontSize: 12, fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
-                Text(subtitle, style: const TextStyle(fontSize: 13, color: Colors.black54, fontWeight: FontWeight.w500)),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: _paleGreen.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(8)
+                  ),
+                  child: Text(statusText, style: TextStyle(color: _primaryGreen, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                ),
+                const SizedBox(height: 12),
+                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: -0.3)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: const TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w500)),
               ],
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(color: const Color(0xFFF0F4F8), borderRadius: BorderRadius.circular(16)),
-            child: Icon(icon, color: const Color(0xFF6A798A), size: 28),
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(20)),
+            child: Icon(icon, color: const Color(0xFF6A798A), size: 26),
           ),
         ],
       ),
