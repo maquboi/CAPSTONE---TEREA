@@ -31,7 +31,7 @@ class _MedsPageState extends State<MedsPage> {
 
   final Color primaryGreen = const Color(0xFF2D3B1E); 
   final Color accentGreen = const Color(0xFF606C38);  
-  final Color lightBg = const Color(0xFFF9F9F7);      
+  final Color lightBg = const Color(0xFFF9F9F7);       
   final Color surfaceWhite = Colors.white;
   final Color emeraldGreen = const Color(0xFF059669); 
 
@@ -187,7 +187,8 @@ class _MedsPageState extends State<MedsPage> {
       final medsData = await Supabase.instance.client
           .from('medications')
           .select()
-          .eq('user_id', user.id);
+          .eq('user_id', user.id)
+          .neq('is_archived', true); // Exclude soft-deleted/archived prescriptions
 
       final logsData = await Supabase.instance.client
           .from('medication_logs')
@@ -258,7 +259,8 @@ class _MedsPageState extends State<MedsPage> {
 
   Future<void> _deleteMed(String medId) async {
     try { 
-      await Supabase.instance.client.from('medications').delete().eq('id', medId); 
+      // Soft Delete logic matches the web parity
+      await Supabase.instance.client.from('medications').update({'is_archived': true}).eq('id', medId); 
       _fetchData(); 
     } catch (e) { 
       debugPrint("Error deleting med: $e"); 
