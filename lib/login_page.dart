@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:onesignal_flutter/onesignal_flutter.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -278,7 +279,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         )
                       ],
                     ),
-              ),
+              ), // <-- Fixed: Added closing parenthesis for Padding
             );
           },
         );
@@ -312,6 +313,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             await Supabase.instance.client.auth.signOut();
             _showNotificationPopup("Access Denied: Doctors must use the Web Portal.");
           } else {
+            OneSignal.login(response.user!.id);
             Navigator.pushReplacementNamed(context, '/dashboard');
           }
         }
@@ -457,7 +459,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                             Align(
                               alignment: Alignment.centerRight,
                               child: TextButton(
-                                onPressed: _showForgotPasswordDialog, // Wired up here!
+                                onPressed: _showForgotPasswordDialog,
                                 style: TextButton.styleFrom(
                                   padding: EdgeInsets.zero,
                                   minimumSize: Size.zero,

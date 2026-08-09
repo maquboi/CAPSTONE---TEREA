@@ -1,8 +1,11 @@
+import 'dart:ui'; 
+import 'package:flutter/services.dart'; 
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:shimmer/shimmer.dart'; 
 import 'shared_widgets.dart';
-import 'qr_scanner_page.dart'; // IMPORT THE NEW SCANNER PAGE
+import 'qr_scanner_page.dart';
 
 //DASHBOARD
 class DashboardPage extends StatefulWidget {
@@ -21,10 +24,12 @@ class _DashboardPageState extends State<DashboardPage> {
   bool _isLoading = true;
   
   // CONNECTION TRACKING
-  // null = no connection, 'pending' = waiting, 'active' = Verified
   String? _connectionStatus;
   String? _doctorName;
   
+  // SMART BELL NOTIFICATION TRACKING
+  bool _hasUnreadNotifications = false;
+
   final _codeController = TextEditingController();
   bool _isLinking = false;
 
@@ -39,6 +44,7 @@ class _DashboardPageState extends State<DashboardPage> {
   void initState() {
     super.initState();
     _fetchUserData();
+    _checkUnreadNotifications();
     _setupRealtimeListener();
   }
 
@@ -73,6 +79,40 @@ class _DashboardPageState extends State<DashboardPage> {
         callback: (payload) => _fetchUserData(),
       )
       .subscribe();
+
+    _supabase
+      .channel('patient_notifications')
+      .onPostgresChanges(
+        event: PostgresChangeEvent.all,
+        schema: 'public',
+        table: 'notifications',
+        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+        callback: (payload) => _checkUnreadNotifications(),
+      )
+      .subscribe();
+  }
+
+  Future<void> _checkUnreadNotifications() async {
+    try {
+      final user = _supabase.auth.currentUser;
+      if (user == null) return;
+
+      final data = await _supabase
+          .from('notifications')
+          .select('id')
+          .eq('patient_id', user.id)
+          .eq('is_read', false)
+          .eq('type', 'alert') // <-- THE FIX: Ignore doctor requests
+          .limit(1);
+
+      if (mounted) {
+        setState(() {
+          _hasUnreadNotifications = data.isNotEmpty;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error checking notifications: $e');
+    }
   }
 
   Future<void> _fetchUserData() async {
@@ -117,6 +157,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _showNotificationPopup(String message, {bool isSuccess = false, IconData? customIcon}) {
+    HapticFeedback.mediumImpact(); 
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -165,7 +206,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         elevation: 0,
                       ),
-                      onPressed: () => Navigator.of(context).pop(),
+                      onPressed: () {
+                        HapticFeedback.lightImpact();
+                        Navigator.of(context).pop();
+                      },
                       child: Text("Got it", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 14)),
                     ),
                   ),
@@ -178,8 +222,8 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // MODIFIED: Accepts an optional scanned code parameter
   Future<void> _submitClinicCode([String? scannedCode]) async {
+    HapticFeedback.lightImpact(); 
     final code = scannedCode ?? _codeController.text.trim();
     if (code.isEmpty) return;
 
@@ -211,7 +255,6 @@ class _DashboardPageState extends State<DashboardPage> {
           _connectionStatus = 'pending';
           _isLinking = false;
         });
-        // Close dialog only if we triggered this from the manual input dialog
         if (scannedCode == null) Navigator.pop(context);
         _showNotificationPopup("Request sent to Dr. ${doctor['full_name']}!", isSuccess: true);
       }
@@ -226,6 +269,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   void _showClinicCodeDialog() {
+    HapticFeedback.selectionClick(); 
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -251,13 +295,53 @@ class _DashboardPageState extends State<DashboardPage> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.grey))),
+          TextButton(
+            onPressed: () {
+              HapticFeedback.lightImpact();
+              Navigator.pop(context);
+            }, 
+            child: const Text("Cancel", style: TextStyle(color: Colors.grey))
+          ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(backgroundColor: forestMed, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
             onPressed: _isLinking ? null : () => _submitClinicCode(),
             child: _isLinking ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)) : const Text("Connect", style: TextStyle(color: Colors.white)),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildSkeletonLoader() {
+    return Shimmer.fromColors(
+      baseColor: Colors.grey.shade300,
+      highlightColor: Colors.white,
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.only(top: kToolbarHeight + 40, left: 24, right: 24, bottom: 20),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(width: 200, height: 32, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8))),
+            const SizedBox(height: 8),
+            Container(width: 150, height: 16, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8))),
+            const SizedBox(height: 30),
+            Container(width: double.infinity, height: 130, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))),
+            const SizedBox(height: 30),
+            Container(width: double.infinity, height: 160, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))),
+            const SizedBox(height: 20),
+            Container(width: double.infinity, height: 110, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24))),
+            const SizedBox(height: 35),
+            Container(width: 120, height: 16, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8))),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Expanded(child: Container(height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)))),
+                const SizedBox(width: 16),
+                Expanded(child: Container(height: 120, decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24)))),
+              ],
+            )
+          ],
+        ),
       ),
     );
   }
@@ -270,11 +354,18 @@ class _DashboardPageState extends State<DashboardPage> {
 
     return Scaffold(
       backgroundColor: softWhite,
+      extendBodyBehindAppBar: true, 
       appBar: AppBar(
-        backgroundColor: softWhite,
+        backgroundColor: softWhite.withOpacity(0.75), 
         elevation: 0,
         scrolledUnderElevation: 0,
         automaticallyImplyLeading: false,
+        flexibleSpace: ClipRect(
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 12, sigmaY: 12), 
+            child: Container(color: Colors.transparent),
+          ),
+        ),
         title: Row(
           children: [
             buildLogo(size: 32),
@@ -283,6 +374,36 @@ class _DashboardPageState extends State<DashboardPage> {
           ],
         ),
         actions: [
+          // SMART BELL ICON
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              IconButton(
+                icon: Icon(Icons.notifications_outlined, color: forestDark, size: 28),
+                onPressed: () {
+                  HapticFeedback.lightImpact(); 
+                  Navigator.pushNamed(context, '/notifications').then((_) {
+                    _checkUnreadNotifications();
+                  });
+                },
+              ),
+              if (_hasUnreadNotifications)
+                Positioned(
+                  right: 12,
+                  top: 12,
+                  child: Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: softWhite, width: 2),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(width: 4),
           Padding(
             padding: const EdgeInsets.only(right: 20),
             child: Container(
@@ -298,13 +419,13 @@ class _DashboardPageState extends State<DashboardPage> {
         ],
       ),
       body: _isLoading
-        ? Center(child: CircularProgressIndicator(color: forestMed))
+        ? _buildSkeletonLoader() 
         : RefreshIndicator(
             onRefresh: _fetchUserData,
             color: forestMed,
             backgroundColor: Colors.white,
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+              padding: EdgeInsets.only(top: kToolbarHeight + MediaQuery.of(context).padding.top + 20, left: 24, right: 24, bottom: 20),
               physics: const AlwaysScrollableScrollPhysics(),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -360,7 +481,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         subtitle: isConnected ? 'View physician' : 'Requires Clinic', 
                         route: '/my_doctor',
                         isLocked: !isConnected,
-                        onLockedTap: () => _showNotificationPopup("Please connect to a clinic first to view your doctor.", customIcon: Icons.lock_outline),
+                        onLockedTap: () {
+                          HapticFeedback.heavyImpact(); 
+                          _showNotificationPopup("Please connect to a clinic first to view your doctor.", customIcon: Icons.lock_outline);
+                        },
                       ),
                       _HoverActionCard(
                         icon: Icons.medication_outlined, 
@@ -368,7 +492,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         subtitle: isConnected ? 'Track doses' : 'Requires Clinic', 
                         route: '/meds',
                         isLocked: !isConnected,
-                        onLockedTap: () => _showNotificationPopup("Your doctor needs to prescribe a treatment plan before you can use the diary.", customIcon: Icons.lock_outline),
+                        onLockedTap: () {
+                          HapticFeedback.heavyImpact();
+                          _showNotificationPopup("Your doctor needs to prescribe a treatment plan before you can use the diary.", customIcon: Icons.lock_outline);
+                        },
                       ),
                       _HoverActionCard(
                         icon: Icons.calendar_month_outlined, 
@@ -376,7 +503,10 @@ class _DashboardPageState extends State<DashboardPage> {
                         subtitle: 'View appointments', 
                         route: '/followup',
                         isLocked: !isConnected,
-                        onLockedTap: () => _showNotificationPopup("Clinic verification required to view appointments.", customIcon: Icons.lock_outline),
+                        onLockedTap: () {
+                          HapticFeedback.heavyImpact();
+                          _showNotificationPopup("Clinic verification required to view appointments.", customIcon: Icons.lock_outline);
+                        },
                       ),
                       _HoverActionCard(
                         icon: Icons.menu_book_rounded, 
@@ -402,10 +532,8 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  // --- NEW: ROADMAP WIDGET ---
+  // --- ROADMAP WIDGET ---
   Widget _buildTreatmentRoadmap(bool hasAssessed, bool isConnected, bool isPending) {
-    int currentStep = isConnected ? 3 : (hasAssessed ? 2 : 1);
-
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -438,7 +566,7 @@ class _DashboardPageState extends State<DashboardPage> {
               _buildStepIndicator(
                 title: "Treat", 
                 isActive: isConnected, 
-                isDone: false, // Completes at end of program
+                isDone: false, 
                 icon: Icons.healing
               ),
             ],
@@ -486,15 +614,14 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildLine({required bool isActive}) {
     return Expanded(
       child: Container(
-        margin: const EdgeInsets.only(bottom: 24), // visually align with center of circles
+        margin: const EdgeInsets.only(bottom: 24), 
         height: 2,
         color: isActive ? paleGreen : Colors.grey.shade200,
       ),
     );
   }
 
-  // --- WIDGETS ---
-  // MODIFIED to include the QR Scan Button
+  // --- CARDS ---
   Widget _buildConnectCard() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -534,13 +661,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 width: 48,
                 child: ElevatedButton(
                   onPressed: () async {
-                    // Navigate to the scanner page and wait for a result
+                    HapticFeedback.lightImpact(); 
                     final scannedCode = await Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const QRScannerPage()),
                     );
-                    
-                    // If the user scanned something successfully, submit it!
                     if (scannedCode != null && scannedCode is String) {
                       _submitClinicCode(scannedCode);
                     }
@@ -653,7 +778,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 }
 
-// --- HOVER ACTION CARD (UPDATED WITH LOCK) ---
+// --- HOVER ACTION CARD ---
 class _HoverActionCard extends StatefulWidget {
   final IconData icon;
   final String title;
@@ -704,9 +829,14 @@ class _HoverActionCardState extends State<_HoverActionCard> {
         child: Material(
           color: Colors.transparent,
           child: InkWell(
-            onTap: widget.isLocked 
-                ? widget.onLockedTap 
-                : () => Navigator.pushNamed(context, widget.route),
+            onTap: () {
+              HapticFeedback.selectionClick(); 
+              if (widget.isLocked && widget.onLockedTap != null) {
+                widget.onLockedTap!();
+              } else if (!widget.isLocked) {
+                Navigator.pushNamed(context, widget.route);
+              }
+            },
             borderRadius: BorderRadius.circular(24),
             child: Padding(
               padding: const EdgeInsets.all(20),
