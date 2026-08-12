@@ -960,7 +960,7 @@ class _MedsPageState extends State<MedsPage> {
                   ],
                 ),
               ],
-            ),
+            ),  
           ),
         ); 
       },
