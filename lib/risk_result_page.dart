@@ -72,20 +72,20 @@ class _RiskResultPageState extends State<RiskResultPage> {
   // Helper for dynamic recommendations
   Map<String, String> _getRecommendation(String risk) {
     switch (risk) {
-      case "HIGH RISK":
+      case "Priority Consultation":
         return {
-          "title": "Immediate Action Required",
-          "desc": "Please visit your nearest health center for a GeneXpert/Sputum test immediately."
+          "title": "Recommended Next Steps",
+          "desc": "Your reported symptoms indicate that a professional medical evaluation is a good idea. We recommend using the facility locator to find a nearby health center for a routine screening."
         };
-      case "MEDIUM RISK":
+      case "Consultation Advised":
         return {
-          "title": "Consultation Advised",
-          "desc": "Schedule a check-up with a doctor to discuss your persistent symptoms."
+          "title": "Health Check Suggested",
+          "desc": "You have some persistent symptoms. Scheduling a routine check-up with a doctor can help give you peace of mind."
         };
       default:
         return {
-          "title": "Stay Vigilant",
-          "desc": "Continue to monitor your health and maintain a healthy lifestyle."
+          "title": "Healthy Habits",
+          "desc": "Continue to monitor your health and maintain a balanced, healthy lifestyle."
         };
     }
   }
@@ -93,13 +93,13 @@ class _RiskResultPageState extends State<RiskResultPage> {
   @override
   Widget build(BuildContext context) {
     final int score = (ModalRoute.of(context)!.settings.arguments as int? ?? 0);
-    String riskLabel = score >= 12 ? "HIGH RISK" : (score >= 6 ? "MEDIUM RISK" : "LOW RISK");
+    String riskLabel = score >= 12 ? "Priority Consultation" : (score >= 6 ? "Consultation Advised" : "Routine Monitoring");
     Color riskColor = score >= 12
-        ? const Color(0xFFD9534F) // Red for High
+        ? const Color(0xFFD9534F) // Red for High (Kept as requested)
         : (score >= 6 ? const Color(0xFFBC6C25) : const Color(0xFF606C38)); // Orange for Med, Green for Low
 
     // Define Logic Flags based on Risk
-    bool showFacilitiesBtn = (riskLabel == "HIGH RISK" || riskLabel == "MEDIUM RISK");
+    bool showFacilitiesBtn = (riskLabel == "Priority Consultation" || riskLabel == "Consultation Advised");
 
     final rec = _getRecommendation(riskLabel);
 
@@ -155,16 +155,17 @@ class _RiskResultPageState extends State<RiskResultPage> {
                             color: riskColor.withOpacity(0.1),
                             shape: BoxShape.circle,
                           ),
-                          child: Icon(Icons.health_and_safety_rounded,
+                          child: Icon(Icons.medical_services_rounded,
                               size: 70, color: riskColor),
                         ),
                         const SizedBox(height: 25),
                         Text(riskLabel,
+                            textAlign: TextAlign.center,
                             style: TextStyle(
-                                fontSize: 30,
+                                fontSize: 26,
                                 fontWeight: FontWeight.bold,
                                 color: riskColor,
-                                letterSpacing: 1.2)),
+                                letterSpacing: 1.0)),
                         const SizedBox(height: 10),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
@@ -222,7 +223,7 @@ class _RiskResultPageState extends State<RiskResultPage> {
                     children: [
                       Expanded(
                           child: _actionBtn(Icons.share_rounded, "Share",
-                              () => Share.share("My TB Risk is $riskLabel (Score: $score)"))),
+                              () => Share.share("My Assessment Result: $riskLabel (Score: $score)"))),
                       const SizedBox(width: 15),
                       Expanded(
                           child: _actionBtn(Icons.picture_as_pdf_rounded, "Save PDF",
