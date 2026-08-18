@@ -16,12 +16,24 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   bool _isLoading = false;
   bool _obscurePassword = true;
 
+  // Background Blob Controllers
   late AnimationController _blob1Controller;
   late AnimationController _blob2Controller;
+
+  // UI Staggered Entrance Controllers (Logo uses Hero now)
+  late AnimationController _entranceController;
+  late Animation<double> _textOpacity;
+  late Animation<Offset> _textSlide;
+  late Animation<double> _cardOpacity;
+  late Animation<Offset> _cardSlide;
+  late Animation<double> _buttonOpacity;
+  late Animation<Offset> _buttonSlide;
 
   @override
   void initState() {
     super.initState();
+    
+    // Background Blobs
     _blob1Controller = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 8),
@@ -31,6 +43,23 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
       vsync: this,
       duration: const Duration(seconds: 10),
     )..repeat(reverse: true);
+
+    // Staggered Entrance Setup - Slowed down to 2 seconds to match Hero flight
+    _entranceController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    );
+
+    _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.0, 0.4, curve: Curves.easeOut)));
+    _textSlide = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.0, 0.4, curve: Curves.easeOutCubic)));
+
+    _cardOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.3, 0.7, curve: Curves.easeOut)));
+    _cardSlide = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.3, 0.7, curve: Curves.easeOutCubic)));
+
+    _buttonOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.6, 1.0, curve: Curves.easeOut)));
+    _buttonSlide = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.6, 1.0, curve: Curves.easeOutCubic)));
+
+    _entranceController.forward();
   }
 
   @override
@@ -39,6 +68,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     _passwordController.dispose();
     _blob1Controller.dispose();
     _blob2Controller.dispose();
+    _entranceController.dispose();
     super.dispose();
   }
 
@@ -279,7 +309,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         )
                       ],
                     ),
-              ), // <-- Fixed: Added closing parenthesis for Padding
+              ),
             );
           },
         );
@@ -290,14 +320,12 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   Future<void> _signIn() async {
     setState(() => _isLoading = true);
     try {
-      // 1. Perform the Auth Login
       final response = await Supabase.instance.client.auth.signInWithPassword(
         email: _emailController.text.trim(),
         password: _passwordController.text.trim(),
       );
 
       if (response.user != null) {
-        // 2. FETCH ROLE: Check if this user is a Patient or Doctor
         final data = await Supabase.instance.client
             .from('profiles')
             .select('role')
@@ -308,7 +336,6 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             data != null && data['role'] != null ? data['role'] : 'patient';
 
         if (mounted) {
-          // 3. ROLE GATEKEEPER
           if (role == 'doctor') {
             await Supabase.instance.client.auth.signOut();
             _showNotificationPopup("Access Denied: Doctors must use the Web Portal.");
@@ -373,7 +400,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             },
           ),
 
-          // --- MAIN CONTENT ---
+          // --- MAIN CONTENT (STAGGERED ENTRANCE) ---
           SafeArea(
             child: Center(
               child: SingleChildScrollView(
@@ -383,136 +410,166 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    
+                    // --- HERO ANIMATED LOGO ---
                     Center(child: _buildLogo(size: 70)),
                     const SizedBox(height: 35),
                     
-                    Text(
-                      'Welcome back',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(
-                        fontSize: 28,
-                        fontWeight: FontWeight.w700,
-                        color: forestDark,
-                        letterSpacing: -0.5,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Sign in to your personalized tracker',
-                      textAlign: TextAlign.center,
-                      style: GoogleFonts.poppins(
-                        fontSize: 14,
-                        color: Colors.black45,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                    const SizedBox(height: 50),
-
-                    // Modern Input Cards
-                    Container(
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
-                            blurRadius: 20,
-                            offset: const Offset(0, 10),
-                          ),
-                        ],
-                      ),
-                      child: Padding(
-                        padding: const EdgeInsets.all(24.0),
+                    // TEXT ANIMATION
+                    FadeTransition(
+                      opacity: _textOpacity,
+                      child: SlideTransition(
+                        position: _textSlide,
                         child: Column(
                           children: [
-                            _buildTextField(
-                              label: "Email Address",
-                              hint: "you@example.com",
-                              controller: _emailController,
-                              icon: Icons.alternate_email_rounded,
-                              keyboardType: TextInputType.emailAddress,
-                            ),
-                            const SizedBox(height: 24),
-                            _buildTextField(
-                              label: "Password",
-                              hint: "••••••••",
-                              isPassword: true,
-                              controller: _passwordController,
-                              icon: Icons.lock_outline_rounded,
-                              obscureText: _obscurePassword,
-                              suffixIcon: IconButton(
-                                icon: Icon(
-                                  _obscurePassword
-                                      ? Icons.visibility_outlined
-                                      : Icons.visibility_off_outlined,
-                                  color: Colors.black38,
-                                  size: 20,
-                                ),
-                                onPressed: () {
-                                  setState(() {
-                                    _obscurePassword = !_obscurePassword;
-                                  });
-                                },
+                            Text(
+                              'Welcome back',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                fontSize: 28,
+                                fontWeight: FontWeight.w700,
+                                color: forestDark,
+                                letterSpacing: -0.5,
                               ),
                             ),
-                            const SizedBox(height: 12),
-                            Align(
-                              alignment: Alignment.centerRight,
-                              child: TextButton(
-                                onPressed: _showForgotPasswordDialog,
-                                style: TextButton.styleFrom(
-                                  padding: EdgeInsets.zero,
-                                  minimumSize: Size.zero,
-                                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                ),
-                                child: Text(
-                                  "Forgot password?",
-                                  style: GoogleFonts.poppins(
-                                    color: forestLight,
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                            const SizedBox(height: 8),
+                            Text(
+                              'Sign in to your personalized tracker',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.poppins(
+                                fontSize: 14,
+                                color: Colors.black45,
+                                fontWeight: FontWeight.w500,
                               ),
                             ),
                           ],
                         ),
                       ),
                     ),
+                    const SizedBox(height: 50),
+
+                    // INPUT CARD ANIMATION
+                    FadeTransition(
+                      opacity: _cardOpacity,
+                      child: SlideTransition(
+                        position: _cardSlide,
+                        child: Container(
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(24),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.03),
+                                blurRadius: 20,
+                                offset: const Offset(0, 10),
+                              ),
+                            ],
+                          ),
+                          child: Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Column(
+                              children: [
+                                _buildTextField(
+                                  label: "Email Address",
+                                  hint: "you@example.com",
+                                  controller: _emailController,
+                                  icon: Icons.alternate_email_rounded,
+                                  keyboardType: TextInputType.emailAddress,
+                                ),
+                                const SizedBox(height: 24),
+                                _buildTextField(
+                                  label: "Password",
+                                  hint: "••••••••",
+                                  isPassword: true,
+                                  controller: _passwordController,
+                                  icon: Icons.lock_outline_rounded,
+                                  obscureText: _obscurePassword,
+                                  suffixIcon: IconButton(
+                                    icon: Icon(
+                                      _obscurePassword
+                                          ? Icons.visibility_outlined
+                                          : Icons.visibility_off_outlined,
+                                      color: Colors.black38,
+                                      size: 20,
+                                    ),
+                                    onPressed: () {
+                                      setState(() {
+                                        _obscurePassword = !_obscurePassword;
+                                      });
+                                    },
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Align(
+                                  alignment: Alignment.centerRight,
+                                  child: TextButton(
+                                    onPressed: _showForgotPasswordDialog,
+                                    style: TextButton.styleFrom(
+                                      padding: EdgeInsets.zero,
+                                      minimumSize: Size.zero,
+                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                    ),
+                                    child: Text(
+                                      "Forgot password?",
+                                      style: GoogleFonts.poppins(
+                                        color: forestLight,
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
                     
                     const SizedBox(height: 40),
 
-                    _isLoading
-                        ? const Center(
-                            child: CircularProgressIndicator(color: forestDark))
-                        : _buildGradientButton(
-                            text: "Sign in",
-                            onPressed: _signIn,
-                            colors: [forestLight, forestDark],
-                          ),
-
-                    const SizedBox(height: 30),
-                    
-                    TextButton(
-                      onPressed: () => Navigator.pushNamed(context, '/signup'),
-                      style: TextButton.styleFrom(
-                        foregroundColor: forestLight,
-                        splashFactory: NoSplash.splashFactory,
-                      ),
-                      child: RichText(
-                        text: TextSpan(
-                          text: "Don't have an account? ",
-                          style: GoogleFonts.poppins(
-                            color: Colors.black45, 
-                            fontSize: 13,
-                            fontWeight: FontWeight.w500
-                          ),
+                    // BOTTOM BUTTONS ANIMATION
+                    FadeTransition(
+                      opacity: _buttonOpacity,
+                      child: SlideTransition(
+                        position: _buttonSlide,
+                        child: Column(
                           children: [
-                            TextSpan(
-                              text: "Create an Account",
-                              style: GoogleFonts.poppins(
-                                color: forestDark,
-                                fontWeight: FontWeight.w700,
+                            _isLoading
+                                ? const Center(
+                                    child: CircularProgressIndicator(color: forestDark))
+                                : _buildGradientButton(
+                                    text: "Sign in",
+                                    onPressed: _signIn,
+                                    colors: [forestLight, forestDark],
+                                  ),
+
+                            const SizedBox(height: 30),
+                            
+                            TextButton(
+                              onPressed: () => Navigator.pushNamed(context, '/signup'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: forestLight,
+                                splashFactory: NoSplash.splashFactory,
+                              ),
+                              child: RichText(
+                                text: TextSpan(
+                                  text: "Don't have an account? ",
+                                  style: GoogleFonts.poppins(
+                                    color: Colors.black45, 
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w500
+                                  ),
+                                  children: [
+                                    TextSpan(
+                                      text: "Create an Account",
+                                      style: GoogleFonts.poppins(
+                                        color: forestDark,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ],
@@ -633,26 +690,32 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  // Updated to load your custom logo with a modern rounded-square clipping
+  // Linked Hero Animation Logo
   Widget _buildLogo({required double size}) {
-    return Container(
-      width: size * 1.4,
-      height: size * 1.4,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+    return Hero(
+      tag: 'terea_hero_logo',
+      child: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          width: size * 1.4,
+          height: size * 1.4,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(24),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.15),
+                blurRadius: 20,
+                offset: const Offset(0, 10),
+              ),
+            ],
           ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
-        child: Image.asset(
-          'assets/NoBackgroundLogo.png',
-          fit: BoxFit.cover,
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(24),
+            child: Image.asset(
+              'assets/LogoNoBG.png',
+              fit: BoxFit.contain,
+            ),
+          ),
         ),
       ),
     );
