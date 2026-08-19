@@ -19,6 +19,7 @@ class _DashboardPageState extends State<DashboardPage> {
   // --- LOGIC ---
   final _supabase = Supabase.instance.client;
   String _username = "Patient";
+  String _userId = ""; // PATIENT ID STATE ADDED
   String? _avatarUrl;
   String _riskLevel = "Not yet assessed";
   bool _isLoading = true;
@@ -102,7 +103,7 @@ class _DashboardPageState extends State<DashboardPage> {
           .select('id')
           .eq('patient_id', user.id)
           .eq('is_read', false)
-          .eq('type', 'alert') // <-- THE FIX: Ignore doctor requests
+          .eq('type', 'alert')
           .limit(1);
 
       if (mounted) {
@@ -133,6 +134,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
         if (mounted) {
           setState(() {
+            _userId = user.id; // Assign ID
             _username = profileData['full_name'] ?? "Patient";
             _avatarUrl = profileData['avatar_url'];
             _riskLevel = profileData['risk_level'] ?? "Not yet assessed";
@@ -687,26 +689,51 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  // 3. PHYSICAL-TO-DIGITAL HANDSHAKE WIDGET ADDED HERE
   Widget _buildPendingCard() {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(color: Colors.amber.shade50, borderRadius: BorderRadius.circular(24), border: Border.all(color: Colors.amber.shade100)),
-      child: Row(
+      child: Column(
         children: [
-          Container(padding: const EdgeInsets.all(12), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: Icon(Icons.hourglass_empty_rounded, color: Colors.amber.shade700, size: 24)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text("Approval Pending", style: TextStyle(color: Colors.amber.shade900, fontWeight: FontWeight.bold, fontSize: 15)),
-                const SizedBox(height: 4),
-                Text("Waiting for your clinic to verify your request.", style: TextStyle(color: Colors.amber.shade700, fontSize: 12)),
-              ],
-            ),
+          Row(
+            children: [
+              Container(padding: const EdgeInsets.all(12), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: Icon(Icons.qr_code_scanner_rounded, color: Colors.amber.shade700, size: 24)),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text("Verification Pending", style: TextStyle(color: Colors.amber.shade900, fontWeight: FontWeight.bold, fontSize: 15)),
+                    const SizedBox(height: 4),
+                    Text("Show your Patient ID to the clinic admin to complete verification.", style: TextStyle(color: Colors.amber.shade700, fontSize: 12)),
+                  ],
+                ),
+              ),
+            ],
           ),
+          const SizedBox(height: 20),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              border: Border.all(color: Colors.amber.shade200, width: 2),
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              children: [
+                Text("YOUR PATIENT ID", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1.5)),
+                const SizedBox(height: 4),
+                SelectableText(
+                  _userId.length >= 8 ? _userId.substring(0, 8).toUpperCase() : _userId, 
+                  style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: forestDark, letterSpacing: 2)
+                ),
+              ]
+            )
+          )
         ],
-      ),
+      )
     );
   }
 
@@ -733,6 +760,73 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  // 4. SMART LOCK SCREEN WIDGET WITH PATIENT ID DISPLAY
+  Widget _buildLockedUI(bool hasAssessed, bool isVerified) {
+    String title = "Diary Locked";
+    String message = "To ensure your safety, the Medication Diary is locked until you complete your assessment and link with your doctor.";
+    IconData icon = Icons.lock_outline_rounded;
+
+    if (!hasAssessed) {
+      title = "Assessment Required";
+      message = "Please complete the Risk Assessment first to unlock your health features.";
+      icon = Icons.assignment_late_outlined;
+    } else if (!isVerified) {
+      title = "Verification Pending";
+      message = "Assessment complete! Please show your Patient ID to the clinic admin for verification.";
+      icon = Icons.qr_code_scanner_rounded;
+    }
+
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(30),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20), 
+              decoration: BoxDecoration(color: forestMed.withOpacity(0.1), shape: BoxShape.circle), 
+              child: Icon(icon, size: 50, color: forestDark)
+            ),
+            const SizedBox(height: 30),
+            Text(title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: forestDark)),
+            const SizedBox(height: 10),
+            Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+            
+            if (hasAssessed && !isVerified) ...[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: paleGreen, width: 2),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    Text("YOUR PATIENT ID", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1.5)),
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      _userId.length >= 8 ? _userId.substring(0, 8).toUpperCase() : _userId, 
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: forestDark, letterSpacing: 2)
+                    ),
+                  ]
+                )
+              )
+            ],
+
+            const SizedBox(height: 40),
+            ElevatedButton(
+                onPressed: () => Navigator.pushReplacementNamed(context, hasAssessed ? '/dashboard' : '/assess'), 
+                style: ElevatedButton.styleFrom(backgroundColor: forestDark, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), 
+                child: Text(hasAssessed ? "Go to Dashboard" : "Take Assessment", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+            ),
+          ],
+        ),
       ),
     );
   }

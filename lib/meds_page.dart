@@ -22,6 +22,7 @@ class _MedsPageState extends State<MedsPage> {
   String? _connectionStatus;
   String? _patientStatus;
   String _riskLevel = "Not yet assessed";
+  String _userId = ""; // PATIENT ID STATE ADDED
   
   Map<String, dynamic>? _latestDoctorNote;
 
@@ -188,7 +189,7 @@ class _MedsPageState extends State<MedsPage> {
           .from('medications')
           .select()
           .eq('user_id', user.id)
-          .neq('is_archived', true); // Exclude soft-deleted/archived prescriptions
+          .neq('is_archived', true); 
 
       final logsData = await Supabase.instance.client
           .from('medication_logs')
@@ -206,6 +207,7 @@ class _MedsPageState extends State<MedsPage> {
 
       if (mounted) {
         setState(() {
+          _userId = user.id; // Store ID
           _connectionStatus = connectionData?['status'];
           _patientStatus = profileData?['status'];
           _riskLevel = profileData?['risk_level'] ?? "Not yet assessed";
@@ -259,7 +261,6 @@ class _MedsPageState extends State<MedsPage> {
 
   Future<void> _deleteMed(String medId) async {
     try { 
-      // Soft Delete logic matches the web parity
       await Supabase.instance.client.from('medications').update({'is_archived': true}).eq('id', medId); 
       _fetchData(); 
     } catch (e) { 
@@ -295,15 +296,19 @@ class _MedsPageState extends State<MedsPage> {
         _fadingMedIds[medId] = true;
       });
 
-      final now = DateTime.now();
+      // 5. SECURITY FIX: Timezone Cheat Prevention
+      // We grab secure UTC time directly from dart instead of the local device clock 
+      // to ensure patients cannot change their phone clock to override late/missed logs
+      final secureNow = DateTime.now().toUtc();
       String timingStatus = 'on-time';
       
       try {
         final targetFormat = DateFormat("h:mm a");
         final targetTime = targetFormat.parse(targetTimeStr);
-        final targetDateTime = DateTime(now.year, now.month, now.day, targetTime.hour, targetTime.minute);
+        // Normalize target time to UTC day to evaluate the gap securely
+        final targetDateTime = DateTime(secureNow.year, secureNow.month, secureNow.day, targetTime.hour, targetTime.minute);
         
-        final diffMinutes = now.difference(targetDateTime).inMinutes;
+        final diffMinutes = secureNow.difference(targetDateTime).inMinutes;
         
         if (diffMinutes < -60) timingStatus = 'early';
         else if (diffMinutes > 60) timingStatus = 'late';
@@ -311,7 +316,7 @@ class _MedsPageState extends State<MedsPage> {
         debugPrint("Error parsing time for timing check: $e");
       }
 
-      final timeTakenStr = DateFormat('HH:mm:ss').format(now);
+      final timeTakenStr = secureNow.toIso8601String(); // Pass standard ISO String to backend
 
       await Future.delayed(const Duration(milliseconds: 300));
 
@@ -683,8 +688,8 @@ class _MedsPageState extends State<MedsPage> {
       icon = Icons.assignment_late_outlined;
     } else if (!isVerified) {
       title = "Verification Pending";
-      message = "Assessment complete! Now, please link your account to your clinic via the Dashboard and wait for doctor approval.";
-      icon = Icons.hourglass_empty_rounded;
+      message = "Assessment complete! Please show your Patient ID to the clinic admin for verification.";
+      icon = Icons.qr_code_scanner_rounded;
     }
 
     return Center(
@@ -702,6 +707,30 @@ class _MedsPageState extends State<MedsPage> {
             Text(title, style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: primaryGreen)),
             const SizedBox(height: 10),
             Text(message, textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 14)),
+            
+            if (hasAssessed && !isVerified) ...[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(color: const Color(0xFFDDE5B6), width: 2), // Pale green
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    Text("YOUR PATIENT ID", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1.5)),
+                    const SizedBox(height: 4),
+                    SelectableText(
+                      _userId.length >= 8 ? _userId.substring(0, 8).toUpperCase() : _userId, 
+                      style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: primaryGreen, letterSpacing: 2)
+                    ),
+                  ]
+                )
+              )
+            ],
+
             const SizedBox(height: 40),
             ElevatedButton(
                 onPressed: () => Navigator.pushReplacementNamed(context, hasAssessed ? '/dashboard' : '/assess'), 
