@@ -571,7 +571,7 @@ class _SignUpPageState extends State<SignUpPage> {
                   child: DropdownButton<String>(
                     value: _selectedGender,
                     hint: Text("Select", style: GoogleFonts.poppins(fontSize: 14, color: Colors.black26)),
-                    icon: Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black38, size: 20),
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black38, size: 20),
                     isExpanded: true,
                     dropdownColor: Colors.white,
                     borderRadius: BorderRadius.circular(16),
@@ -676,7 +676,6 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  // Updated to match the NoBackgroundLogo.png style from login_page.dart
   Widget _buildLogo({required double size}) {
     return Container(
       width: size * 1.4,
@@ -694,7 +693,7 @@ class _SignUpPageState extends State<SignUpPage> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(24),
         child: Image.asset(
-          'assets/NoBackgroundLogo.png',
+          'assets/LogoNoBG.png',
           fit: BoxFit.cover,
         ),
       ),

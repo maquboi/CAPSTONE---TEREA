@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:file_picker/file_picker.dart';
+import 'shared_widgets.dart'; // REQUIRED to access isEnglishNotifier
 
 // --- 9. SETTINGS PAGE ---
 class SettingsPage extends StatefulWidget {
@@ -18,9 +19,9 @@ class _SettingsPageState extends State<SettingsPage> {
   bool _isLoading = true;
 
   // Theme Palette
-  final Color primaryGreen = const Color(0xFF2D3B1E); // Dark Forest
-  final Color accentGreen = const Color(0xFF606C38);  // Olive
-  final Color lightBg = const Color(0xFFF9F9F7);      // Off-white background
+  final Color primaryGreen = const Color(0xFF2D3B1E); 
+  final Color accentGreen = const Color(0xFF606C38);  
+  final Color lightBg = const Color(0xFFF9F9F7);      
   final Color surfaceWhite = Colors.white;
 
   @override
@@ -29,7 +30,7 @@ class _SettingsPageState extends State<SettingsPage> {
     _loadUserProfile();
   }
 
-  // --- DATA LOGIC (Unchanged) ---
+  // --- DATA LOGIC ---
   Future<void> _loadUserProfile() async {
     try {
       final user = _supabase.auth.currentUser;
@@ -54,23 +55,23 @@ class _SettingsPageState extends State<SettingsPage> {
     }
   }
 
-  Future<void> _updateUsername() async {
+  Future<void> _updateUsername(bool isEnglish) async {
     final controller = TextEditingController(text: _username);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: surfaceWhite,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: Text("Update Username", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
+        title: Text(isEnglish ? "Update Username" : "I-update ang Pangalan", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
         content: TextField(
           controller: controller,
           decoration: InputDecoration(
-            hintText: "Enter new username",
+            hintText: isEnglish ? "Enter new username" : "Ilagay ang bagong pangalan",
             focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: accentGreen)),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text("Cancel", style: TextStyle(color: Colors.grey[600]))),
+          TextButton(onPressed: () => Navigator.pop(context), child: Text(isEnglish ? "Cancel" : "Kanselahin", style: TextStyle(color: Colors.grey[600]))),
           ElevatedButton(
             onPressed: () async {
               final newName = controller.text.trim();
@@ -81,14 +82,14 @@ class _SettingsPageState extends State<SettingsPage> {
               }
             },
             style: ElevatedButton.styleFrom(backgroundColor: accentGreen, elevation: 0),
-            child: const Text("Save", style: TextStyle(color: Colors.white)),
+            child: Text(isEnglish ? "Save" : "I-save", style: const TextStyle(color: Colors.white)),
           )
         ],
       ),
     );
   }
 
-  Future<void> _uploadPhoto() async {
+  Future<void> _uploadPhoto(bool isEnglish) async {
     try {
       FilePickerResult? result = await FilePicker.platform.pickFiles(
         type: FileType.image,
@@ -103,7 +104,7 @@ class _SettingsPageState extends State<SettingsPage> {
       final fileName = '$userId/profile_${DateTime.now().millisecondsSinceEpoch}.png';
 
       if (fileBytes != null) {
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Uploading photo...")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? "Uploading photo..." : "Ina-upload ang litrato...")));
 
         await _supabase.storage.from('avatars').uploadBinary(
           fileName,
@@ -117,16 +118,16 @@ class _SettingsPageState extends State<SettingsPage> {
 
         setState(() => _avatarUrl = publicUrl);
         
-        if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Photo updated!")));
+        if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? "Photo updated!" : "Na-update na ang litrato!")));
       }
     } catch (e) {
       debugPrint('Upload failed: $e');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text("Upload failed. Check Storage permissions.")));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(isEnglish ? "Upload failed. Check Storage permissions." : "Bigo ang pag-upload.")));
     }
   }
 
-  // --- LEGAL OVERLAYS FOR PRESENTATION & DEFENSE ---
-  void _showPrivacyPolicy() {
+  // --- LEGAL OVERLAYS ---
+  void _showPrivacyPolicy(bool isEnglish) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -167,7 +168,7 @@ class _SettingsPageState extends State<SettingsPage> {
             ElevatedButton(
               onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(backgroundColor: primaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 16)),
-              child: const Text("Understand & Accept", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: Text(isEnglish ? "Understand & Accept" : "Naiintindihan Ko", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -175,7 +176,7 @@ class _SettingsPageState extends State<SettingsPage> {
     );
   }
 
-  void _showAboutTEREA() {
+  void _showAboutTEREA(bool isEnglish) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -222,7 +223,7 @@ class _SettingsPageState extends State<SettingsPage> {
               child: OutlinedButton(
                 onPressed: () => Navigator.pop(context),
                 style: OutlinedButton.styleFrom(side: BorderSide(color: primaryGreen), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 16)),
-                child: Text("Close Window", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
+                child: Text(isEnglish ? "Close Window" : "Isara", style: TextStyle(color: primaryGreen, fontWeight: FontWeight.bold)),
               ),
             ),
           ],
@@ -248,53 +249,67 @@ class _SettingsPageState extends State<SettingsPage> {
   // --- UI BUILD ---
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: lightBg,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        centerTitle: true,
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen, size: 20),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text('Settings', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20)),
-      ),
-      body: _isLoading 
-        ? Center(child: CircularProgressIndicator(color: accentGreen))
-        : SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Column(
-              children: [
-                _buildModernProfileCard(),
-                const SizedBox(height: 30),
-                _buildSettingsGroup("General", [
-                  _buildSettingsTile(Icons.person_outline_rounded, "Edit Username", onTap: _updateUsername),
-                  _buildSettingsTile(Icons.notifications_none_rounded, "Notifications", 
-                      trailing: Switch(
-                        value: true, 
-                        activeThumbColor: Colors.white, 
-                        activeTrackColor: accentGreen,
-                        onChanged: (v){}
-                      )),
-                  _buildSettingsTile(Icons.language_rounded, "Language", subtext: "English"),
-                ]),
-                const SizedBox(height: 25),
-                _buildSettingsGroup("Privacy & Support", [
-                  _buildSettingsTile(Icons.lock_outline_rounded, "Privacy Policy", onTap: _showPrivacyPolicy),
-                  _buildSettingsTile(Icons.help_outline_rounded, "Help Center"),
-                  _buildSettingsTile(Icons.info_outline_rounded, "About TEREA", onTap: _showAboutTEREA),
-                ]),
-                const SizedBox(height: 40),
-                _buildPrimaryButton(context, "Log Out", () => Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false)),
-                const SizedBox(height: 20),
-              ],
+    return ValueListenableBuilder<bool>(
+      valueListenable: isEnglishNotifier,
+      builder: (context, isEnglish, child) {
+        return Scaffold(
+          backgroundColor: lightBg,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            centerTitle: true,
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen, size: 20),
+              onPressed: () => Navigator.pop(context),
             ),
+            title: Text(isEnglish ? 'Settings' : 'Mga Setting', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20)),
           ),
+          body: _isLoading 
+            ? Center(child: CircularProgressIndicator(color: accentGreen))
+            : SingleChildScrollView(
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+                child: Column(
+                  children: [
+                    _buildModernProfileCard(isEnglish),
+                    const SizedBox(height: 30),
+                    _buildSettingsGroup(isEnglish ? "General" : "Pangkalahatan", [
+                      _buildSettingsTile(Icons.person_outline_rounded, isEnglish ? "Edit Username" : "I-edit ang Pangalan", onTap: () => _updateUsername(isEnglish)),
+                      
+                      // --- GLOBAL LANGUAGE TOGGLE ---
+                      _buildSettingsTile(
+                        Icons.language_rounded, 
+                        isEnglish ? "Language" : "Wika", 
+                        subtext: isEnglish ? "English" : "Filipino",
+                        trailing: Switch(
+                          value: isEnglishNotifier.value,
+                          activeThumbColor: Colors.white,
+                          activeTrackColor: accentGreen,
+                          inactiveThumbColor: Colors.white,
+                          inactiveTrackColor: Colors.grey.shade400,
+                          onChanged: (bool value) {
+                            // Update the global notifier
+                            isEnglishNotifier.value = value;
+                          },
+                        ),
+                      ),
+                    ]),
+                    const SizedBox(height: 25),
+                    _buildSettingsGroup(isEnglish ? "Privacy & Support" : "Privacy at Suporta", [
+                      _buildSettingsTile(Icons.lock_outline_rounded, isEnglish ? "Privacy Policy" : "Patakaran sa Privacy", onTap: () => _showPrivacyPolicy(isEnglish)),
+                      _buildSettingsTile(Icons.info_outline_rounded, isEnglish ? "About TEREA" : "Tungkol sa TEREA", onTap: () => _showAboutTEREA(isEnglish)),
+                    ]),
+                    const SizedBox(height: 40),
+                    _buildPrimaryButton(context, isEnglish ? "Log Out" : "Mag-log Out", () => Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false)),
+                    const SizedBox(height: 20),
+                  ],
+                ),
+              ),
+        );
+      }
     );
   }
 
-  Widget _buildModernProfileCard() {
+  Widget _buildModernProfileCard(bool isEnglish) {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
@@ -319,7 +334,7 @@ class _SettingsPageState extends State<SettingsPage> {
               Positioned(
                 bottom: 0, right: 0,
                 child: GestureDetector(
-                  onTap: _uploadPhoto,
+                  onTap: () => _uploadPhoto(isEnglish),
                   child: Container(
                     padding: const EdgeInsets.all(6),
                     decoration: BoxDecoration(

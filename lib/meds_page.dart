@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart'; 
+import 'shared_widgets.dart'; // REQUIRED to access isEnglishNotifier
 
 class MedsPage extends StatefulWidget {
   const MedsPage({super.key});
@@ -43,8 +44,7 @@ class _MedsPageState extends State<MedsPage> {
     _setupRealtimeListener();
   }
 
-  // --- MODERN CENTERED POPUP ANIMATION ---
-  void _showNotificationPopup(String message, {bool isSuccess = false}) {
+  void _showNotificationPopup(String message, String titleStr, {bool isSuccess = false}) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
@@ -77,7 +77,7 @@ class _MedsPageState extends State<MedsPage> {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    isSuccess ? "Success" : "Notice",
+                    titleStr,
                     style: const TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
@@ -231,21 +231,21 @@ class _MedsPageState extends State<MedsPage> {
     }
   }
 
-  String _getCurrentPhase() {
+  String _getCurrentPhase(bool isEnglish) {
     if (_patientStatus == 'cured' || _patientStatus == 'treatment_completed') {
-      return "Post-Care Archival"; 
+      return isEnglish ? "Post-Care Archival" : "Tapos na ang Gamutan"; 
     }
     
-    if (_treatmentStartDate == null) return "Phase Not Set";
+    if (_treatmentStartDate == null) return isEnglish ? "Phase Not Set" : "Wala Pang Phase";
     final daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays;
-    return daysPassed <= 60 ? "Intensive Phase" : "Continuation Phase";
+    return daysPassed <= 60 ? (isEnglish ? "Intensive Phase" : "Intensive Phase") : (isEnglish ? "Continuation Phase" : "Continuation Phase");
   }
 
-  void _handleAddNewMed() {
-    _showMedDialog();
+  void _handleAddNewMed(bool isEnglish) {
+    _showMedDialog(isEnglish);
   }
 
-  Future<void> _saveMed({String? medId, required String name, required String dosage, required String time, required DateTime start, required DateTime end}) async {
+  Future<void> _saveMed(bool isEnglish, {String? medId, required String name, required String dosage, required String time, required DateTime start, required DateTime end}) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
     final medData = {'user_id': user.id, 'name': name, 'dosage': dosage, 'time': time, 'start_date': start.toIso8601String(), 'end_date': end.toIso8601String(), 'is_taken': false};
@@ -255,21 +255,21 @@ class _MedsPageState extends State<MedsPage> {
       _fetchData();
     } catch (e) { 
       debugPrint("Error saving med: $e"); 
-      if (mounted) _showNotificationPopup("Error saving medication: $e");
+      if (mounted) _showNotificationPopup(isEnglish ? "Error saving medication: $e" : "Error sa pag-save: $e", "Error");
     }
   }
 
-  Future<void> _deleteMed(String medId) async {
+  Future<void> _deleteMed(String medId, bool isEnglish) async {
     try { 
       await Supabase.instance.client.from('medications').update({'is_archived': true}).eq('id', medId); 
       _fetchData(); 
     } catch (e) { 
       debugPrint("Error deleting med: $e"); 
-      if (mounted) _showNotificationPopup("Error deleting medication: $e");
+      if (mounted) _showNotificationPopup(isEnglish ? "Error deleting medication: $e" : "Error sa pagbura: $e", "Error");
     }
   }
 
-  Future<void> _toggleMed(bool isCurrentlyTaken, String medId, String targetTimeStr) async {
+  Future<void> _toggleMed(bool isCurrentlyTaken, String medId, String targetTimeStr, bool isEnglish) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
@@ -289,23 +289,19 @@ class _MedsPageState extends State<MedsPage> {
         _fetchData();
       } catch (e) { 
         debugPrint("Error deleting log: $e"); 
-        if (mounted) _showNotificationPopup("Error updating status: $e");
+        if (mounted) _showNotificationPopup(isEnglish ? "Error updating status: $e" : "Error sa pag-update: $e", "Error");
       }
     } else {
       setState(() {
         _fadingMedIds[medId] = true;
       });
 
-      // 5. SECURITY FIX: Timezone Cheat Prevention
-      // We grab secure UTC time directly from dart instead of the local device clock 
-      // to ensure patients cannot change their phone clock to override late/missed logs
       final secureNow = DateTime.now().toUtc();
       String timingStatus = 'on-time';
       
       try {
         final targetFormat = DateFormat("h:mm a");
         final targetTime = targetFormat.parse(targetTimeStr);
-        // Normalize target time to UTC day to evaluate the gap securely
         final targetDateTime = DateTime(secureNow.year, secureNow.month, secureNow.day, targetTime.hour, targetTime.minute);
         
         final diffMinutes = secureNow.difference(targetDateTime).inMinutes;
@@ -316,7 +312,7 @@ class _MedsPageState extends State<MedsPage> {
         debugPrint("Error parsing time for timing check: $e");
       }
 
-      final timeTakenStr = secureNow.toIso8601String(); // Pass standard ISO String to backend
+      final timeTakenStr = secureNow.toIso8601String(); 
 
       await Future.delayed(const Duration(milliseconds: 300));
 
@@ -344,13 +340,13 @@ class _MedsPageState extends State<MedsPage> {
           setState(() {
             _optimisticTakenMeds.remove('${medId}_$dateStr');
           });
-          _showNotificationPopup("Failed to log medication: $e");
+          _showNotificationPopup(isEnglish ? "Failed to log medication: $e" : "Bigo sa pag-log ng gamot: $e", "Error");
         }
       }
     }
   }
 
-  void _showMedDialog({Map<String, dynamic>? existingMed}) async {
+  void _showMedDialog(bool isEnglish, {Map<String, dynamic>? existingMed}) async {
     final nameController = TextEditingController(text: existingMed?['name']);
     final dosageController = TextEditingController(text: existingMed?['dosage']);
     String selectedTime = existingMed?['time'] ?? "08:00 AM";
@@ -364,7 +360,7 @@ class _MedsPageState extends State<MedsPage> {
           backgroundColor: surfaceWhite, 
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)), 
           title: Text(
-            existingMed == null ? "Add Medication" : "Edit Details", 
+            existingMed == null ? (isEnglish ? "Add Medication" : "Magdagdag ng Gamot") : (isEnglish ? "Edit Details" : "I-edit ang Detalye"), 
             style: TextStyle(color: primaryGreen, fontWeight: FontWeight.w700)
           ), 
           content: SingleChildScrollView(
@@ -374,7 +370,7 @@ class _MedsPageState extends State<MedsPage> {
                 TextField(
                   controller: nameController, 
                   decoration: InputDecoration(
-                    labelText: "Medicine Name", 
+                    labelText: isEnglish ? "Medicine Name" : "Pangalan ng Gamot", 
                     labelStyle: TextStyle(color: accentGreen), 
                     focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: accentGreen))
                   )
@@ -382,7 +378,7 @@ class _MedsPageState extends State<MedsPage> {
                 TextField(
                   controller: dosageController, 
                   decoration: InputDecoration(
-                    labelText: "Dosage (e.g. 500mg)", 
+                    labelText: isEnglish ? "Dosage (e.g. 500mg)" : "Dosis (hal. 500mg)", 
                     labelStyle: TextStyle(color: accentGreen), 
                     focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: accentGreen))
                   )
@@ -390,7 +386,7 @@ class _MedsPageState extends State<MedsPage> {
                 const SizedBox(height: 15), 
                 _buildDialogTile(
                   icon: Icons.access_time_rounded, 
-                  title: "Reminder Time", 
+                  title: isEnglish ? "Reminder Time" : "Oras ng Paalala", 
                   value: selectedTime, 
                   onTap: () async { 
                     TimeOfDay? picked = await showTimePicker(context: context, initialTime: TimeOfDay.now()); 
@@ -399,7 +395,7 @@ class _MedsPageState extends State<MedsPage> {
                 ), 
                 _buildDialogTile(
                   icon: Icons.calendar_today_rounded, 
-                  title: "Treatment Duration", 
+                  title: isEnglish ? "Treatment Duration" : "Haba ng Gamutan", 
                   value: "${DateFormat('MMM d').format(startDate)} - ${DateFormat('MMM d').format(endDate)}", 
                   onTap: () async { 
                     DateTimeRange? picked = await showDateRangePicker(
@@ -421,7 +417,7 @@ class _MedsPageState extends State<MedsPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context), 
-              child: Text("Cancel", style: TextStyle(color: Colors.grey[600]))
+              child: Text(isEnglish ? "Cancel" : "Kanselahin", style: TextStyle(color: Colors.grey[600]))
             ), 
             ElevatedButton(
               style: ElevatedButton.styleFrom(
@@ -431,6 +427,7 @@ class _MedsPageState extends State<MedsPage> {
               ), 
               onPressed: () { 
                 _saveMed(
+                  isEnglish,
                   medId: existingMed?['id']?.toString(), 
                   name: nameController.text, 
                   dosage: dosageController.text, 
@@ -440,7 +437,7 @@ class _MedsPageState extends State<MedsPage> {
                 ); 
                 Navigator.pop(context); 
               }, 
-              child: const Text("Save Task", style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600))
+              child: Text(isEnglish ? "Save Task" : "I-save", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600))
             )
           ],
         ),
@@ -454,66 +451,71 @@ class _MedsPageState extends State<MedsPage> {
 
   @override
   Widget build(BuildContext context) {
-    bool hasTakenAssessment = _riskLevel != "Not yet assessed";
+    bool hasTakenAssessment = _riskLevel != "Not yet assessed" && _riskLevel != "Hindi pa nasusuri";
     bool isVerifiedByDoctor = _connectionStatus == 'active';
     bool isUnlocked = hasTakenAssessment && isVerifiedByDoctor;
-    
     bool isCured = _patientStatus == 'cured' || _patientStatus == 'treatment_completed';
 
-    return Scaffold(
-      backgroundColor: lightBg,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent, 
-        elevation: 0, 
-        leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen), 
-          onPressed: () => Navigator.of(context).pop()
-        ), 
-        title: Text('', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20)),
-        actions: [
-          if (isUnlocked)
-            IconButton(
-              icon: Icon(_showHistoryLog ? Icons.assignment_rounded : Icons.history_toggle_off_rounded, color: primaryGreen),
-              tooltip: "View Logs History",
-              onPressed: () => setState(() => _showHistoryLog = !_showHistoryLog),
-            )
-        ],
-      ),
-      
-      body: _isLoading 
-        ? Center(child: CircularProgressIndicator(color: accentGreen)) 
-        : isUnlocked 
-            ? _showHistoryLog ? _buildHistoryLogsContent() : _buildUnlockedContent() 
-            : _buildLockedUI(hasTakenAssessment, isVerifiedByDoctor),
+    // WRAP ENTIRE SCAFFOLD IN VALUELISTENABLEBUILDER
+    return ValueListenableBuilder<bool>(
+      valueListenable: isEnglishNotifier,
+      builder: (context, isEnglish, child) {
+        return Scaffold(
+          backgroundColor: lightBg,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent, 
+            elevation: 0, 
+            leading: IconButton(
+              icon: Icon(Icons.arrow_back_ios_new_rounded, color: primaryGreen), 
+              onPressed: () => Navigator.of(context).pop()
+            ), 
+            title: Text('', style: TextStyle(fontWeight: FontWeight.w800, color: primaryGreen, fontSize: 20)),
+            actions: [
+              if (isUnlocked)
+                IconButton(
+                  icon: Icon(_showHistoryLog ? Icons.assignment_rounded : Icons.history_toggle_off_rounded, color: primaryGreen),
+                  tooltip: isEnglish ? "View Logs History" : "Tingnan ang Kasaysayan",
+                  onPressed: () => setState(() => _showHistoryLog = !_showHistoryLog),
+                )
+            ],
+          ),
+          
+          body: _isLoading 
+            ? Center(child: CircularProgressIndicator(color: accentGreen)) 
+            : isUnlocked 
+                ? _showHistoryLog ? _buildHistoryLogsContent(isEnglish) : _buildUnlockedContent(isEnglish) 
+                : _buildLockedUI(hasTakenAssessment, isVerifiedByDoctor, isEnglish),
 
-      floatingActionButton: (isUnlocked && !_showHistoryLog && !isCured)
-        ? FloatingActionButton(backgroundColor: primaryGreen, onPressed: _handleAddNewMed, child: const Icon(Icons.add, color: Colors.white))
-        : null,
+          floatingActionButton: (isUnlocked && !_showHistoryLog && !isCured)
+            ? FloatingActionButton(backgroundColor: primaryGreen, onPressed: () => _handleAddNewMed(isEnglish), child: const Icon(Icons.add, color: Colors.white))
+            : null,
+        );
+      }
     );
   }
 
-  Widget _buildUnlockedContent() {
+  Widget _buildUnlockedContent(bool isEnglish) {
     return Column(
       children: [
-        _buildModernHeader(), 
-        if (_latestDoctorNote != null) _buildDoctorAdviceCard(),
+        _buildModernHeader(isEnglish), 
+        if (_latestDoctorNote != null) _buildDoctorAdviceCard(isEnglish),
         const SizedBox(height: 15), 
-        _buildViewSelector(), 
+        _buildViewSelector(isEnglish), 
         const SizedBox(height: 15), 
-        _buildCalendarSection(), 
+        _buildCalendarSection(isEnglish), 
         const SizedBox(height: 20), 
         Expanded(
           child: Container(
             width: double.infinity, 
             decoration: BoxDecoration(color: surfaceWhite, borderRadius: const BorderRadius.only(topLeft: Radius.circular(30), topRight: Radius.circular(30)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -5))]), 
-            child: _buildMedList()
+            child: _buildMedList(isEnglish)
           ),
         ),
       ],
     );
   }
 
-  Widget _buildHistoryLogsContent() {
+  Widget _buildHistoryLogsContent(bool isEnglish) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Column(
@@ -523,11 +525,11 @@ class _MedsPageState extends State<MedsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text("Medication Compliance Logs", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryGreen)),
+              Text(isEnglish ? "Medication Compliance Logs" : "Kasaysayan ng Pag-inom ng Gamot", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: primaryGreen)),
               TextButton.icon(
                 onPressed: () => setState(() => _showHistoryLog = false),
                 icon: Icon(Icons.arrow_back, size: 16, color: accentGreen),
-                label: Text("Back Diary", style: TextStyle(color: accentGreen, fontWeight: FontWeight.bold)),
+                label: Text(isEnglish ? "Back Diary" : "Bumalik", style: TextStyle(color: accentGreen, fontWeight: FontWeight.bold)),
               )
             ],
           ),
@@ -540,7 +542,7 @@ class _MedsPageState extends State<MedsPage> {
                       children: [
                         Icon(Icons.history_edu_rounded, size: 50, color: Colors.grey[300]),
                         const SizedBox(height: 10),
-                        Text("No recorded logs history yet.", style: TextStyle(color: Colors.grey[500])),
+                        Text(isEnglish ? "No recorded logs history yet." : "Wala pang naitalang kasaysayan.", style: TextStyle(color: Colors.grey[500])),
                       ],
                     ),
                   )
@@ -567,7 +569,7 @@ class _MedsPageState extends State<MedsPage> {
                             child: Icon(Icons.check_circle_rounded, color: accentGreen, size: 22),
                           ),
                           title: Text(medName, style: TextStyle(fontWeight: FontWeight.bold, color: primaryGreen)),
-                          subtitle: Text("$dosage • Taken at ${log['time_taken']} \n$formattedLogDay", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                          subtitle: Text(isEnglish ? "$dosage • Taken at ${log['time_taken']} \n$formattedLogDay" : "$dosage • Ininom noong ${log['time_taken']} \n$formattedLogDay", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
                           isThreeLine: true,
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -594,7 +596,7 @@ class _MedsPageState extends State<MedsPage> {
     );
   }
 
-  Widget _buildDoctorAdviceCard() {
+  Widget _buildDoctorAdviceCard(bool isEnglish) {
     return Container(
       padding: const EdgeInsets.all(16),
       margin: const EdgeInsets.fromLTRB(20, 15, 20, 0),
@@ -615,7 +617,7 @@ class _MedsPageState extends State<MedsPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text("Doctor's Recent Advice", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: accentGreen, letterSpacing: 0.5)),
+                Text(isEnglish ? "Doctor's Recent Advice" : "Payo ng Doktor", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w800, color: accentGreen, letterSpacing: 0.5)),
                 const SizedBox(height: 4),
                 Text(
                   _latestDoctorNote!['note_text'], 
@@ -631,7 +633,10 @@ class _MedsPageState extends State<MedsPage> {
     );
   }
 
-  Widget _buildViewSelector() {
+  Widget _buildViewSelector(bool isEnglish) {
+    final List<String> types = isEnglish ? ['Day', 'Week', 'Month'] : ['Araw', 'Linggo', 'Buwan'];
+    final List<String> originalTypes = ['Day', 'Week', 'Month'];
+    
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Container(
@@ -641,11 +646,14 @@ class _MedsPageState extends State<MedsPage> {
           borderRadius: BorderRadius.circular(25),
         ),
         child: Row(
-          children: ['Day', 'Week', 'Month'].map((type) {
-            bool isSelected = _viewType == type;
+          children: List.generate(types.length, (index) {
+            String displayType = types[index];
+            String internalValue = originalTypes[index];
+            bool isSelected = _viewType == internalValue;
+            
             return Expanded(
               child: GestureDetector(
-                onTap: () => setState(() => _viewType = type),
+                onTap: () => setState(() => _viewType = internalValue),
                 behavior: HitTestBehavior.opaque,
                 child: AnimatedContainer(
                   duration: const Duration(milliseconds: 250),
@@ -660,7 +668,7 @@ class _MedsPageState extends State<MedsPage> {
                   ),
                   child: Center(
                     child: Text(
-                      type,
+                      displayType,
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
@@ -671,24 +679,24 @@ class _MedsPageState extends State<MedsPage> {
                 ),
               ),
             );
-          }).toList(),
+          }),
         ),
       ),
     );
   }
 
-  Widget _buildLockedUI(bool hasAssessed, bool isVerified) {
-    String title = "Diary Locked";
-    String message = "To ensure your safety, the Medication Diary is locked until you complete your assessment and link with your doctor.";
+  Widget _buildLockedUI(bool hasAssessed, bool isVerified, bool isEnglish) {
+    String title = isEnglish ? "Diary Locked" : "Naka-lock ang Talaan";
+    String message = isEnglish ? "To ensure your safety, the Medication Diary is locked until you complete your assessment and link with your doctor." : "Para sa iyong kaligtasan, naka-lock ang Talaan ng Gamot hanggang makumpleto mo ang pagsusuri at makakonekta sa iyong doktor.";
     IconData icon = Icons.lock_outline_rounded;
 
     if (!hasAssessed) {
-      title = "Assessment Required";
-      message = "Please complete the Risk Assessment first to unlock your health features.";
+      title = isEnglish ? "Assessment Required" : "Kailangan ng Pagsusuri";
+      message = isEnglish ? "Please complete the Risk Assessment first to unlock your health features." : "Mangyaring kumpletuhin muna ang Pagsusuri ng Panganib upang magamit ang iyong mga health feature.";
       icon = Icons.assignment_late_outlined;
     } else if (!isVerified) {
-      title = "Verification Pending";
-      message = "Assessment complete! Please show your Patient ID to the clinic admin for verification.";
+      title = isEnglish ? "Verification Pending" : "Naghihintay ng Pagpapatunay";
+      message = isEnglish ? "Assessment complete! Please show your Patient ID to the clinic admin for verification." : "Tapos na ang pagsusuri! Ipakita ang iyong Patient ID sa admin ng klinika para sa pagpapatunay.";
       icon = Icons.qr_code_scanner_rounded;
     }
 
@@ -720,7 +728,7 @@ class _MedsPageState extends State<MedsPage> {
                 ),
                 child: Column(
                   children: [
-                    Text("YOUR PATIENT ID", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1.5)),
+                    Text(isEnglish ? "YOUR PATIENT ID" : "ANG IYONG PATIENT ID", style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.grey.shade500, letterSpacing: 1.5)),
                     const SizedBox(height: 4),
                     SelectableText(
                       _userId.length >= 8 ? _userId.substring(0, 8).toUpperCase() : _userId, 
@@ -735,7 +743,7 @@ class _MedsPageState extends State<MedsPage> {
             ElevatedButton(
                 onPressed: () => Navigator.pushReplacementNamed(context, hasAssessed ? '/dashboard' : '/assess'), 
                 style: ElevatedButton.styleFrom(backgroundColor: primaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), 
-                child: Text(hasAssessed ? "Go to Dashboard" : "Take Assessment", style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
+                child: Text(hasAssessed ? (isEnglish ? "Go to Dashboard" : "Pumunta sa Dashboard") : (isEnglish ? "Take Assessment" : "Magsimula ng Pagsusuri"), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold))
             ),
           ],
         ),
@@ -743,7 +751,7 @@ class _MedsPageState extends State<MedsPage> {
     );
   }
 
-  Widget _buildModernHeader() { 
+  Widget _buildModernHeader(bool isEnglish) { 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 20), 
       padding: const EdgeInsets.all(20), 
@@ -755,19 +763,19 @@ class _MedsPageState extends State<MedsPage> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text('Medication Diary', style: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
+              Text(isEnglish ? 'Medication Diary' : 'Talaan ng Gamot', style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700)),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)),
                 child: Text(
-                  _getCurrentPhase(), 
+                  _getCurrentPhase(isEnglish), 
                   style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)
                 ),
               ),
             ],
           ), 
           const SizedBox(height: 4), 
-          Text('Keep track of your TB treatment journey.', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13)), 
+          Text(isEnglish ? 'Keep track of your TB treatment journey.' : 'Subaybayan ang iyong paggamot sa TB.', style: TextStyle(color: Colors.white.withOpacity(0.8), fontSize: 13)), 
           const SizedBox(height: 15), 
           Row(
             children: [
@@ -781,7 +789,7 @@ class _MedsPageState extends State<MedsPage> {
     ); 
   }
 
-  Widget _buildCalendarSection() { 
+  Widget _buildCalendarSection(bool isEnglish) { 
     if (_viewType == 'Month') return SizedBox(height: 350, child: _buildMonthGrid()); 
     if (_viewType == 'Day') return Center(child: SizedBox(height: 90, child: _buildDateCard(_selectedDate, true))); 
     return SizedBox(height: 90, child: _buildWeekStrip()); 
@@ -819,12 +827,9 @@ class _MedsPageState extends State<MedsPage> {
     ); 
   }
 
-  // --- MODIFIED: ADDED VISUAL ADHERENCE TICK-BOX INDICATOR ---
   Widget _buildDateCard(DateTime date, bool isSelected, {bool compact = false}) { 
     String formattedDate = DateFormat('yyyy-MM-dd').format(date);
     
-    // Check if the patient has taken ANY medicine on this specific date.
-    // This perfectly mimics the daily grid checkmark on the DOH TB DOTS Form 4
     bool isCompletedDay = myMedLogs.any((log) {
       String dbDate = log['log_date'].toString();
       if (dbDate.length >= 10) dbDate = dbDate.substring(0, 10);
@@ -860,7 +865,6 @@ class _MedsPageState extends State<MedsPage> {
                 )
               ],
             ),
-            // The DOH Form 4 Checkmark overlay
             if (isCompletedDay)
               Positioned(
                 bottom: compact ? 2 : 4,
@@ -877,7 +881,7 @@ class _MedsPageState extends State<MedsPage> {
     ); 
   }
 
-  Widget _buildMedList() { 
+  Widget _buildMedList(bool isEnglish) { 
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
     final filteredMeds = myMeds.where((med) { 
@@ -911,7 +915,7 @@ class _MedsPageState extends State<MedsPage> {
         children: [
           Icon(Icons.spa_outlined, size: 60, color: Colors.grey[300]), 
           const SizedBox(height: 10), 
-          Text("Rest easy. No uncompleted meds today.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))
+          Text(isEnglish ? "Rest easy. No uncompleted meds today." : "Walang hindi pa naiinom na gamot ngayon.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))
         ],
       ); 
     }
@@ -941,7 +945,7 @@ class _MedsPageState extends State<MedsPage> {
                 GestureDetector(
                   onTap: (isFading || _patientStatus == 'cured' || _patientStatus == 'treatment_completed') 
                       ? null 
-                      : () => _toggleMed(false, medIdStr, med['time'].toString()), 
+                      : () => _toggleMed(false, medIdStr, med['time'].toString(), isEnglish), 
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 200),
                     padding: const EdgeInsets.all(10), 
@@ -980,12 +984,12 @@ class _MedsPageState extends State<MedsPage> {
                 PopupMenuButton<String>(
                   icon: const Icon(Icons.more_vert, color: Colors.grey), 
                   onSelected: (value) { 
-                    if (value == 'edit') _showMedDialog(existingMed: med); 
-                    if (value == 'delete') _deleteMed(medIdStr); 
+                    if (value == 'edit') _showMedDialog(isEnglish, existingMed: med); 
+                    if (value == 'delete') _deleteMed(medIdStr, isEnglish); 
                   }, 
                   itemBuilder: (context) => [
-                    const PopupMenuItem(value: 'edit', child: Text('Edit')), 
-                    const PopupMenuItem(value: 'delete', child: Text('Delete', style: TextStyle(color: Colors.red)))
+                    PopupMenuItem(value: 'edit', child: Text(isEnglish ? 'Edit' : 'I-edit')), 
+                    PopupMenuItem(value: 'delete', child: Text(isEnglish ? 'Delete' : 'Burahin', style: const TextStyle(color: Colors.red)))
                   ],
                 ),
               ],

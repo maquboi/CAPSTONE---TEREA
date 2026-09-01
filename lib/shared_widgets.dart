@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 // --- SHARED UI COMPONENTS ---
 
+final ValueNotifier<bool> isEnglishNotifier = ValueNotifier<bool>(true);
+
 Widget buildLogo({double size = 80}) {
   return Container(
     width: size, height: size,
