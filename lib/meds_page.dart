@@ -312,7 +312,7 @@ class _MedsPageState extends State<MedsPage> {
         debugPrint("Error parsing time for timing check: $e");
       }
 
-      final timeTakenStr = secureNow.toIso8601String(); 
+      final timeTakenStr = DateFormat('HH:mm:ss').format(secureNow); 
 
       await Future.delayed(const Duration(milliseconds: 300));
 
