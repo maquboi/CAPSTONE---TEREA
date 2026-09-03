@@ -1,5 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart'; // Needed for TextInputFormatter
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:image_picker/image_picker.dart';
@@ -19,27 +20,171 @@ class _SignUpPageState extends State<SignUpPage> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
+  // --- FORM SELECTIONS ---
   String? _selectedGender;
   final List<String> _genderOptions = ['Male', 'Female', 'Other'];
+
+  String _selectedBarangay = 'Maduya';
+  final List<String> _carmonaBarangays = [
+    'Bancal',
+    'Cabilang Baybay',
+    'Lantic',
+    'Mabuhay',
+    'Maduya',
+    'Milagrosa',
+    'Poblacion 1',
+    'Poblacion 2',
+    'Poblacion 3',
+    'Poblacion 4',
+    'Poblacion 5',
+    'Poblacion 6',
+    'Poblacion 7',
+    'Poblacion 8',
+  ];
+
+  // --- INLINE ERROR STATES ---
+  String? _nameError;
+  String? _ageError;
+  String? _genderError;
+  String? _contactError;
+  String? _emailError;
+  String? _passwordError;
+  String? _idError;
+
+  bool _obscurePassword = true;
   bool _isLoading = false;
 
-  // --- NEW ATTACHMENT & TERMS STATE (WEB SAFE) ---
-  XFile? _idAttachment; 
+  // --- ATTACHMENT & TERMS STATE ---
+  XFile? _idAttachment;
+  Uint8List? _idAttachmentBytes; // Web & Native compatible image preview
   bool _acceptedTerms = false;
   final ImagePicker _picker = ImagePicker();
 
-  // --- IMAGE PICKER LOGIC ---
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _ageController.dispose();
+    _contactController.dispose();
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
+  // --- IMAGE PICKER LOGIC WITH PREVIEW ---
   Future<void> _pickImage() async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(source: ImageSource.gallery);
+      final XFile? pickedFile = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 1200,
+        maxHeight: 1200,
+        imageQuality: 85,
+      );
       if (pickedFile != null) {
+        final bytes = await pickedFile.readAsBytes();
         setState(() {
           _idAttachment = pickedFile;
+          _idAttachmentBytes = bytes;
+          _idError = null;
         });
       }
     } catch (e) {
       _showNotificationPopup("Failed to pick image: $e");
     }
+  }
+
+  // --- LIVE VALIDATION ON SUBMISSION ---
+  bool _validateForm() {
+    bool isValid = true;
+    setState(() {
+      // 1. Name Validation
+      final name = _nameController.text.trim();
+      final nameRegex = RegExp(r"^[a-zA-ZñÑáéíóúÁÉÍÓÚ\s\.\-]+$");
+      if (name.isEmpty) {
+        _nameError = "Full name is required";
+        isValid = false;
+      } else if (name.length < 2 || name.length > 60) {
+        _nameError = "Name must be between 2 and 60 characters";
+        isValid = false;
+      } else if (!nameRegex.hasMatch(name)) {
+        _nameError = "Name can only contain letters, dots, and hyphens";
+        isValid = false;
+      } else {
+        _nameError = null;
+      }
+
+      // 2. Age Validation
+      final age = int.tryParse(_ageController.text.trim());
+      if (_ageController.text.trim().isEmpty) {
+        _ageError = "Age required";
+        isValid = false;
+      } else if (age == null || age < 1 || age > 115) {
+        _ageError = "1 - 115 yrs";
+        isValid = false;
+      } else {
+        _ageError = null;
+      }
+
+      // 3. Gender Validation
+      if (_selectedGender == null) {
+        _genderError = "Select gender";
+        isValid = false;
+      } else {
+        _genderError = null;
+      }
+
+      // 4. Contact Number Validation
+      final contact = _contactController.text.trim();
+      if (contact.isEmpty) {
+        _contactError = "Contact number is required";
+        isValid = false;
+      } else if (!contact.startsWith('09') || contact.length != 11) {
+        _contactError = "Must start with '09' and be 11 digits (e.g. 09123456789)";
+        isValid = false;
+      } else {
+        _contactError = null;
+      }
+
+      // 5. Email Validation
+      final email = _emailController.text.trim();
+      final emailRegex = RegExp(r"^[\w-\.]+@([\w-]+\.)+[\w-]{2,4}$");
+      if (email.isEmpty) {
+        _emailError = "Email address is required";
+        isValid = false;
+      } else if (!emailRegex.hasMatch(email)) {
+        _emailError = "Please enter a valid email format";
+        isValid = false;
+      } else {
+        _emailError = null;
+      }
+
+      // 6. Password Validation
+      final password = _passwordController.text;
+      if (password.isEmpty) {
+        _passwordError = "Password is required";
+        isValid = false;
+      } else if (password.length < 10) {
+        _passwordError = "Password must be at least 10 characters long";
+        isValid = false;
+      } else {
+        _passwordError = null;
+      }
+
+      // 7. Proof of Residence
+      if (_idAttachment == null) {
+        _idError = "Please attach a valid ID proving Carmona residence";
+        isValid = false;
+      } else {
+        _idError = null;
+      }
+
+      // 8. Terms Agreement
+      if (!_acceptedTerms) {
+        isValid = false;
+        _showNotificationPopup("Please review and agree to the Terms & Conditions to proceed.");
+      }
+    });
+
+    return isValid;
   }
 
   // --- TERMS & CONDITIONS DIALOG ---
@@ -88,57 +233,6 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  // --- VALIDATION LOGIC ---
-  bool _validateInputs() {
-    final nameRegex = RegExp(r'^[a-zA-Z ]+$');
-    if (_nameController.text.isEmpty ||
-        _nameController.text.length > 50 ||
-        !nameRegex.hasMatch(_nameController.text)) {
-      _showNotificationPopup("Name must contain letters only and be under 50 characters.");
-      return false;
-    }
-
-    final age = int.tryParse(_ageController.text);
-    if (age == null || age < 1 || age > 100) {
-      _showNotificationPopup("Age must be a valid number between 1 and 100.");
-      return false;
-    }
-
-    if (!_contactController.text.startsWith('09') ||
-        _contactController.text.length != 11) {
-      _showNotificationPopup("Contact number must start with '09' and be 11 digits.");
-      return false;
-    }
-
-    if (!_emailController.text.contains('@')) {
-      _showNotificationPopup("Please enter a valid email address.");
-      return false;
-    }
-
-    if (_passwordController.text.length < 10) {
-      _showNotificationPopup("Password must be at least 10 characters long.");
-      return false;
-    }
-
-    if (_selectedGender == null) {
-      _showNotificationPopup("Please select a gender.");
-      return false;
-    }
-
-    if (_idAttachment == null) {
-      _showNotificationPopup("Please attach a valid ID to confirm your residence in Carmona.");
-      return false;
-    }
-
-    if (!_acceptedTerms) {
-      _showNotificationPopup("You must acknowledge the terms and conditions to proceed.");
-      return false;
-    }
-
-    return true;
-  }
-
-  // --- MODERN CENTERED POPUP ANIMATION ---
   void _showNotificationPopup(String message) {
     showGeneralDialog(
       context: context,
@@ -177,7 +271,7 @@ class _SignUpPageState extends State<SignUpPage> {
                     style: GoogleFonts.poppins(
                       fontWeight: FontWeight.bold,
                       fontSize: 18,
-                      color: const Color(0xFF2D3B1E), // forestDark matching
+                      color: const Color(0xFF2D3B1E),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -195,7 +289,7 @@ class _SignUpPageState extends State<SignUpPage> {
                     width: double.infinity,
                     child: ElevatedButton(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF606C38), // forestLight matching
+                        backgroundColor: const Color(0xFF606C38),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         padding: const EdgeInsets.symmetric(vertical: 14),
                         elevation: 0,
@@ -221,7 +315,7 @@ class _SignUpPageState extends State<SignUpPage> {
   }
 
   Future<void> _handleSignUp() async {
-    if (!_validateInputs()) return;
+    if (!_validateForm()) return;
 
     setState(() => _isLoading = true);
     try {
@@ -231,36 +325,33 @@ class _SignUpPageState extends State<SignUpPage> {
       );
 
       if (authResponse.user != null) {
-        // --- PROCESS WORKFLOW: UPLOAD ID ATTACHMENT ---
         String? idUrl;
-        if (_idAttachment != null) {
+        if (_idAttachment != null && _idAttachmentBytes != null) {
           final fileExt = _idAttachment!.name.split('.').last;
           final fileName = '${authResponse.user!.id}_id.$fileExt';
           
-          final bytes = await _idAttachment!.readAsBytes();
-          
           await Supabase.instance.client.storage
               .from('id_attachments')
-              .uploadBinary(fileName, bytes);
+              .uploadBinary(fileName, _idAttachmentBytes!);
               
           idUrl = Supabase.instance.client.storage
               .from('id_attachments')
               .getPublicUrl(fileName);
         }
 
-        // --- PROCESS WORKFLOW: AUTOMATIC PATIENT ASSIGNMENT ---
         await Supabase.instance.client.from('profiles').insert({
           'id': authResponse.user!.id,
           'full_name': _nameController.text.trim(),
           'age': _ageController.text.trim(),
           'gender': _selectedGender,
+          'barangay': _selectedBarangay,
           'contact_number': _contactController.text.trim(),
           'email': _emailController.text.trim(),
           'role': 'patient', 
           'id_attachment_url': idUrl, 
         });
 
-        if (mounted) Navigator.pushNamed(context, '/dashboard');
+        if (mounted) Navigator.pushReplacementNamed(context, '/dashboard');
       }
     } catch (e) {
       if (mounted) {
@@ -293,7 +384,6 @@ class _SignUpPageState extends State<SignUpPage> {
       ),
       body: Stack(
         children: [
-          // Soft decorative background shapes
           Positioned(
             top: -50,
             right: -50,
@@ -310,28 +400,27 @@ class _SignUpPageState extends State<SignUpPage> {
               physics: const BouncingScrollPhysics(),
               child: Column(
                 children: [
-                  // Header Section (Modernized text, matched spacing)
                   Padding(
-                    padding: const EdgeInsets.only(top: 20, bottom: 30, left: 24, right: 24),
+                    padding: const EdgeInsets.only(top: 15, bottom: 25, left: 24, right: 24),
                     child: Column(
                       children: [
-                        _buildLogo(size: 70), // Updated to size 70 to match Login
-                        const SizedBox(height: 20),
+                        _buildLogo(size: 70),
+                        const SizedBox(height: 16),
                         Text(
-                          'Creation of Account',
+                          'Create Account',
                           style: GoogleFonts.poppins(
-                            fontSize: 32,
+                            fontSize: 30,
                             fontWeight: FontWeight.w700,
                             color: forestDark,
                             letterSpacing: -0.5,
                           ),
                         ),
-                        const SizedBox(height: 8),
+                        const SizedBox(height: 6),
                         Text(
-                          'Create your Patient Identity',
+                          'Register for Carmona TB-DOTS Care',
                           style: GoogleFonts.poppins(
                             color: Colors.black45,
-                            fontSize: 14,
+                            fontSize: 13,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -341,14 +430,14 @@ class _SignUpPageState extends State<SignUpPage> {
 
                   // Form Card
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 40),
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 40),
                     child: Container(
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(24),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.03),
+                            color: Colors.black.withOpacity(0.04),
                             blurRadius: 20,
                             offset: const Offset(0, 10),
                           ),
@@ -359,123 +448,244 @@ class _SignUpPageState extends State<SignUpPage> {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           Text(
-                            'Create Account',
-                            style: GoogleFonts.poppins(fontSize: 18, fontWeight: FontWeight.w700, color: forestDark),
-                          ),
-                          const SizedBox(height: 24),
-
-                          _buildTextField(
-                            label: "Full Name",
-                            hint: "Juan Dela Cruz",
-                            controller: _nameController,
-                            icon: Icons.person_outline_rounded,
-                            inputType: TextInputType.name,
-                            formatters: [
-                              LengthLimitingTextInputFormatter(50),
-                              FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z ]')),
-                            ],
+                            'Personal Information',
+                            style: GoogleFonts.poppins(fontSize: 16, fontWeight: FontWeight.w700, color: forestDark),
                           ),
                           const SizedBox(height: 20),
 
+                          // 1. Full Name
+                          _buildModernInputField(
+                            label: "Full Name",
+                            hint: "e.g. Juan Dela Cruz",
+                            controller: _nameController,
+                            icon: Icons.person_outline_rounded,
+                            errorText: _nameError,
+                            inputType: TextInputType.name,
+                            onChanged: (val) {
+                              if (_nameError != null) setState(() => _nameError = null);
+                            },
+                          ),
+                          const SizedBox(height: 18),
+
+                          // 2. Age & Gender in 1 Row
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Expanded(
-                                child: _buildTextField(
+                                flex: 1,
+                                child: _buildModernInputField(
                                   label: "Age",
                                   hint: "25",
                                   controller: _ageController,
                                   icon: Icons.cake_outlined,
+                                  errorText: _ageError,
                                   inputType: TextInputType.number,
-                                  formatters: [
+                                  inputFormatters: [
                                     LengthLimitingTextInputFormatter(3),
                                     FilteringTextInputFormatter.digitsOnly,
                                   ],
+                                  onChanged: (val) {
+                                    if (_ageError != null) setState(() => _ageError = null);
+                                  },
                                 ),
                               ),
-                              const SizedBox(width: 16),
-                              Expanded(child: _buildGenderDropdown(forestDark, forestLight)),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                flex: 1,
+                                child: _buildGenderDropdown(forestDark, forestLight),
+                              ),
                             ],
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 18),
 
-                          _buildTextField(
+                          // 3. Carmona Barangay Selector
+                          _buildBarangayDropdown(forestDark, forestLight),
+                          const SizedBox(height: 18),
+
+                          // 4. Contact Number
+                          _buildModernInputField(
                             label: "Contact Number",
                             hint: "09123456789",
                             controller: _contactController,
                             icon: Icons.phone_android_outlined,
+                            errorText: _contactError,
                             inputType: TextInputType.phone,
-                            formatters: [
+                            inputFormatters: [
                               LengthLimitingTextInputFormatter(11),
                               FilteringTextInputFormatter.digitsOnly,
                             ],
+                            onChanged: (val) {
+                              if (_contactError != null) setState(() => _contactError = null);
+                            },
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 18),
 
-                          _buildTextField(
+                          // 5. Email Address
+                          _buildModernInputField(
                             label: "Email Address",
                             hint: "your.email@example.com",
                             controller: _emailController,
                             icon: Icons.alternate_email_rounded,
+                            errorText: _emailError,
                             inputType: TextInputType.emailAddress,
+                            onChanged: (val) {
+                              if (_emailError != null) setState(() => _emailError = null);
+                            },
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: 18),
 
-                          _buildTextField(
+                          // 6. Password with Visibility Toggle
+                          _buildModernInputField(
                             label: "Password",
                             hint: "Minimum 10 characters",
-                            isPassword: true,
                             controller: _passwordController,
                             icon: Icons.lock_outline_rounded,
+                            errorText: _passwordError,
+                            isPassword: true,
+                            obscureText: _obscurePassword,
+                            suffixIcon: IconButton(
+                              icon: Icon(
+                                _obscurePassword ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                                color: Colors.black38,
+                                size: 20,
+                              ),
+                              onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                            ),
+                            onChanged: (val) {
+                              if (_passwordError != null) setState(() => _passwordError = null);
+                            },
                           ),
                           const SizedBox(height: 24),
 
-                          // --- STYLED ID ATTACHMENT UPLOAD ---
-                          Text(
-                            "Proof of Residence (Carmona ID)", 
-                            style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.w600, fontSize: 13)
+                          // 7. Proof of Residence (Carmona ID Upload with Live Preview)
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Proof of Residence (Carmona ID)", 
+                                style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.w600, fontSize: 13)
+                              ),
+                              if (_idAttachment != null)
+                                GestureDetector(
+                                  onTap: _pickImage,
+                                  child: Text(
+                                    "Change", 
+                                    style: GoogleFonts.poppins(color: forestLight, fontWeight: FontWeight.bold, fontSize: 12)
+                                  ),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 8),
+
                           GestureDetector(
                             onTap: _pickImage,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+                              padding: const EdgeInsets.all(14),
                               decoration: BoxDecoration(
                                 color: const Color(0xFFF8F9FA),
                                 borderRadius: BorderRadius.circular(16),
-                                border: Border.all(color: _idAttachment != null ? forestLight : Colors.black.withOpacity(0.05), width: 1.5),
+                                border: Border.all(
+                                  color: _idError != null 
+                                      ? Colors.redAccent 
+                                      : (_idAttachment != null ? forestLight : Colors.black.withOpacity(0.08)),
+                                  width: 1.5,
+                                ),
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    _idAttachment != null ? Icons.check_circle_rounded : Icons.upload_file_rounded, 
-                                    color: _idAttachment != null ? forestLight : Colors.black38, 
-                                    size: 22
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: Text(
-                                      _idAttachment != null ? "ID Attached Successfully" : "Tap to upload ID photo",
-                                      style: GoogleFonts.poppins(
-                                        color: _idAttachment != null ? forestDark : Colors.black45, 
-                                        fontSize: 13,
-                                        fontWeight: _idAttachment != null ? FontWeight.w600 : FontWeight.w500
-                                      ),
+                              child: _idAttachmentBytes != null
+                                  ? Row(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(10),
+                                          child: Image.memory(
+                                            _idAttachmentBytes!,
+                                            width: 60,
+                                            height: 60,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "ID Photo Attached",
+                                                style: GoogleFonts.poppins(
+                                                  fontWeight: FontWeight.w700,
+                                                  fontSize: 13,
+                                                  color: forestDark,
+                                                ),
+                                              ),
+                                              const SizedBox(height: 2),
+                                              Text(
+                                                "Tap to replace photo",
+                                                style: GoogleFonts.poppins(
+                                                  fontSize: 11,
+                                                  color: Colors.black45,
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                        Icon(Icons.check_circle_rounded, color: forestLight, size: 22),
+                                      ],
+                                    )
+                                  : Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(10),
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            borderRadius: BorderRadius.circular(12),
+                                            border: Border.all(color: Colors.black.withOpacity(0.06)),
+                                          ),
+                                          child: const Icon(
+                                            Icons.upload_file_rounded,
+                                            color: Colors.black45,
+                                            size: 22,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 14),
+                                        Expanded(
+                                          child: Column(
+                                            crossAxisAlignment: CrossAxisAlignment.start,
+                                            children: [
+                                              Text(
+                                                "Upload ID / Barangay Certificate",
+                                                style: GoogleFonts.poppins(
+                                                  color: forestDark, 
+                                                  fontSize: 13, 
+                                                  fontWeight: FontWeight.w600
+                                                ),
+                                              ),
+                                              Text(
+                                                "JPG, PNG under 5MB",
+                                                style: GoogleFonts.poppins(fontSize: 11, color: Colors.black38),
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      ],
                                     ),
-                                  ),
-                                ],
-                              ),
                             ),
                           ),
+                          if (_idError != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6, left: 4),
+                              child: Text(
+                                _idError!,
+                                style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w500),
+                              ),
+                            ),
                           const SizedBox(height: 24),
 
-                          // --- INTERACTIVE TERMS AND CONDITIONS CHECKBOX ---
+                          // 8. Terms & Conditions Checkbox
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               SizedBox(
-                                height: 24,
-                                width: 24,
+                                height: 22,
+                                width: 22,
                                 child: Checkbox(
                                   value: _acceptedTerms,
                                   onChanged: (val) => setState(() => _acceptedTerms = val ?? false),
@@ -497,7 +707,7 @@ class _SignUpPageState extends State<SignUpPage> {
                                           text: "Terms & Conditions",
                                           style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.w700, decoration: TextDecoration.underline),
                                         ),
-                                        const TextSpan(text: " and confirm I am a resident of Carmona."),
+                                        const TextSpan(text: " and certify under penalty of perjury that I am a resident of Carmona, Cavite."),
                                       ],
                                     ),
                                   ),
@@ -505,19 +715,18 @@ class _SignUpPageState extends State<SignUpPage> {
                               ),
                             ],
                           ),
-                          const SizedBox(height: 32),
+                          const SizedBox(height: 30),
 
-                          // SUBMIT BUTTON
+                          // Submit Button
                           _isLoading
                               ? const Center(child: CircularProgressIndicator(color: forestDark))
-                              : _buildGradientButton("Create Account", _handleSignUp, [forestLight, forestDark]),
+                              : _buildGradientButton("Register as Patient", _handleSignUp, [forestLight, forestDark]),
                           
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 20),
                           
                           Center(
                             child: TextButton(
                               onPressed: () => Navigator.pop(context),
-                              style: TextButton.styleFrom(splashFactory: NoSplash.splashFactory),
                               child: RichText(
                                 text: TextSpan(
                                   text: "Already have an account? ",
@@ -545,62 +754,19 @@ class _SignUpPageState extends State<SignUpPage> {
     );
   }
 
-  // --- UI COMPONENTS ---
-  Widget _buildGenderDropdown(Color forestDark, Color forestLight) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          "Gender", 
-          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: forestDark, fontSize: 13)
-        ),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FA),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.black.withOpacity(0.05)),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.person_outline_rounded, color: Colors.black38, size: 20),
-              const SizedBox(width: 12),
-              Expanded(
-                child: DropdownButtonHideUnderline(
-                  child: DropdownButton<String>(
-                    value: _selectedGender,
-                    hint: Text("Select", style: GoogleFonts.poppins(fontSize: 14, color: Colors.black26)),
-                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black38, size: 20),
-                    isExpanded: true,
-                    dropdownColor: Colors.white,
-                    borderRadius: BorderRadius.circular(16),
-                    style: GoogleFonts.poppins(color: forestDark, fontSize: 14, fontWeight: FontWeight.w500),
-                    items: _genderOptions.map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value, 
-                        child: Text(value)
-                      );
-                    }).toList(),
-                    onChanged: (newValue) => setState(() => _selectedGender = newValue),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTextField({
+  // --- REUSABLE MODERN INPUT FIELD WITH INLINE ERROR NOTIFICATION ---
+  Widget _buildModernInputField({
     required String label,
     required String hint,
     required TextEditingController controller,
+    required IconData icon,
+    String? errorText,
     bool isPassword = false,
-    IconData? icon,
+    bool obscureText = false,
+    Widget? suffixIcon,
     TextInputType inputType = TextInputType.text,
-    List<TextInputFormatter>? formatters,
+    List<TextInputFormatter>? inputFormatters,
+    ValueChanged<String>? onChanged,
   }) {
     const Color forestDark = Color(0xFF2D3B1E);
 
@@ -611,26 +777,155 @@ class _SignUpPageState extends State<SignUpPage> {
           label, 
           style: GoogleFonts.poppins(color: forestDark, fontWeight: FontWeight.w600, fontSize: 13)
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
             color: const Color(0xFFF8F9FA),
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.black.withOpacity(0.05)),
+            border: Border.all(
+              color: errorText != null ? Colors.redAccent : Colors.black.withOpacity(0.08),
+              width: errorText != null ? 1.5 : 1.0,
+            ),
           ),
           child: TextField(
             controller: controller,
-            obscureText: isPassword,
+            obscureText: isPassword && obscureText,
             keyboardType: inputType,
-            inputFormatters: formatters,
+            inputFormatters: inputFormatters,
+            onChanged: onChanged,
             style: GoogleFonts.poppins(color: forestDark, fontSize: 14, fontWeight: FontWeight.w500),
             decoration: InputDecoration(
               hintText: hint,
-              hintStyle: GoogleFonts.poppins(fontSize: 14, color: Colors.black26),
-              prefixIcon: Icon(icon, color: Colors.black38, size: 20),
+              hintStyle: GoogleFonts.poppins(fontSize: 13, color: Colors.black26),
+              prefixIcon: Icon(icon, color: errorText != null ? Colors.redAccent : Colors.black38, size: 20),
+              suffixIcon: suffixIcon,
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+              contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
             ),
+          ),
+        ),
+        if (errorText != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 5, left: 4),
+            child: Text(
+              errorText,
+              style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w500),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildGenderDropdown(Color forestDark, Color forestLight) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          "Gender", 
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: forestDark, fontSize: 13)
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F9FA),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: _genderError != null ? Colors.redAccent : Colors.black.withOpacity(0.08),
+              width: _genderError != null ? 1.5 : 1.0,
+            ),
+          ),
+          child: DropdownButtonHideUnderline(
+            child: DropdownButton<String>(
+              value: _selectedGender,
+              hint: Text("Select", style: GoogleFonts.poppins(fontSize: 13, color: Colors.black26)),
+              icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black38, size: 20),
+              isExpanded: true,
+              dropdownColor: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+              style: GoogleFonts.poppins(color: forestDark, fontSize: 14, fontWeight: FontWeight.w500),
+              items: _genderOptions.map((String value) {
+                return DropdownMenuItem<String>(
+                  value: value, 
+                  child: Text(value)
+                );
+              }).toList(),
+              onChanged: (newValue) {
+                setState(() {
+                  _selectedGender = newValue;
+                  _genderError = null;
+                });
+              },
+            ),
+          ),
+        ),
+        if (_genderError != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 5, left: 4),
+            child: Text(
+              _genderError!,
+              style: GoogleFonts.poppins(color: Colors.redAccent, fontSize: 11, fontWeight: FontWeight.w500),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildBarangayDropdown(Color forestDark, Color forestLight) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(
+              "Barangay Residency", 
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w600, color: forestDark, fontSize: 13)
+            ),
+            const SizedBox(width: 4),
+            Text(
+              "(Carmona, Cavite)", 
+              style: GoogleFonts.poppins(fontWeight: FontWeight.w400, color: Colors.black38, fontSize: 11)
+            ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        Container(
+          height: 52,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF8F9FA),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: Colors.black.withOpacity(0.08)),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.location_on_outlined, color: Colors.black38, size: 20),
+              const SizedBox(width: 10),
+              Expanded(
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedBarangay,
+                    icon: const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.black38, size: 20),
+                    isExpanded: true,
+                    dropdownColor: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    style: GoogleFonts.poppins(color: forestDark, fontSize: 14, fontWeight: FontWeight.w600),
+                    items: _carmonaBarangays.map((String b) {
+                      return DropdownMenuItem<String>(
+                        value: b, 
+                        child: Text("Brgy. $b")
+                      );
+                    }).toList(),
+                    onChanged: (newBarangay) {
+                      if (newBarangay != null) {
+                        setState(() => _selectedBarangay = newBarangay);
+                      }
+                    },
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ],
@@ -639,19 +934,19 @@ class _SignUpPageState extends State<SignUpPage> {
 
   Widget _buildGradientButton(String text, VoidCallback onPressed, List<Color> colors) {
     return Container(
-      height: 58,
+      height: 54,
       decoration: BoxDecoration(
         gradient: LinearGradient(
           colors: colors,
           begin: Alignment.centerLeft,
           end: Alignment.centerRight,
         ),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(18),
         boxShadow: [
           BoxShadow(
-            color: colors.last.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
+            color: colors.last.withOpacity(0.28),
+            blurRadius: 18,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
@@ -659,7 +954,7 @@ class _SignUpPageState extends State<SignUpPage> {
         color: Colors.transparent,
         child: InkWell(
           onTap: onPressed,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(18),
           child: Center(
             child: Text(
               text, 
@@ -667,7 +962,7 @@ class _SignUpPageState extends State<SignUpPage> {
                 color: Colors.white, 
                 fontWeight: FontWeight.w600, 
                 fontSize: 15,
-                letterSpacing: 0.5,
+                letterSpacing: 0.3,
               )
             ),
           ),
@@ -678,20 +973,20 @@ class _SignUpPageState extends State<SignUpPage> {
 
   Widget _buildLogo({required double size}) {
     return Container(
-      width: size * 1.4,
-      height: size * 1.4,
+      width: size * 1.3,
+      height: size * 1.3,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.15),
-            blurRadius: 20,
-            offset: const Offset(0, 10),
+            color: Colors.black.withOpacity(0.12),
+            blurRadius: 16,
+            offset: const Offset(0, 8),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(24),
+        borderRadius: BorderRadius.circular(22),
         child: Image.asset(
           'assets/LogoNoBG.png',
           fit: BoxFit.cover,

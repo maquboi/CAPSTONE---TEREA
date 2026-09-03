@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:intl/intl.dart'; 
 
-//FOLLOWUP PAGE
 class FollowUpPage extends StatefulWidget {
   const FollowUpPage({super.key});
 
@@ -14,17 +13,18 @@ class _FollowUpPageState extends State<FollowUpPage> {
   final _supabase = Supabase.instance.client;
   bool _isLoading = true;
 
-  // CONNECTION STATE
+  // CONNECTION & CLINICAL STATE
   String? _connectionStatus;
   String? _patientStatus;
   String? _linkedDoctorId;
   String? _doctorName;
   DateTime? _treatmentStartDate; 
+  String? _tbRegimen;
 
   // DATA
-  int _streakDays = 0;
   List<Map<String, dynamic>> _doctorNotes = [];
   List<Map<String, dynamic>> _appointments = [];
+  String _noteFilterCategory = 'All';
   
   // CRUD INPUTS
   final TextEditingController _noteController = TextEditingController();
@@ -51,7 +51,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
     super.dispose();
   }
 
-  // --- MODERN CENTERED POPUP ANIMATION ---
   void _showNotificationPopup(String message, {bool isSuccess = false}) {
     showGeneralDialog(
       context: context,
@@ -132,7 +131,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  // --- REAL-TIME LISTENER ---
   void _setupRealtimeListener() {
     final user = _supabase.auth.currentUser;
     if (user == null) return;
@@ -163,23 +161,20 @@ class _FollowUpPageState extends State<FollowUpPage> {
       .subscribe();
   }
 
-  // --- INIT DATA ---
   Future<void> _checkConnectionAndLoad() async {
     try {
       final user = _supabase.auth.currentUser;
       if (user == null) return;
 
-      // 1. Check connection status (Handshake)
       final connectionData = await _supabase
           .from('connections')
           .select('status, doctor_id, profiles!fk_doctor(full_name)')
           .eq('patient_id', user.id)
           .maybeSingle();
 
-      // 2. Check treatment dates & status (Prescription / Cured State)
       final profileData = await _supabase
           .from('profiles')
-          .select('treatment_start_date, status') 
+          .select('treatment_start_date, status, tb_regimen') 
           .eq('id', user.id)
           .maybeSingle(); 
 
@@ -187,6 +182,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
         setState(() {
           _connectionStatus = connectionData?['status'];
           _patientStatus = profileData?['status'];
+          _tbRegimen = profileData?['tb_regimen'] ?? "6-Month DOTS";
 
           if (connectionData != null) {
             _linkedDoctorId = connectionData['doctor_id'];
@@ -205,10 +201,8 @@ class _FollowUpPageState extends State<FollowUpPage> {
         });
       }
 
-      // 3. Load content if unlocked (now requires active connection OR cured state)
-      if (_connectionStatus == 'active' || _patientStatus == 'cured') {
+      if (_connectionStatus == 'active' || _patientStatus == 'cured' || _patientStatus == 'treatment_completed') {
         await Future.wait([
-          _fetchStreak(),
           _fetchNotes(), 
           _fetchAppointments(),
         ]);
@@ -218,15 +212,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
-  }
-
-  // --- DATA FETCHING ---
-  Future<void> _fetchStreak() async {
-    try {
-      final userId = _supabase.auth.currentUser?.id;
-      final response = await _supabase.rpc('get_medication_streak', params: {'p_user_id': userId});
-      if (mounted) setState(() => _streakDays = response as int);
-    } catch (e) { debugPrint('Streak Error: $e'); }
   }
 
   Future<void> _fetchNotes() async {
@@ -251,7 +236,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
     } catch (e) { debugPrint('Appt Error: $e'); }
   }
 
-  // --- CRUD OPERATIONS ---
   Future<void> _addNote() async {
     if (_noteController.text.isEmpty) return;
     final text = _noteController.text;
@@ -261,6 +245,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
     try {
       await _supabase.from('doctor_notes').insert({'note_text': text, 'category': category, 'user_id': _supabase.auth.currentUser!.id, 'is_checked': false});
       _fetchNotes();
+      _showNotificationPopup("Note successfully sent to your doctor's queue.", isSuccess: true);
     } catch (e) { 
       debugPrint('Add Note Error: $e'); 
       if (mounted) _showNotificationPopup("Failed to add note: $e");
@@ -369,7 +354,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
     final isEditing = apptToEdit != null;
     
     final titleController = TextEditingController(text: isEditing ? (apptToEdit['title'] ?? "") : "Follow-up Checkup");
-    final locController = TextEditingController(text: isEditing ? (apptToEdit['location'] ?? "") : "");
+    final locController = TextEditingController(text: isEditing ? (apptToEdit['location'] ?? "") : "Carmona Health Center");
     
     DateTime? selectedDate = isEditing ? DateTime.tryParse(apptToEdit['appointment_date']) : null;
     TimeOfDay? selectedTime;
@@ -457,17 +442,16 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  // --- UI BUILD ---
   @override
   Widget build(BuildContext context) {
-    bool isUnlocked = _connectionStatus == 'active' || _patientStatus == 'cured';
+    bool isUnlocked = _connectionStatus == 'active' || _patientStatus == 'cured' || _patientStatus == 'treatment_completed';
 
     return Scaffold(
       backgroundColor: kWhite,
       appBar: AppBar(
         backgroundColor: kWhite, elevation: 0, centerTitle: true,
         leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: kPrimaryGreen, size: 20), onPressed: () => Navigator.of(context).pop()),
-        title: Text('Roadmap Milestone', style: TextStyle(fontWeight: FontWeight.w900, color: kPrimaryGreen, fontSize: 20)),
+        title: Text('Roadmap & Milestones', style: TextStyle(fontWeight: FontWeight.w900, color: kPrimaryGreen, fontSize: 20)),
       ),
       body: _isLoading 
         ? Center(child: CircularProgressIndicator(color: kSecondaryGreen)) 
@@ -476,7 +460,11 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   Widget _buildUnlockedContent() {
-    bool isCured = _patientStatus == 'cured';
+    bool isCured = _patientStatus == 'cured' || _patientStatus == 'treatment_completed';
+
+    final filteredNotes = _noteFilterCategory == 'All' 
+        ? _doctorNotes 
+        : _doctorNotes.where((n) => (n['category'] ?? 'Question') == _noteFilterCategory).toList();
 
     return SingleChildScrollView(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
@@ -497,24 +485,25 @@ class _FollowUpPageState extends State<FollowUpPage> {
                 children: [
                   Icon(Icons.verified_rounded, color: Colors.green.shade700, size: 40),
                   const SizedBox(height: 10),
-                  Text("TREATMENT COMPLETED", style: TextStyle(fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
+                  Text("POST-TREATMENT SURVEILLANCE", style: TextStyle(fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
                   const SizedBox(height: 5),
-                  Text("Congratulations! You are officially cleared. Please attend your scheduled post-treatment clearances below.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+                  Text("You have concluded active treatment. Please attend your scheduled 6-Month and 1-Year post-care clearances below.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
                 ],
-              )
+              ),
             )
           else
             _buildRecoveryRoadmap(), 
 
           const SizedBox(height: 25),
           
-          if (!isCured) _buildStreakCard(),
-          if (!isCured) const SizedBox(height: 35),
+          // --- REPLACED STREAK WITH DOH NTP CLINICAL TRAJECTORY STEPPER ---
+          if (!isCured) _buildClinicalTrajectoryCard(),
+          if (!isCured) const SizedBox(height: 30),
 
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(isCured ? "Post-Care clearanaces" : "Roadmap Milestones", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
+              Text(isCured ? "Post-Care Checkpoints" : "Roadmap Milestones", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
               if (!isCured)
                 GestureDetector(
                   onTap: () => _showAppointmentModal(),
@@ -546,16 +535,29 @@ class _FollowUpPageState extends State<FollowUpPage> {
           const SizedBox(height: 40),
           
           if (!isCured) ...[
-            Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
+                DropdownButton<String>(
+                  value: _noteFilterCategory,
+                  underline: const SizedBox(),
+                  icon: const Icon(Icons.filter_list_rounded, size: 16),
+                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimaryGreen),
+                  items: ['All', ..._categories].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                  onChanged: (val) => setState(() => _noteFilterCategory = val ?? 'All'),
+                )
+              ],
+            ),
             const SizedBox(height: 15),
             _buildNoteInputArea(), 
             const SizedBox(height: 25),
-            if (_doctorNotes.isEmpty) _buildEmptyState("No notes added yet."),
+            if (filteredNotes.isEmpty) _buildEmptyState("No notes matching filter."),
             ListView.builder(
               shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
-              itemCount: _doctorNotes.length,
+              itemCount: filteredNotes.length,
               itemBuilder: (context, index) {
-                final note = _doctorNotes[index];
+                final note = filteredNotes[index];
                 return InkWell(onLongPress: () => _editNoteDialog(note), child: _buildNoteTile(note, index));
               },
             ),
@@ -606,7 +608,6 @@ class _FollowUpPageState extends State<FollowUpPage> {
     );
   }
 
-  // --- UI COMPONENTS ---
   Widget _buildRecoveryRoadmap() {
     if (_treatmentStartDate == null) {
       return Container(
@@ -631,7 +632,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
           Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), 
+            Text("Treatment Progress", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), 
             Text("Started: ${DateFormat('MMM dd, yyyy').format(_treatmentStartDate!)}", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))
           ]), 
           Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(10)), child: Text("Month $month of 6", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kSecondaryGreen)))
@@ -641,6 +642,247 @@ class _FollowUpPageState extends State<FollowUpPage> {
         const SizedBox(height: 10), 
         Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("${(progress * 100).toInt()}% Complete", style: TextStyle(fontSize: 12, color: kPrimaryGreen, fontWeight: FontWeight.bold)), Text("${180 - daysPassed} days left", style: const TextStyle(fontSize: 11, color: Colors.grey))])
       ]));
+  }
+
+  // --- REPLACED STREAK CARD: MOBILE DOH NTP CLINICAL TRAJECTORY STEPPER ---
+  Widget _buildClinicalTrajectoryCard() {
+    final now = DateTime.now();
+    final elapsedDays = _treatmentStartDate != null 
+        ? now.difference(_treatmentStartDate!).inDays 
+        : 0;
+
+    final bool isIntensive = elapsedDays <= 60;
+    final String currentPhaseTitle = isIntensive ? "Intensive Phase" : "Continuation Phase";
+    final String currentDrugFocus = isIntensive ? "4-Drug HRZE Regimen" : "2-Drug HR Regimen";
+
+    final steps = [
+      {"title": "Day 1", "sub": "Initiation", "day": 0},
+      {"title": "Mo 2", "sub": "Conversion", "day": 60},
+      {"title": "Mo 5", "sub": "Mid-Check", "day": 150},
+      {"title": "Mo 6", "sub": "Clearance", "day": 180},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: kWhite,
+        borderRadius: BorderRadius.circular(25),
+        border: Border.all(color: kSecondaryGreen.withOpacity(0.2), width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          )
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: kSecondaryGreen.withOpacity(0.12),
+                      shape: BoxShape.circle,
+                    ),
+                    child: Icon(Icons.route_rounded, color: kSecondaryGreen, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        "DOH NTP Trajectory",
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w900,
+                          color: kPrimaryGreen,
+                        ),
+                      ),
+                      Text(
+                        "Clinical Care Protocol",
+                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isIntensive ? Colors.amber.shade50 : Colors.blue.shade50,
+                  border: Border.all(color: isIntensive ? Colors.amber.shade200 : Colors.blue.shade200),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  currentPhaseTitle,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold,
+                    color: isIntensive ? Colors.amber.shade900 : Colors.blue.shade800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          const SizedBox(height: 24),
+
+          // Mathematically aligned horizontal stepper
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final totalWidth = constraints.maxWidth;
+              final double startLine = totalWidth / 8;
+              final double endLine = totalWidth * 0.75;
+              final double progressPercent = (elapsedDays / 180.0).clamp(0.0, 1.0);
+
+              return Stack(
+                children: [
+                  // Inactive background connecting track
+                  Positioned(
+                    top: 15,
+                    left: startLine,
+                    right: startLine,
+                    child: Container(
+                      height: 3,
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade200,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+
+                  // Active filled track
+                  Positioned(
+                    top: 15,
+                    left: startLine,
+                    child: Container(
+                      height: 3,
+                      width: endLine * progressPercent,
+                      decoration: BoxDecoration(
+                        color: kSecondaryGreen,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  ),
+
+                  // 4 Milestone Nodes
+                  Row(
+                    children: List.generate(steps.length, (idx) {
+                      final s = steps[idx];
+                      final stepDay = s['day'] as int;
+                      final bool isDone = elapsedDays >= stepDay;
+                      final bool isCurrent = elapsedDays < stepDay && (idx == 0 || elapsedDays >= (steps[idx - 1]['day'] as int));
+
+                      return Expanded(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Container(
+                              width: 30,
+                              height: 30,
+                              decoration: BoxDecoration(
+                                color: isDone
+                                    ? kSecondaryGreen
+                                    : (isCurrent ? Colors.white : Colors.white),
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                  color: isDone
+                                      ? kSecondaryGreen
+                                      : (isCurrent ? kSecondaryGreen : Colors.grey.shade300),
+                                  width: isCurrent ? 3 : 2,
+                                ),
+                                boxShadow: isCurrent ? [
+                                  BoxShadow(
+                                    color: kSecondaryGreen.withOpacity(0.3),
+                                    blurRadius: 6,
+                                    spreadRadius: 1,
+                                  )
+                                ] : [],
+                              ),
+                              child: Center(
+                                child: isDone
+                                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                                    : Text(
+                                        "${idx + 1}",
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                          color: isCurrent ? kSecondaryGreen : Colors.grey.shade400,
+                                        ),
+                                      ),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              s['title'] as String,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: isCurrent || isDone ? FontWeight.w800 : FontWeight.w600,
+                                color: isDone ? kPrimaryGreen : (isCurrent ? kSecondaryGreen : Colors.grey.shade600),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              s['sub'] as String,
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Colors.grey.shade500,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 20),
+
+          // Contextual clinical summary banner
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: kSoftGrey,
+              borderRadius: BorderRadius.circular(14),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.info_outline_rounded, color: kSecondaryGreen, size: 16),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    isIntensive 
+                        ? "Intensive Phase active: $currentDrugFocus. Target: Month 2 Conversion Test."
+                        : "Continuation Phase active: $currentDrugFocus. Target: Month 6 Cure Clearance.",
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: kPrimaryGreen,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildStep(String title, bool isActive, {bool isLast = false}) {
@@ -654,19 +896,13 @@ class _FollowUpPageState extends State<FollowUpPage> {
     ]);
   }
 
-  Widget _buildStreakCard() {
-    return Container(padding: const EdgeInsets.all(24), decoration: BoxDecoration(gradient: LinearGradient(colors: [kSecondaryGreen, kPrimaryGreen], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(30)), 
-      child: Row(children: [
-        Container(height: 60, width: 60, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.bolt_rounded, color: Colors.orangeAccent, size: 35)), 
-        const SizedBox(width: 20), 
-        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('$_streakDays Day Streak', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, fontSize: 26)), const Text('Keep going!', style: TextStyle(color: Colors.white70, fontSize: 14))])
-      ]));
-  }
-
   Widget _buildAppointmentCard(String title, String date, String time, String loc, String type) {
     bool isProtocol = type == 'protocol';
     bool isPostCare = type == 'post-treatment';
     
+    final apptDate = DateTime.tryParse(date) ?? DateTime.now();
+    final isOverdue = apptDate.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
+
     String displayTime = time;
     if (time.contains(':')) {
       final parts = time.split(':');
@@ -686,20 +922,20 @@ class _FollowUpPageState extends State<FollowUpPage> {
         color: kWhite, 
         borderRadius: BorderRadius.circular(25), 
         border: Border.all(
-          color: isProtocol ? kSecondaryGreen.withOpacity(0.5) : (isPostCare ? Colors.green.shade200 : kSoftGrey), 
-          width: 2
+          color: isOverdue ? Colors.red.shade300 : (isProtocol ? kSecondaryGreen.withOpacity(0.5) : (isPostCare ? Colors.green.shade200 : kSoftGrey)), 
+          width: isOverdue ? 2 : 2
         )
       ), 
       child: Row(children: [
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), 
           decoration: BoxDecoration(
-            color: isProtocol ? kSecondaryGreen.withOpacity(0.1) : (isPostCare ? Colors.green.shade50 : kCreamAccent), 
+            color: isOverdue ? Colors.red.shade50 : (isProtocol ? kSecondaryGreen.withOpacity(0.1) : (isPostCare ? Colors.green.shade50 : kCreamAccent)), 
             borderRadius: BorderRadius.circular(15)
           ), 
           child: Column(children: [
-            Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isPostCare ? Colors.green.shade800 : kPrimaryGreen)), 
-            Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isPostCare ? Colors.green.shade700 : kSecondaryGreen))
+            Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isOverdue ? Colors.red.shade700 : (isPostCare ? Colors.green.shade800 : kPrimaryGreen))), 
+            Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isOverdue ? Colors.red.shade600 : (isPostCare ? Colors.green.shade700 : kSecondaryGreen)))
           ])
         ), 
         const SizedBox(width: 15), 
@@ -718,14 +954,21 @@ class _FollowUpPageState extends State<FollowUpPage> {
                       overflow: TextOverflow.ellipsis,
                     )
                   ),
-                  if (isProtocol) 
+                  if (isOverdue)
+                    Container(
+                      margin: const EdgeInsets.only(left: 8),
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+                      decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
+                      child: Text("OVERDUE", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red.shade900)),
+                    ),
+                  if (isProtocol && !isOverdue) 
                     Container(
                       margin: const EdgeInsets.only(left: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                       decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(6)),
                       child: Text("DOH Protocol", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
                     ),
-                  if (isPostCare) 
+                  if (isPostCare && !isOverdue) 
                     Container(
                       margin: const EdgeInsets.only(left: 8),
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),

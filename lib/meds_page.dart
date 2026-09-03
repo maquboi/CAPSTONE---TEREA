@@ -14,7 +14,7 @@ class _MedsPageState extends State<MedsPage> {
   List<dynamic> myMeds = [];
   List<dynamic> myMedLogs = []; 
   bool _isLoading = true;
-  bool _showHistoryLog = false; // Controls display of history log card
+  bool _showHistoryLog = false;
   DateTime _selectedDate = DateTime.now();
   String _viewType = 'Week';
 
@@ -23,11 +23,10 @@ class _MedsPageState extends State<MedsPage> {
   String? _connectionStatus;
   String? _patientStatus;
   String _riskLevel = "Not yet assessed";
-  String _userId = ""; // PATIENT ID STATE ADDED
+  String _userId = "";
   
   Map<String, dynamic>? _latestDoctorNote;
 
-  // Track items undergoing fade-out animation and optimistically hide them
   final Map<String, bool> _fadingMedIds = {};
   final Set<String> _optimisticTakenMeds = {};
 
@@ -205,9 +204,11 @@ class _MedsPageState extends State<MedsPage> {
           .limit(1)
           .maybeSingle();
 
+      await _autoLogPastMissedDoses(medsData as List<dynamic>, logsData as List<dynamic>, user.id);
+
       if (mounted) {
         setState(() {
-          _userId = user.id; // Store ID
+          _userId = user.id;
           _connectionStatus = connectionData?['status'];
           _patientStatus = profileData?['status'];
           _riskLevel = profileData?['risk_level'] ?? "Not yet assessed";
@@ -220,8 +221,8 @@ class _MedsPageState extends State<MedsPage> {
             _treatmentEndDate = DateTime.parse(profileData['treatment_end_date'].toString());
           }
           
-          myMeds = medsData as List<dynamic>;
-          myMedLogs = logsData as List<dynamic>; 
+          myMeds = medsData;
+          myMedLogs = logsData; 
           _isLoading = false;
         });
       }
@@ -231,9 +232,53 @@ class _MedsPageState extends State<MedsPage> {
     }
   }
 
+  Future<void> _autoLogPastMissedDoses(List<dynamic> meds, List<dynamic> logs, String userId) async {
+    final today = DateTime.now();
+    final todayDateOnly = DateTime(today.year, today.month, today.day);
+    final yesterday = todayDateOnly.subtract(const Duration(days: 1));
+    final yesterdayStr = DateFormat('yyyy-MM-dd').format(yesterday);
+
+    List<Map<String, dynamic>> missedEntries = [];
+
+    for (final med in meds) {
+      if (med['start_date'] == null || med['end_date'] == null) continue;
+      DateTime start = DateTime.parse(med['start_date']);
+      DateTime end = DateTime.parse(med['end_date']);
+      DateTime startDate = DateTime(start.year, start.month, start.day);
+      DateTime endDate = DateTime(end.year, end.month, end.day);
+
+      if (!yesterday.isBefore(startDate) && !yesterday.isAfter(endDate)) {
+        final hasLog = logs.any((l) {
+          String dbDate = l['log_date'].toString();
+          if (dbDate.length >= 10) dbDate = dbDate.substring(0, 10);
+          return dbDate == yesterdayStr && l['medication_id'].toString() == med['id'].toString();
+        });
+
+        if (!hasLog) {
+          missedEntries.add({
+            'medication_id': med['id'],
+            'patient_id': userId,
+            'log_date': yesterdayStr,
+            'status': 'missed',
+            'timing_status': 'missed',
+          });
+        }
+      }
+    }
+
+    if (missedEntries.isNotEmpty) {
+      try {
+        await Supabase.instance.client.from('medication_logs').insert(missedEntries);
+        logs.addAll(missedEntries);
+      } catch (e) {
+        debugPrint("Auto-sweeper caught error inserting missed logs: $e");
+      }
+    }
+  }
+
   String _getCurrentPhase(bool isEnglish) {
     if (_patientStatus == 'cured' || _patientStatus == 'treatment_completed') {
-      return isEnglish ? "Post-Care Archival" : "Tapos na ang Gamutan"; 
+      return isEnglish ? "Post-Care Surveillance" : "Post-Care Surveillance"; 
     }
     
     if (_treatmentStartDate == null) return isEnglish ? "Phase Not Set" : "Wala Pang Phase";
@@ -269,7 +314,160 @@ class _MedsPageState extends State<MedsPage> {
     }
   }
 
-  Future<void> _toggleMed(bool isCurrentlyTaken, String medId, String targetTimeStr, bool isEnglish) async {
+  void _showAutomatedSymptomCheck(String medName, bool isEnglish) {
+    final symptoms = [
+      {
+        "label": isEnglish ? "Blurred / Dim Vision" : "Malabong Paningin", 
+        "keywords": "vision blur",
+        "desc": isEnglish ? "Possible Ethambutol optic reaction" : "Posibleng epekto ng Ethambutol"
+      },
+      {
+        "label": isEnglish ? "Yellowing of Skin or Eyes (Jaundice)" : "Paninilaw ng Balat o Mata (Jaundice)", 
+        "keywords": "yellow jaundice",
+        "desc": isEnglish ? "Possible hepatic liver stress" : "Posibleng epekto sa atay"
+      },
+      {
+        "label": isEnglish ? "Severe Nausea / Vomiting" : "Matinding Pagsusuka o Pagkahilo", 
+        "keywords": "vomit nausea",
+        "desc": isEnglish ? "Gastrointestinal intolerance" : "Pangangasim ng tiyan"
+      },
+      {
+        "label": isEnglish ? "Numbness / Tingling in Hands or Feet" : "Pamamanhid o Tusok-tusok sa Kamay/Paa", 
+        "keywords": "numb tingling",
+        "desc": isEnglish ? "Peripheral neuropathy" : "Epekto sa nerbiyos"
+      },
+      {
+        "label": isEnglish ? "Skin Rashes / Severe Itching" : "Pantal o Matinding Pangangati ng Balat", 
+        "keywords": "rash itch",
+        "desc": isEnglish ? "Hypersensitivity reaction" : "Reaksyon sa balat"
+      },
+      {
+        "label": isEnglish ? "None / Feeling Well Today" : "Wala / Maayos ang Pakiramdam", 
+        "keywords": "none",
+        "desc": isEnglish ? "Normal medication tolerance" : "Walang masamang nararamdaman"
+      }
+    ];
+
+    showModalBottomSheet(
+      context: context,
+      isDismissible: false,
+      enableDrag: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 20, 24, 30),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade300,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: accentGreen.withOpacity(0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.health_and_safety_rounded, color: accentGreen, size: 24),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        isEnglish ? "Daily Post-Intake Check-in" : "Pang-araw-araw na Check-in",
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w800,
+                          color: primaryGreen,
+                        ),
+                      ),
+                      Text(
+                        isEnglish ? "Did you experience any of these after taking $medName?" : "Naramdaman mo ba ang alinman dito matapos inumin ang $medName?",
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: symptoms.length,
+                separatorBuilder: (_, __) => Divider(height: 1, color: Colors.grey.shade100),
+                itemBuilder: (context, idx) {
+                  final s = symptoms[idx];
+                  final isNone = s['keywords'] == 'none';
+
+                  return ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    dense: true,
+                    title: Text(
+                      s["label"]!,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: isNone ? emeraldGreen : primaryGreen,
+                      ),
+                    ),
+                    subtitle: Text(
+                      s["desc"]!,
+                      style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                    ),
+                    trailing: Icon(
+                      isNone ? Icons.check_circle_outline_rounded : Icons.arrow_forward_ios_rounded,
+                      size: 16,
+                      color: isNone ? emeraldGreen : Colors.grey.shade400,
+                    ),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      if (!isNone) {
+                        try {
+                          await Supabase.instance.client.from('doctor_notes').insert({
+                            'user_id': _userId,
+                            'note_text': "Patient post-intake check-in reported: ${s['label']} after taking $medName (${s['keywords']})",
+                            'category': 'Adverse Event',
+                            'is_checked': false,
+                          });
+
+                          _showNotificationPopup(
+                            isEnglish
+                                ? "Your reported symptom has been forwarded to your attending physician's clinical alert feed."
+                                : "Ang iyong iniulat na sintomas ay naipadala na sa alert dashboard ng iyong doktor.",
+                            isEnglish ? "Doctor Notified" : "Naabisuhan ang Doktor",
+                            isSuccess: true,
+                          );
+                        } catch (e) {
+                          debugPrint("Error auto-inserting doctor note: $e");
+                        }
+                      }
+                    },
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _toggleMed(bool isCurrentlyTaken, String medId, String targetTimeStr, String medName, bool isEnglish) async {
     final user = Supabase.instance.client.auth.currentUser;
     if (user == null) return;
 
@@ -334,6 +532,10 @@ class _MedsPageState extends State<MedsPage> {
         });
         
         await _fetchData();
+
+        if (mounted) {
+          _showAutomatedSymptomCheck(medName, isEnglish);
+        }
       } catch (e) { 
         debugPrint("Error inserting log: $e"); 
         if (mounted) {
@@ -449,6 +651,18 @@ class _MedsPageState extends State<MedsPage> {
     return ListTile(contentPadding: EdgeInsets.zero, leading: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: lightBg, borderRadius: BorderRadius.circular(8)), child: Icon(icon, color: accentGreen, size: 20)), title: Text(title, style: const TextStyle(fontSize: 12, color: Colors.grey)), subtitle: Text(value, style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: primaryGreen)), onTap: onTap);
   }
 
+  // --- HELPER: GROUPING BY TIME OF DAY ---
+  String _getTimeBucket(String timeStr) {
+    try {
+      final parsed = DateFormat("h:mm a").parse(timeStr);
+      if (parsed.hour < 12) return "morning";
+      if (parsed.hour < 18) return "afternoon";
+      return "evening";
+    } catch (_) {
+      return "morning";
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     bool hasTakenAssessment = _riskLevel != "Not yet assessed" && _riskLevel != "Hindi pa nasusuri";
@@ -456,7 +670,6 @@ class _MedsPageState extends State<MedsPage> {
     bool isUnlocked = hasTakenAssessment && isVerifiedByDoctor;
     bool isCured = _patientStatus == 'cured' || _patientStatus == 'treatment_completed';
 
-    // WRAP ENTIRE SCAFFOLD IN VALUELISTENABLEBUILDER
     return ValueListenableBuilder<bool>(
       valueListenable: isEnglishNotifier,
       builder: (context, isEnglish, child) {
@@ -565,24 +778,37 @@ class _MedsPageState extends State<MedsPage> {
                         margin: const EdgeInsets.only(bottom: 12),
                         child: ListTile(
                           leading: CircleAvatar(
-                            backgroundColor: accentGreen.withOpacity(0.1),
-                            child: Icon(Icons.check_circle_rounded, color: accentGreen, size: 22),
+                            backgroundColor: log['status'] == 'taken' ? accentGreen.withOpacity(0.1) : Colors.redAccent.withOpacity(0.1),
+                            child: Icon(
+                              log['status'] == 'taken' ? Icons.check_circle_rounded : Icons.cancel_rounded, 
+                              color: log['status'] == 'taken' ? accentGreen : Colors.redAccent, 
+                              size: 22
+                            ),
                           ),
                           title: Text(medName, style: TextStyle(fontWeight: FontWeight.bold, color: primaryGreen)),
-                          subtitle: Text(isEnglish ? "$dosage • Taken at ${log['time_taken']} \n$formattedLogDay" : "$dosage • Ininom noong ${log['time_taken']} \n$formattedLogDay", style: TextStyle(fontSize: 12, color: Colors.grey[600])),
+                          subtitle: Text(
+                            log['status'] == 'taken'
+                              ? (isEnglish ? "$dosage • Taken at ${log['time_taken']} \n$formattedLogDay" : "$dosage • Ininom noong ${log['time_taken']} \n$formattedLogDay")
+                              : (isEnglish ? "$dosage • Missed Dose \n$formattedLogDay" : "$dosage • Nakaligtaang Inumin \n$formattedLogDay"), 
+                            style: TextStyle(fontSize: 12, color: Colors.grey[600])
+                          ),
                           isThreeLine: true,
                           trailing: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                             decoration: BoxDecoration(
-                              color: timingStatus == 'early' ? Colors.blue[50] : (timingStatus == 'late' ? Colors.orange[50] : Colors.green[50]),
+                              color: log['status'] != 'taken' 
+                                  ? Colors.red[50] 
+                                  : (timingStatus == 'early' ? Colors.blue[50] : (timingStatus == 'late' ? Colors.orange[50] : Colors.green[50])),
                               borderRadius: BorderRadius.circular(8),
                             ),
                             child: Text(
-                              timingStatus.toUpperCase(),
+                              log['status'] != 'taken' ? "MISSED" : timingStatus.toUpperCase(),
                               style: TextStyle(
                                 fontSize: 10,
                                 fontWeight: FontWeight.bold,
-                                color: timingStatus == 'early' ? Colors.blue[700] : (timingStatus == 'late' ? Colors.orange[700] : Colors.green[700])
+                                color: log['status'] != 'taken' 
+                                    ? Colors.red[700] 
+                                    : (timingStatus == 'early' ? Colors.blue[700] : (timingStatus == 'late' ? Colors.orange[700] : Colors.green[700]))
                               ),
                             ),
                           ),
@@ -723,7 +949,7 @@ class _MedsPageState extends State<MedsPage> {
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                 decoration: BoxDecoration(
                   color: Colors.white,
-                  border: Border.all(color: const Color(0xFFDDE5B6), width: 2), // Pale green
+                  border: Border.all(color: const Color(0xFFDDE5B6), width: 2),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Column(
@@ -881,7 +1107,130 @@ class _MedsPageState extends State<MedsPage> {
     ); 
   }
 
+  // --- ITEM 5: POST-CARE SURVEILLANCE TROPHY CARD ---
+  Widget _buildDischargedSurveillanceCard(bool isEnglish) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: emeraldGreen.withOpacity(0.3)),
+            boxShadow: [
+              BoxShadow(
+                color: emeraldGreen.withOpacity(0.08),
+                blurRadius: 16,
+                offset: const Offset(0, 6),
+              )
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.amber.shade200),
+                ),
+                child: const Text("🏆", style: TextStyle(fontSize: 40)),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                isEnglish ? "Treatment Successfully Completed!" : "Tagumpay na Nakumpleto ang Gamutan!",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w900, color: primaryGreen),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isEnglish 
+                  ? "You have completed your mandated TB medication protocol. Active pill intake has concluded."
+                  : "Natapos mo na ang itinakdang gamutan sa TB. Hindi mo na kailangang uminom ng gamot araw-araw.",
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: lightBg,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.shield_outlined, color: emeraldGreen, size: 20),
+                        const SizedBox(width: 8),
+                        Text(
+                          isEnglish ? "Post-Care Surveillance Active" : "Aktibong Pagsubaybay",
+                          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: primaryGreen),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      isEnglish 
+                        ? "Please keep this app installed to receive automatic reminders for your scheduled 6-Month and 1-Year follow-up clearances at the Carmona TB DOTS Center."
+                        : "Panatilihing naka-install ang app na ito upang makatanggap ng paalala para sa iyong 6-Month at 1-Year surveillance checkup sa Carmona TB DOTS Center.",
+                      style: TextStyle(fontSize: 12, color: Colors.grey.shade600, height: 1.3),
+                    ),
+                  ],
+                ),
+              )
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- ITEM 4: CELEBRATORY "ALL DONE FOR TODAY" CARD ---
+  Widget _buildCelebratoryCard(bool isEnglish) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: emeraldGreen.withOpacity(0.12),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.verified_rounded, size: 56, color: emeraldGreen),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              isEnglish ? "All Done for Today! 🎉" : "Tapos na para sa Araw na Ito! 🎉",
+              style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: primaryGreen),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isEnglish 
+                ? "You have taken all scheduled medications for this day. Drink plenty of water and rest well."
+                : "Nainom mo na ang lahat ng gamot na nakatakda para sa araw na ito. Uminom ng tubig at magpahinga.",
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 13, color: Colors.grey.shade600, height: 1.4),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMedList(bool isEnglish) { 
+    final bool isCured = _patientStatus == 'cured' || _patientStatus == 'treatment_completed';
+
+    // Show Post-Care Surveillance Card if Cured
+    if (isCured) {
+      return _buildDischargedSurveillanceCard(isEnglish);
+    }
+
     final dateStr = DateFormat('yyyy-MM-dd').format(_selectedDate);
 
     final filteredMeds = myMeds.where((med) { 
@@ -909,94 +1258,275 @@ class _MedsPageState extends State<MedsPage> {
       return takenLog.isEmpty;
     }).toList(); 
 
+    // If all medications for today are taken, show Celebration Card
     if (filteredMeds.isEmpty) {
+      final hasLogsToday = myMedLogs.any((l) {
+        String dbDate = l['log_date'].toString();
+        if (dbDate.length >= 10) dbDate = dbDate.substring(0, 10);
+        return dbDate == dateStr && l['status'] == 'taken';
+      });
+
+      if (hasLogsToday) {
+        return _buildCelebratoryCard(isEnglish);
+      }
+
       return Column(
         mainAxisAlignment: MainAxisAlignment.center, 
         children: [
           Icon(Icons.spa_outlined, size: 60, color: Colors.grey[300]), 
           const SizedBox(height: 10), 
-          Text(isEnglish ? "Rest easy. No uncompleted meds today." : "Walang hindi pa naiinom na gamot ngayon.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))
+          Text(isEnglish ? "No medications scheduled for this date." : "Walang gamot na nakatakda para sa petsang ito.", style: TextStyle(color: Colors.grey[500], fontWeight: FontWeight.w500))
         ],
       ); 
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.fromLTRB(20, 30, 20, 100), 
-      itemCount: filteredMeds.length, 
-      itemBuilder: (context, index) { 
-        final med = filteredMeds[index]; 
-        final String medIdStr = med['id'].toString();
-        final bool isFading = _fadingMedIds[medIdStr] ?? false;
+    // --- ITEM 2: GROUPING BY TIME OF DAY (MORNING, AFTERNOON, EVENING) ---
+    final morningMeds = filteredMeds.where((m) => _getTimeBucket(m['time'].toString()) == 'morning').toList();
+    final afternoonMeds = filteredMeds.where((m) => _getTimeBucket(m['time'].toString()) == 'afternoon').toList();
+    final eveningMeds = filteredMeds.where((m) => _getTimeBucket(m['time'].toString()) == 'evening').toList();
 
-        return AnimatedOpacity(
-          duration: const Duration(milliseconds: 300),
-          opacity: isFading ? 0.0 : 1.0,
-          curve: Curves.easeOut,
-          child: Container(
-            margin: const EdgeInsets.only(bottom: 16), 
-            padding: const EdgeInsets.all(12), 
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(20, 24, 20, 100),
+      children: [
+        if (morningMeds.isNotEmpty) ...[
+          _buildTimeBucketHeader("🌅", isEnglish ? "Morning Intake" : "Gamot sa Umaga", morningMeds.length),
+          ...morningMeds.map((m) => _buildMedCard(m, isEnglish)),
+          const SizedBox(height: 12),
+        ],
+        if (afternoonMeds.isNotEmpty) ...[
+          _buildTimeBucketHeader("☀️", isEnglish ? "Afternoon Intake" : "Gamot sa Hapon", afternoonMeds.length),
+          ...afternoonMeds.map((m) => _buildMedCard(m, isEnglish)),
+          const SizedBox(height: 12),
+        ],
+        if (eveningMeds.isNotEmpty) ...[
+          _buildTimeBucketHeader("🌙", isEnglish ? "Evening Intake" : "Gamot sa Gabi", eveningMeds.length),
+          ...eveningMeds.map((m) => _buildMedCard(m, isEnglish)),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildTimeBucketHeader(String emoji, String title, int count) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, top: 4),
+      child: Row(
+        children: [
+          Text(emoji, style: const TextStyle(fontSize: 16)),
+          const SizedBox(width: 8),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w800,
+              color: primaryGreen,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const Spacer(),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: surfaceWhite, 
-              borderRadius: BorderRadius.circular(20), 
-              border: Border.all(color: Colors.grey.withOpacity(0.1))
-            ), 
-            child: Row(
+              color: accentGreen.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Text(
+              "$count due",
+              style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: accentGreen),
+            ),
+          )
+        ],
+      ),
+    );
+  }
+
+  // --- ITEM 1: SLIDE TO CONFIRM INTAKE CARD ---
+  Widget _buildMedCard(dynamic med, bool isEnglish) {
+    final String medIdStr = med['id'].toString();
+    final String medName = med['name'].toString();
+    final bool isFading = _fadingMedIds[medIdStr] ?? false;
+
+    return AnimatedOpacity(
+      duration: const Duration(milliseconds: 300),
+      opacity: isFading ? 0.0 : 1.0,
+      curve: Curves.easeOut,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: surfaceWhite,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.grey.withOpacity(0.12)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.02),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
+            )
+          ]
+        ),
+        child: Column(
+          children: [
+            Row(
               children: [
-                GestureDetector(
-                  onTap: (isFading || _patientStatus == 'cured' || _patientStatus == 'treatment_completed') 
-                      ? null 
-                      : () => _toggleMed(false, medIdStr, med['time'].toString(), isEnglish), 
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 200),
-                    padding: const EdgeInsets.all(10), 
-                    decoration: BoxDecoration(
-                      color: isFading ? emeraldGreen : lightBg, 
-                      shape: BoxShape.circle,
-                    ), 
-                    child: Icon(
-                      isFading ? Icons.check_circle_outline : Icons.radio_button_unchecked_rounded, 
-                      color: isFading ? Colors.white : accentGreen, 
-                      size: 24
-                    ),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: accentGreen.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                ), 
-                const SizedBox(width: 15), 
+                  child: Icon(Icons.medication_rounded, color: accentGreen, size: 24),
+                ),
+                const SizedBox(width: 14),
                 Expanded(
                   child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start, 
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        med['name'], 
+                        med['name'],
                         style: TextStyle(
-                          fontWeight: FontWeight.w700, 
-                          fontSize: 16, 
-                          color: primaryGreen
+                          fontWeight: FontWeight.w800,
+                          fontSize: 15,
+                          color: primaryGreen,
                         ),
-                      ), 
-                      Row(
-                        children: [
-                          Text('${med['dosage']} • ${med['time']}', style: TextStyle(fontSize: 13, color: Colors.grey[600])),
-                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        '${med['dosage']} • Target: ${med['time']}',
+                        style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
                       ),
                     ],
                   ),
-                ), 
+                ),
                 PopupMenuButton<String>(
-                  icon: const Icon(Icons.more_vert, color: Colors.grey), 
-                  onSelected: (value) { 
-                    if (value == 'edit') _showMedDialog(isEnglish, existingMed: med); 
-                    if (value == 'delete') _deleteMed(medIdStr, isEnglish); 
-                  }, 
+                  icon: const Icon(Icons.more_vert, color: Colors.grey, size: 20),
+                  onSelected: (value) {
+                    if (value == 'edit') _showMedDialog(isEnglish, existingMed: med);
+                    if (value == 'delete') _deleteMed(medIdStr, isEnglish);
+                  },
                   itemBuilder: (context) => [
-                    PopupMenuItem(value: 'edit', child: Text(isEnglish ? 'Edit' : 'I-edit')), 
+                    PopupMenuItem(value: 'edit', child: Text(isEnglish ? 'Edit' : 'I-edit')),
                     PopupMenuItem(value: 'delete', child: Text(isEnglish ? 'Delete' : 'Burahin', style: const TextStyle(color: Colors.red)))
                   ],
                 ),
               ],
-            ),  
+            ),
+            const SizedBox(height: 14),
+            // Slide-To-Take Component
+            _SlideToTakeWidget(
+              isEnglish: isEnglish,
+              accentColor: accentGreen,
+              onConfirmed: () => _toggleMed(false, medIdStr, med['time'].toString(), medName, isEnglish),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// --- SLIDE TO CONFIRM INTAKE SLIDER WIDGET (0 Dependencies) ---
+class _SlideToTakeWidget extends StatefulWidget {
+  final bool isEnglish;
+  final Color accentColor;
+  final VoidCallback onConfirmed;
+
+  const _SlideToTakeWidget({
+    required this.isEnglish,
+    required this.accentColor,
+    required this.onConfirmed,
+  });
+
+  @override
+  State<_SlideToTakeWidget> createState() => _SlideToTakeWidgetState();
+}
+
+class _SlideToTakeWidgetState extends State<_SlideToTakeWidget> {
+  double _dragPosition = 0.0;
+  bool _isConfirmed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    const double barHeight = 44.0;
+    const double thumbSize = 36.0;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final maxDrag = constraints.maxWidth - thumbSize - 8;
+
+        return Container(
+          height: barHeight,
+          width: double.infinity,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF4F7F4),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: Colors.grey.shade200),
           ),
-        ); 
+          child: Stack(
+            alignment: Alignment.centerLeft,
+            children: [
+              Center(
+                child: Text(
+                  _isConfirmed 
+                    ? (widget.isEnglish ? "Intake Confirmed" : "Nainom Na")
+                    : (widget.isEnglish ? "Slide to take  ➔" : "I-slide upang inumin  ➔"),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.grey.shade600,
+                    letterSpacing: 0.5,
+                  ),
+                ),
+              ),
+              Positioned(
+                left: _dragPosition + 4,
+                child: GestureDetector(
+                  onHorizontalDragUpdate: (details) {
+                    if (_isConfirmed) return;
+                    setState(() {
+                      _dragPosition = (_dragPosition + details.delta.dx).clamp(0.0, maxDrag);
+                    });
+                  },
+                  onHorizontalDragEnd: (details) {
+                    if (_isConfirmed) return;
+                    if (_dragPosition >= maxDrag * 0.8) {
+                      setState(() {
+                        _dragPosition = maxDrag;
+                        _isConfirmed = true;
+                      });
+                      widget.onConfirmed();
+                    } else {
+                      setState(() {
+                        _dragPosition = 0.0;
+                      });
+                    }
+                  },
+                  child: Container(
+                    width: thumbSize,
+                    height: thumbSize,
+                    decoration: BoxDecoration(
+                      color: widget.accentColor,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: widget.accentColor.withOpacity(0.35),
+                          blurRadius: 6,
+                          offset: const Offset(0, 2),
+                        )
+                      ],
+                    ),
+                    child: const Icon(
+                      Icons.arrow_forward_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
       },
-    ); 
+    );
   }
 }
