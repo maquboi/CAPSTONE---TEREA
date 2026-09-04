@@ -1,16 +1,3 @@
-buildscript {
-    repositories {
-        google()
-        mavenCentral()
-    }
-
-    dependencies {
-        classpath("com.android.tools.build:gradle:7.3.0")
-        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin:1.9.0")
-        // classpath("com.google.gms:google-services:4.4.0")  // Commented out
-    }
-}
-
 allprojects {
     repositories {
         google()
@@ -18,13 +5,35 @@ allprojects {
     }
 }
 
-rootProject.layout.buildDirectory.set(file("../build"))
+val newBuildDir: Directory = rootProject.layout.buildDirectory.dir("../../build").get()
+rootProject.layout.buildDirectory.value(newBuildDir)
 
 subprojects {
-    project.layout.buildDirectory.set(file("${rootProject.layout.buildDirectory.get()}/${project.name}"))
+    val newSubprojectBuildDir: Directory = newBuildDir.dir(project.name)
+    project.layout.buildDirectory.value(newSubprojectBuildDir)
+}
+
+subprojects {
     project.evaluationDependsOn(":app")
 }
 
-tasks.register("clean", Delete::class) {
+// Pins AndroidX transitive libraries to stable versions compatible with AGP 8.7
+subprojects {
+    project.configurations.all {
+        resolutionStrategy.eachDependency {
+            if (requested.group == "androidx.browser" && requested.name == "browser") {
+                useVersion("1.8.0")
+            }
+            if (requested.group == "androidx.activity") {
+                useVersion("1.9.3")
+            }
+            if (requested.group == "androidx.core") {
+                useVersion("1.15.0")
+            }
+        }
+    }
+}
+
+tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
