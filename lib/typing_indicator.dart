@@ -11,13 +11,17 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
   late AnimationController _animationController;
   late List<Animation<double>> _animations;
 
+  // Clinical Teal Theme Color
+  static const Color primaryTeal = Color(0xFF0F766E);
+  static const Color borderNeutral = Color(0xFFE2E8F0);
+
   @override
   void initState() {
     super.initState();
     _animationController = AnimationController(
       duration: const Duration(milliseconds: 900),
       vsync: this,
-    )..repeat();  
+    )..repeat();
 
     // Create staggered animations for 3 dots
     _animations = List.generate(3, (index) {
@@ -43,17 +47,19 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(15).copyWith(
+        borderRadius: BorderRadius.circular(16).copyWith(
           bottomLeft: Radius.zero,
         ),
+        border: Border.all(color: borderNeutral),
         boxShadow: [
           BoxShadow(
-            color: Colors.grey.withOpacity(0.1),
+            color: Colors.black.withOpacity(0.03),
             spreadRadius: 1,
-            blurRadius: 3,
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
@@ -64,13 +70,13 @@ class _TypingIndicatorState extends State<TypingIndicator> with SingleTickerProv
             animation: _animations[index],
             builder: (context, child) {
               return Transform.translate(
-                offset: Offset(0, -5 * _animations[index].value),
+                offset: Offset(0, -4.5 * _animations[index].value),
                 child: Container(
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
-                  width: 8,
-                  height: 8,
+                  margin: const EdgeInsets.symmetric(horizontal: 2.5),
+                  width: 7,
+                  height: 7,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF606C38).withOpacity(0.4 + (0.6 * _animations[index].value)),
+                    color: primaryTeal.withOpacity(0.35 + (0.65 * _animations[index].value)),
                     shape: BoxShape.circle,
                   ),
                 ),

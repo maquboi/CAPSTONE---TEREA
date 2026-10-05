@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:onesignal_flutter/onesignal_flutter.dart';
@@ -15,7 +16,7 @@ import 'risk_result_page.dart';
 import 'facilities_page.dart';
 import 'support_page.dart';
 import 'mydoctor_page.dart';
-import 'notifications_page.dart'; 
+import 'notifications_page.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -33,25 +34,27 @@ Future<void> main() async {
     debugPrint("Supabase Initialization Warning: $e");
   }
 
-  // 2. Safe OneSignal Setup (Background Safe)
-  try {
-    OneSignal.Debug.setLogLevel(OSLogLevel.none); // Disable noisy logs in release
-    OneSignal.initialize("d6a0d4c7-af80-4323-b9e4-dcdc447d7cde");
-    
-    // Deep linking handler
-    OneSignal.Notifications.addClickListener((event) {
-      final data = event.notification.additionalData;
-      if (data != null && data['targetScreen'] == 'notifications') {
-        final currentSession = Supabase.instance.client.auth.currentSession;
-        if (currentSession != null) {
-          navigatorKey.currentState?.pushNamed('/notifications');
-        } else {
-          navigatorKey.currentState?.pushNamed('/login');
+  // 2. Safe OneSignal Setup (Protected for Web / Desktop)
+  if (!kIsWeb) {
+    try {
+      OneSignal.Debug.setLogLevel(OSLogLevel.none);
+      OneSignal.initialize("d6a0d4c7-af80-4323-b9e4-dcdc447d7cde");
+
+      // Deep linking handler
+      OneSignal.Notifications.addClickListener((event) {
+        final data = event.notification.additionalData;
+        if (data != null && data['targetScreen'] == 'notifications') {
+          final currentSession = Supabase.instance.client.auth.currentSession;
+          if (currentSession != null) {
+            navigatorKey.currentState?.pushNamed('/notifications');
+          } else {
+            navigatorKey.currentState?.pushNamed('/login');
+          }
         }
-      }
-    });
-  } catch (e) {
-    debugPrint("OneSignal Initialization Warning: $e");
+      });
+    } catch (e) {
+      debugPrint("OneSignal Initialization Warning: $e");
+    }
   }
 
   runApp(const TereaApp());
@@ -68,13 +71,13 @@ class _TereaAppState extends State<TereaApp> {
   @override
   void initState() {
     super.initState();
-    // Post-frame callback ensures the native Android Window is fully mounted before prompting permissions
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _initPostLaunchServices();
     });
   }
 
   void _initPostLaunchServices() {
+    if (kIsWeb) return; // Prevent web console crash
     try {
       OneSignal.Notifications.requestPermission(true);
       final session = Supabase.instance.client.auth.currentSession;
@@ -89,12 +92,12 @@ class _TereaAppState extends State<TereaApp> {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'TEREA', // Fixes task manager / recents title
+      title: 'TEREA',
       debugShowCheckedModeBanner: false,
       navigatorKey: navigatorKey,
       theme: ThemeData(
-        scaffoldBackgroundColor: const Color(0xFFFEFAE0),
-        primaryColor: const Color(0xFF606C38),
+        scaffoldBackgroundColor: const Color(0xFFF8FAFC),
+        primaryColor: const Color(0xFF0F766E),
         useMaterial3: true,
         pageTransitionsTheme: const PageTransitionsTheme(
           builders: {

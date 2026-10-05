@@ -1,14 +1,39 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
-// --- SHARED UI COMPONENTS ---
-
+// --- SHARED UI STATE & GLOBAL NOTIFIERS ---
 final ValueNotifier<bool> isEnglishNotifier = ValueNotifier<bool>(true);
+
+// --- FORMAL CLINICAL COLOR SYSTEM ---
+const Color _primaryTeal = Color(0xFF0F766E);       // Deep Clinical Teal
+const Color _primaryDark = Color(0xFF115E59);       // Spruce Slate
+const Color _backgroundLight = Color(0xFFF8FAFC);   // Clean Slate Grey
+const Color _textCharcoal = Color(0xFF0F172A);      // High Contrast Text
+const Color _textMuted = Color(0xFF64748B);         // Subdued Text
+const Color _borderNeutral = Color(0xFFE2E8F0);     // Structured Border
+const Color _inputBg = Color(0xFFF1F5F9);          // Input Background
 
 Widget buildLogo({double size = 80}) {
   return Container(
-    width: size, height: size,
-    decoration: BoxDecoration(color: const Color(0xFF606C38), borderRadius: BorderRadius.circular(size * 0.25)),
-    child: Icon(Icons.eco, size: size * 0.6, color: const Color(0xFFFEFAE0)),
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(size * 0.22),
+      border: Border.all(color: _borderNeutral),
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black.withOpacity(0.04),
+          blurRadius: 10,
+          offset: const Offset(0, 2),
+        ),
+      ],
+    ),
+    padding: EdgeInsets.all(size * 0.15),
+    child: Image.asset(
+      'assets/LogoNoBG.png',
+      fit: BoxFit.contain,
+    ),
   );
 }
 
@@ -16,15 +41,25 @@ Widget buildTextField(String label, String hint, {bool isPassword = false, TextE
   return Column(
     crossAxisAlignment: CrossAxisAlignment.start,
     children: [
-      Text(label, style: const TextStyle(fontWeight: FontWeight.bold, color: Color(0xFF283618))),
-      const SizedBox(height: 8),
+      Text(
+        label,
+        style: GoogleFonts.inter(fontWeight: FontWeight.w600, color: _textCharcoal, fontSize: 13),
+      ),
+      const SizedBox(height: 6),
       TextField(
         controller: controller,
         obscureText: isPassword,
+        style: GoogleFonts.inter(color: _textCharcoal, fontSize: 14, fontWeight: FontWeight.w500),
         decoration: InputDecoration(
-          hintText: hint, filled: true, fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-          suffixIcon: isPassword ? const Icon(Icons.visibility_off_outlined) : null,
+          hintText: hint,
+          hintStyle: GoogleFonts.inter(color: Colors.black26, fontSize: 13),
+          filled: true,
+          fillColor: _inputBg,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _borderNeutral)),
+          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _borderNeutral)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: _primaryTeal, width: 1.5)),
+          suffixIcon: isPassword ? const Icon(Icons.visibility_off_outlined, color: _textMuted, size: 19) : null,
         ),
       ),
     ],
@@ -33,11 +68,20 @@ Widget buildTextField(String label, String hint, {bool isPassword = false, TextE
 
 Widget buildPrimaryButton(BuildContext context, String text, VoidCallback onTap) {
   return SizedBox(
-    width: double.infinity, height: 55,
+    width: double.infinity,
+    height: 50,
     child: ElevatedButton(
       onPressed: onTap,
-      style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF606C38), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-      child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: _primaryTeal,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      child: Text(
+        text,
+        style: GoogleFonts.inter(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600, letterSpacing: 0.2),
+      ),
     ),
   );
 }
@@ -46,42 +90,68 @@ Widget buildActionCard(BuildContext context, IconData icon, String title, String
   return GestureDetector(
     onTap: () => Navigator.pushNamed(context, route),
     child: Container(
-      padding: const EdgeInsets.all(15),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderNeutral),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, color: const Color(0xFF606C38)),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: _primaryTeal.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, color: _primaryTeal, size: 20),
+          ),
           const Spacer(),
-          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-          Text(sub, style: const TextStyle(fontSize: 10, color: Colors.grey)),
+          Text(
+            title,
+            style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14, color: _textCharcoal),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            sub,
+            style: GoogleFonts.inter(fontSize: 11, color: _textMuted, fontWeight: FontWeight.w500),
+          ),
         ],
       ),
     ),
   );
 }
 
-// Modernized Floating Pill-Shaped Bottom Navigation
+// Modernized Floating Pill-Shaped Bottom Navigation (Clinical Teal)
 Widget buildBottomNav(int idx, BuildContext context) {
   final List<IconData> icons = [
-    Icons.home_outlined,
-    Icons.assignment_outlined,
-    Icons.medication_outlined,
-    Icons.calendar_today_outlined,
+    Icons.home_rounded,
+    Icons.assignment_rounded,
+    Icons.medication_rounded,
+    Icons.calendar_month_rounded,
   ];
 
   return SafeArea(
     child: Container(
-      margin: const EdgeInsets.fromLTRB(20, 10, 20, 20),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      margin: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(35),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _borderNeutral),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
-            blurRadius: 15,
-            offset: const Offset(0, 5),
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -98,21 +168,17 @@ Widget buildBottomNav(int idx, BuildContext context) {
               if (index == 3) Navigator.pushNamed(context, '/followup');
             },
             child: AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
+              duration: const Duration(milliseconds: 200),
               curve: Curves.easeInOut,
-              padding: const EdgeInsets.all(12),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
-                color: isActive 
-                    ? const Color(0xFF606C38).withOpacity(0.15) 
-                    : Colors.transparent,
-                shape: BoxShape.circle,
+                color: isActive ? _primaryTeal.withOpacity(0.1) : Colors.transparent,
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Icon(
                 icons[index],
-                color: isActive 
-                    ? const Color(0xFF606C38) 
-                    : Colors.grey.shade500,
-                size: 26,
+                color: isActive ? _primaryTeal : const Color(0xFF94A3B8),
+                size: 24,
               ),
             ),
           );

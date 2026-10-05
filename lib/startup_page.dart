@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'login_page.dart'; // Required for the custom PageRouteBuilder
 
 class StartupPage extends StatefulWidget {
@@ -11,35 +12,38 @@ class StartupPage extends StatefulWidget {
 class _StartupPageState extends State<StartupPage> with TickerProviderStateMixin {
   late AnimationController _entranceController;
   late AnimationController _pulseController;
-  
+
   late Animation<double> _fadeAnimation;
   late Animation<Offset> _slideAnimation;
+
+  // --- FORMAL CLINICAL COLOR SYSTEM ---
+  static const Color primaryTeal = Color(0xFF0F766E); // Deep Clinical Teal
+  static const Color primaryDeep = Color(0xFF042F2E); // Deepest Spruce Navy
 
   @override
   void initState() {
     super.initState();
-    
+
     // Smooth entrance animation
     _entranceController = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1200),
+      duration: const Duration(milliseconds: 1000),
     );
 
     _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
       CurvedAnimation(parent: _entranceController, curve: Curves.easeOut),
     );
 
-    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.15), end: Offset.zero).animate(
+    _slideAnimation = Tween<Offset>(begin: const Offset(0, 0.10), end: Offset.zero).animate(
       CurvedAnimation(parent: _entranceController, curve: Curves.easeOutCubic),
     );
 
-    // Continuous pulse for the "Tap anywhere" text
+    // Continuous pulse for the "Tap anywhere" prompt
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     )..repeat(reverse: true);
 
-    // Start entrance animation
     _entranceController.forward();
   }
 
@@ -52,18 +56,15 @@ class _StartupPageState extends State<StartupPage> with TickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
-    const Color forestDark = Color(0xFF283618);
-    const Color forestLight = Color(0xFF606C38);
-
     return Scaffold(
       body: InkWell(
-        // SLOW 2-SECOND CUSTOM TRANSITION
+        // SLOW 2-SECOND FLIGHT TRANSITION TO LOGIN
         onTap: () {
           Navigator.push(
             context,
             PageRouteBuilder(
               settings: const RouteSettings(name: '/login'),
-              transitionDuration: const Duration(seconds: 2), // Exact 2 second flight
+              transitionDuration: const Duration(seconds: 2),
               reverseTransitionDuration: const Duration(seconds: 2),
               pageBuilder: (context, animation, secondaryAnimation) => const LoginPage(),
               transitionsBuilder: (context, animation, secondaryAnimation, child) {
@@ -82,83 +83,127 @@ class _StartupPageState extends State<StartupPage> with TickerProviderStateMixin
             gradient: LinearGradient(
               begin: Alignment.topCenter,
               end: Alignment.bottomCenter,
-              colors: [forestLight, forestDark],
+              colors: [primaryTeal, primaryDeep],
             ),
           ),
-          child: FadeTransition(
-            opacity: _fadeAnimation,
-            child: SlideTransition(
-              position: _slideAnimation,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  
-                  // --- HERO ANIMATED LOGO ---
-                  Hero(
-                    tag: 'terea_hero_logo',
-                    child: Material(
-                      type: MaterialType.transparency,
-                      child: Image.asset(
-                        'assets/LogoNoBG.png',
-                        width: 140,
-                        height: 140,
-                        fit: BoxFit.contain,
+          child: SafeArea(
+            child: FadeTransition(
+              opacity: _fadeAnimation,
+              child: SlideTransition(
+                position: _slideAnimation,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Spacer(flex: 3),
+
+                    // Institutional Badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: Colors.white.withOpacity(0.2)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.local_hospital_rounded, color: Colors.white, size: 13),
+                          const SizedBox(width: 8),
+                          Text(
+                            "Carmona Health Center",
+                            style: GoogleFonts.inter(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                              letterSpacing: 0.3,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
+                    const SizedBox(height: 28),
 
-                  // TEREA Header
-                  const Text(
-                    'TEREA',
-                    style: TextStyle(
-                      fontSize: 52, 
-                      fontWeight: FontWeight.w900, 
-                      letterSpacing: 8, 
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          blurRadius: 10.0,
-                          color: Colors.black26,
-                          offset: Offset(0, 4),
+                    // Hero Animated Logo (Matched to LoginPage hero tag)
+                    Hero(
+                      tag: 'terea_hero_logo',
+                      child: Container(
+                        width: 120,
+                        height: 120,
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(28),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.2),
+                              blurRadius: 20,
+                              offset: const Offset(0, 8),
+                            ),
+                          ],
                         ),
-                      ],
+                        padding: const EdgeInsets.all(16),
+                        child: Image.asset(
+                          'assets/LogoNoBG.png',
+                          fit: BoxFit.contain,
+                        ),
+                      ),
                     ),
-                  ),
-                  
-                  const SizedBox(height: 10),
-                  
-                  Text(
-                    'Personalized TB Care'.toUpperCase(),
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                      letterSpacing: 2,
-                      color: Colors.white.withOpacity(0.7),
-                    ),
-                  ),
+                    const SizedBox(height: 24),
 
-                  const SizedBox(height: 80),
-
-                  // Animated Interaction Hint
-                  FadeTransition(
-                    opacity: Tween<double>(begin: 0.4, end: 1.0).animate(_pulseController),
-                    child: const Column(
-                      children: [
-                        Icon(Icons.touch_app_outlined, color: Colors.white60, size: 20),
-                        SizedBox(height: 8),
-                        Text(
-                          'Tap anywhere to continue',
-                          style: TextStyle(
-                            fontSize: 14,
-                            fontWeight: FontWeight.w300,
-                            color: Colors.white70,
+                    // TEREA Header
+                    Text(
+                      'TEREA',
+                      style: GoogleFonts.inter(
+                        fontSize: 44,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 6,
+                        color: Colors.white,
+                        shadows: const [
+                          Shadow(
+                            blurRadius: 12.0,
+                            color: Colors.black38,
+                            offset: Offset(0, 4),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+
+                    // Clinical Subtitle
+                    Text(
+                      'TUBERCULOSIS RISK ASSESSMENT & HEALTH TRACKER',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.inter(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.5,
+                        color: Colors.white.withOpacity(0.75),
+                      ),
+                    ),
+
+                    const Spacer(flex: 3),
+
+                    // Pulsing Interaction Hint
+                    FadeTransition(
+                      opacity: Tween<double>(begin: 0.35, end: 1.0).animate(_pulseController),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.touch_app_outlined, color: Colors.white70, size: 20),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Tap anywhere to start',
+                            style: GoogleFonts.inter(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w400,
+                              color: Colors.white70,
+                              letterSpacing: 0.2,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 36),
+                  ],
+                ),
               ),
             ),
           ),

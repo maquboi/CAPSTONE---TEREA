@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class MyDoctorPage extends StatefulWidget {
   const MyDoctorPage({Key? key}) : super(key: key);
@@ -10,18 +12,23 @@ class MyDoctorPage extends StatefulWidget {
 
 class _MyDoctorPageState extends State<MyDoctorPage> {
   final supabase = Supabase.instance.client;
-  
+
   bool _isLoading = true;
   bool _hasDoctor = false;
   Map<String, dynamic>? _doctorData;
   String? _errorMessage;
-  
+
   RealtimeChannel? _doctorSubscription;
 
-  // Colors adapted for the modern reference layout while keeping TEREA identity
-  final Color _bgColor = const Color(0xFFF4F6F9); 
-  final Color _primaryGreen = const Color(0xFF606C38);
-  final Color _paleGreen = const Color(0xFFDDE5B6);
+  // --- FORMAL CLINICAL COLOR SYSTEM ---
+  static const Color primaryTeal = Color(0xFF0F766E);       // Deep Clinical Teal
+  static const Color primaryDark = Color(0xFF115E59);       // Spruce Slate
+  static const Color backgroundSurface = Color(0xFFF1F5F9); // Slate 100
+  static const Color cardBg = Colors.white;                // Pure White Card
+  static const Color textCharcoal = Color(0xFF0F172A);      // High Contrast Text
+  static const Color textMuted = Color(0xFF64748B);         // Subdued Slate Text
+  static const Color borderNeutral = Color(0xFFE2E8F0);     // Clean Structured Border
+  static const Color emeraldGreen = Color(0xFF059669);      // Active / Status Green
 
   @override
   void initState() {
@@ -33,6 +40,13 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
   void dispose() {
     _doctorSubscription?.unsubscribe();
     super.dispose();
+  }
+
+  // Prevents duplicate "Dr. Dr." prefixes
+  String _formatDoctorName(String? name) {
+    if (name == null || name.trim().isEmpty) return "Unknown Doctor";
+    final clean = name.trim().replaceFirst(RegExp(r'^(dr\.?\s*)+', caseSensitive: false), '');
+    return "Dr. $clean";
   }
 
   Future<void> _fetchDoctorInfo() async {
@@ -101,41 +115,22 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: _bgColor,
+      backgroundColor: backgroundSurface,
       appBar: AppBar(
-        backgroundColor: _bgColor,
+        backgroundColor: backgroundSurface,
         elevation: 0,
         scrolledUnderElevation: 0,
         centerTitle: true,
-        leading: Padding(
-          padding: const EdgeInsets.only(left: 16.0, top: 8.0, bottom: 8.0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              shape: BoxShape.circle,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 8,
-                  offset: const Offset(0, 2),
-                )
-              ],
-              border: Border.all(color: Colors.grey.shade200),
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.black87, size: 20),
-              onPressed: () => Navigator.pop(context),
-              padding: EdgeInsets.zero,
-            ),
-          ),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: textCharcoal, size: 18),
+          onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'Doctor Detail',
-          style: TextStyle(
-            color: Colors.black87,
-            fontWeight: FontWeight.w800,
-            fontSize: 18,
-            letterSpacing: -0.5,
+        title: Text(
+          'Attending Clinician',
+          style: GoogleFonts.inter(
+            color: textCharcoal,
+            fontWeight: FontWeight.w700,
+            fontSize: 17,
           ),
         ),
       ),
@@ -145,11 +140,16 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return Center(child: CircularProgressIndicator(color: _primaryGreen));
+      return const Center(child: CircularProgressIndicator(color: primaryTeal));
     }
 
     if (_errorMessage != null) {
-      return Center(child: Text("Error: $_errorMessage"));
+      return Center(
+        child: Text(
+          "Error: $_errorMessage",
+          style: GoogleFonts.inter(color: const Color(0xFFDC2626), fontSize: 13),
+        ),
+      );
     }
 
     if (!_hasDoctor || _doctorData == null) {
@@ -167,24 +167,42 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(color: _paleGreen.withOpacity(0.5), shape: BoxShape.circle),
-              child: Icon(Icons.health_and_safety_outlined, size: 80, color: _primaryGreen),
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: primaryTeal.withOpacity(0.08),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.medical_information_outlined, size: 48, color: primaryTeal),
             ),
-            const SizedBox(height: 24),
-            const Text("Not Yet Verified", style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.black87)),
-            const SizedBox(height: 12),
-            const Text("You don't have an assigned doctor yet.", textAlign: TextAlign.center, style: TextStyle(fontSize: 14, color: Colors.black54)),
-            const SizedBox(height: 32),
+            const SizedBox(height: 20),
+            Text(
+              "No Assigned Clinician",
+              style: GoogleFonts.inter(
+                fontSize: 19,
+                fontWeight: FontWeight.w700,
+                color: textCharcoal,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              "You are not yet linked to an attending doctor. Please link with Carmona Health Center using your clinic code.",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(fontSize: 13, color: textMuted, height: 1.4),
+            ),
+            const SizedBox(height: 28),
             ElevatedButton(
               onPressed: () => Navigator.pop(context),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _primaryGreen, 
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                backgroundColor: primaryTeal,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 12),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                 elevation: 0,
               ),
-              child: const Text("Go Back", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+              child: Text(
+                "Return to Dashboard",
+                style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13.5),
+              ),
             ),
           ],
         ),
@@ -193,30 +211,29 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
   }
 
   Widget _buildDoctorProfile() {
-    final String fullName = _doctorData?['full_name'] ?? 'Unknown Doctor';
+    final String rawName = _doctorData?['full_name'] ?? 'Unknown Doctor';
+    final String formattedName = _formatDoctorName(rawName);
     final String email = _doctorData?['email'] ?? 'No email provided';
     final String phone = _doctorData?['phone_number'] ?? 'No phone provided';
     final String avatarUrl = _doctorData?['avatar_url'] ?? '';
-    final String clinic = _doctorData?['clinic_name'] ?? 'Carmona TB DOTS Center';
-    final String formattedName = fullName.startsWith('Dr.') ? fullName : 'Dr. $fullName';
+    final String clinic = _doctorData?['clinic_name'] ?? 'Carmona Health Center';
 
-    // Helper function to convert 24hr "17:00" to "5:00 PM" format
     String formatTimeString(String timeStr) {
       try {
         if (timeStr.toLowerCase().contains('am') || timeStr.toLowerCase().contains('pm')) {
           return timeStr.toUpperCase();
         }
-        
+
         final parts = timeStr.split(':');
         if (parts.isEmpty) return timeStr;
-        
+
         int hr = int.parse(parts[0]);
         final min = parts.length > 1 ? parts[1] : '00';
         final ampm = hr >= 12 ? 'PM' : 'AM';
-        
+
         hr = hr % 12;
-        if (hr == 0) hr = 12; 
-        
+        if (hr == 0) hr = 12;
+
         return '$hr:$min $ampm';
       } catch (e) {
         return timeStr;
@@ -229,81 +246,165 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
 
     return SingleChildScrollView(
       physics: const BouncingScrollPhysics(),
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 18.0, vertical: 12.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Main Physician Identity Card
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(32),
+              color: cardBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderNeutral),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.04), 
-                  blurRadius: 24, 
-                  offset: const Offset(0, 8)
+                  color: Colors.black.withOpacity(0.02),
+                  blurRadius: 12,
+                  offset: const Offset(0, 4),
                 )
               ],
             ),
             child: Column(
               children: [
                 Container(
-                  height: 240,
+                  height: 200,
                   width: double.infinity,
-                  margin: const EdgeInsets.all(16),
+                  margin: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(24),
-                    color: const Color(0xFFF8FAFC),
-                    image: avatarUrl.isNotEmpty ? DecorationImage(image: NetworkImage(avatarUrl), fit: BoxFit.cover) : null,
+                    borderRadius: BorderRadius.circular(16),
+                    color: const Color(0xFFF1F5F9),
+                    border: Border.all(color: borderNeutral),
+                    image: avatarUrl.isNotEmpty
+                        ? DecorationImage(image: NetworkImage(avatarUrl), fit: BoxFit.cover)
+                        : null,
                   ),
-                  child: avatarUrl.isEmpty ? const Center(child: Icon(Icons.person, size: 80, color: Colors.black12)) : null,
+                  child: avatarUrl.isEmpty
+                      ? const Center(child: Icon(Icons.person_rounded, size: 70, color: textMuted))
+                      : null,
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 20.0),
-                  child: Text(
-                    formattedName, 
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: Colors.black87, letterSpacing: -0.5)
+                  padding: const EdgeInsets.symmetric(horizontal: 18.0),
+                  child: Column(
+                    children: [
+                      Text(
+                        formattedName,
+                        textAlign: TextAlign.center,
+                        style: GoogleFonts.inter(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                          color: textCharcoal,
+                          letterSpacing: -0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: primaryTeal.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: primaryTeal.withOpacity(0.2)),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Icon(Icons.verified_rounded, color: primaryTeal, size: 13),
+                            const SizedBox(width: 6),
+                            Text(
+                              "Attending Physician • Carmona",
+                              style: GoogleFonts.inter(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: primaryTeal,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
               ],
             ),
           ),
-          const SizedBox(height: 32),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 8.0),
-            child: Text("Contact & Details", style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: Colors.black87, letterSpacing: -0.5)),
+          const SizedBox(height: 24),
+
+          // Section Title
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4.0),
+            child: Text(
+              "CLINICAL INFORMATION & SCHEDULE",
+              style: GoogleFonts.inter(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: textMuted,
+                letterSpacing: 1.0,
+              ),
+            ),
           ),
-          const SizedBox(height: 16),
-          _buildDetailCard(statusText: 'Real-time', title: "Availability Hours", subtitle: availability, icon: Icons.access_time_rounded),
           const SizedBox(height: 12),
-          _buildDetailCard(statusText: 'Primary Location', title: "Clinic Workspace", subtitle: clinic, icon: Icons.business_outlined),
-          const SizedBox(height: 12),
-          _buildDetailCard(statusText: 'Verified Contact', title: "Email Address", subtitle: email, icon: Icons.email_outlined),
-          const SizedBox(height: 12),
-          _buildDetailCard(statusText: 'Active', title: "Phone Number", subtitle: phone, icon: Icons.phone_outlined),
+
+          // Schedule Card
+          _buildDetailCard(
+            statusText: 'Duty Hours',
+            title: "Consultation Schedule",
+            subtitle: availability,
+            icon: Icons.access_time_rounded,
+          ),
+          const SizedBox(height: 10),
+
+          // Clinic Facility Card
+          _buildDetailCard(
+            statusText: 'Primary Facility',
+            title: "Assigned Health Center",
+            subtitle: clinic,
+            icon: Icons.local_hospital_outlined,
+          ),
+          const SizedBox(height: 10),
+
+          // Email Contact Card
+          _buildDetailCard(
+            statusText: 'Official Email',
+            title: "Professional Contact",
+            subtitle: email,
+            icon: Icons.mail_outline_rounded,
+          ),
+          const SizedBox(height: 10),
+
+          // Direct Phone Card
+          _buildDetailCard(
+            statusText: 'Direct Line',
+            title: "Clinic Hotline / Mobile",
+            subtitle: phone,
+            icon: Icons.phone_outlined,
+          ),
           const SizedBox(height: 40),
         ],
       ),
     );
   }
 
-  Widget _buildDetailCard({required String statusText, required String title, required String subtitle, required IconData icon}) {
+  Widget _buildDetailCard({
+    required String statusText,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+  }) {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(24),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderNeutral),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03), 
-            blurRadius: 16, 
-            offset: const Offset(0, 4)
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           )
         ],
       ),
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(16),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -312,24 +413,51 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: _paleGreen.withOpacity(0.4),
-                    borderRadius: BorderRadius.circular(8)
+                    color: primaryTeal.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(6),
                   ),
-                  child: Text(statusText, style: TextStyle(color: _primaryGreen, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+                  child: Text(
+                    statusText.toUpperCase(),
+                    style: GoogleFonts.inter(
+                      color: primaryTeal,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.5,
+                    ),
+                  ),
                 ),
-                const SizedBox(height: 12),
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87, letterSpacing: -0.3)),
+                const SizedBox(height: 8),
+                Text(
+                  title,
+                  style: GoogleFonts.inter(
+                    fontSize: 14.5,
+                    fontWeight: FontWeight.w700,
+                    color: textCharcoal,
+                  ),
+                ),
                 const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(fontSize: 14, color: Colors.black54, fontWeight: FontWeight.w500)),
+                Text(
+                  subtitle,
+                  style: GoogleFonts.inter(
+                    fontSize: 12.5,
+                    color: textMuted,
+                    fontWeight: FontWeight.w400,
+                  ),
+                ),
               ],
             ),
           ),
+          const SizedBox(width: 12),
           Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(color: const Color(0xFFF8FAFC), borderRadius: BorderRadius.circular(20)),
-            child: Icon(icon, color: const Color(0xFF6A798A), size: 26),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: const Color(0xFFF0FDFA),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: const Color(0xFFCCFBF1)),
+            ),
+            child: Icon(icon, color: primaryTeal, size: 20),
           ),
         ],
       ),

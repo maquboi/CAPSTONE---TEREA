@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'package:intl/intl.dart'; 
+import 'package:intl/intl.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class FollowUpPage extends StatefulWidget {
   const FollowUpPage({super.key});
@@ -18,25 +20,30 @@ class _FollowUpPageState extends State<FollowUpPage> {
   String? _patientStatus;
   String? _linkedDoctorId;
   String? _doctorName;
-  DateTime? _treatmentStartDate; 
+  DateTime? _treatmentStartDate;
   String? _tbRegimen;
 
   // DATA
   List<Map<String, dynamic>> _doctorNotes = [];
   List<Map<String, dynamic>> _appointments = [];
   String _noteFilterCategory = 'All';
-  
+
   // CRUD INPUTS
   final TextEditingController _noteController = TextEditingController();
-  String _selectedCategory = 'Question'; 
+  String _selectedCategory = 'Question';
   final List<String> _categories = ['Question', 'Symptom', 'Side Effect', 'Other'];
 
-  // THEME PALETTE
-  final Color kPrimaryGreen = const Color(0xFF283618);
-  final Color kSecondaryGreen = const Color(0xFF606C38);
-  final Color kCreamAccent = const Color(0xFFFEFAE0);
-  final Color kWhite = Colors.white;
-  final Color kSoftGrey = const Color(0xFFF8F9FA);
+  // --- FORMAL CLINICAL COLOR SYSTEM ---
+  static const Color primaryTeal = Color(0xFF0F766E);       // Deep Clinical Teal
+  static const Color primaryDark = Color(0xFF115E59);       // Spruce Slate
+  static const Color primaryDeep = Color(0xFF042F2E);       // Deepest Navy Teal
+  static const Color backgroundSurface = Color(0xFFF1F5F9); // Contrast Slate Background
+  static const Color cardBg = Colors.white;                // Pure White Card
+  static const Color textCharcoal = Color(0xFF0F172A);      // High Contrast Text
+  static const Color textMuted = Color(0xFF64748B);         // Subdued Text
+  static const Color borderNeutral = Color(0xFFE2E8F0);     // Structured Border
+  static const Color emeraldGreen = Color(0xFF059669);      // Positive Compliance
+  static const Color inputBg = Color(0xFFF8FAFC);          // Form Field Background
 
   @override
   void initState() {
@@ -51,79 +58,82 @@ class _FollowUpPageState extends State<FollowUpPage> {
     super.dispose();
   }
 
+  // Prevents duplicate "Dr. Dr." prefixes
+  String _formatDoctorName(String? name) {
+    if (name == null || name.trim().isEmpty) return "";
+    final clean = name.trim().replaceFirst(RegExp(r'^(dr\.?\s*)+', caseSensitive: false), '');
+    return "Dr. $clean";
+  }
+
   void _showNotificationPopup(String message, {bool isSuccess = false}) {
+    HapticFeedback.mediumImpact();
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
-      barrierColor: Colors.black.withOpacity(0.4),
-      transitionDuration: const Duration(milliseconds: 300),
+      barrierColor: Colors.black.withOpacity(0.45),
+      transitionDuration: const Duration(milliseconds: 200),
       pageBuilder: (context, animation, secondaryAnimation) => const SizedBox.shrink(),
       transitionBuilder: (context, a1, a2, child) {
-        final color = isSuccess ? const Color(0xFF606C38) : Colors.redAccent;
+        final color = isSuccess ? primaryTeal : const Color(0xFFDC2626);
         final icon = isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded;
-        
-        return Transform.scale(
-          scale: Curves.easeOutBack.transform(a1.value),
-          child: FadeTransition(
-            opacity: a1,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              backgroundColor: Colors.white,
-              contentPadding: const EdgeInsets.all(24),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, color: color, size: 32),
+
+        return FadeTransition(
+          opacity: a1,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: borderNeutral),
+            ),
+            backgroundColor: Colors.white,
+            contentPadding: const EdgeInsets.all(24),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(color: color.withOpacity(0.1), shape: BoxShape.circle),
+                  child: Icon(icon, color: color, size: 28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  isSuccess ? "Success" : "Notice",
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: textCharcoal,
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    isSuccess ? "Success" : "Notice",
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: Color(0xFF2D3B1E), 
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w400,
+                    fontSize: 13,
+                    color: textMuted,
+                    height: 1.4,
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                      color: Colors.black87,
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryTeal,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
                     ),
+                    onPressed: () {
+                      HapticFeedback.lightImpact();
+                      Navigator.of(context).pop();
+                    },
+                    child: Text("Got it", style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF606C38),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        elevation: 0,
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text(
-                        "Got it",
-                        style: TextStyle(
-                          color: Colors.white, 
-                          fontWeight: FontWeight.w600, 
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
@@ -136,29 +146,29 @@ class _FollowUpPageState extends State<FollowUpPage> {
     if (user == null) return;
 
     _supabase
-      .channel('followup_sync')
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'profiles',
-        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: user.id),
-        callback: (payload) => _checkConnectionAndLoad(),
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'connections',
-        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
-        callback: (payload) => _checkConnectionAndLoad(),
-      )
-      .onPostgresChanges(
-        event: PostgresChangeEvent.all,
-        schema: 'public',
-        table: 'roadmap',
-        filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
-        callback: (payload) => _fetchAppointments(), 
-      )
-      .subscribe();
+        .channel('followup_sync')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'profiles',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'id', value: user.id),
+          callback: (payload) => _checkConnectionAndLoad(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'connections',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+          callback: (payload) => _checkConnectionAndLoad(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'roadmap',
+          filter: PostgresChangeFilter(type: PostgresChangeFilterType.eq, column: 'patient_id', value: user.id),
+          callback: (payload) => _fetchAppointments(),
+        )
+        .subscribe();
   }
 
   Future<void> _checkConnectionAndLoad() async {
@@ -174,15 +184,15 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
       final profileData = await _supabase
           .from('profiles')
-          .select('treatment_start_date, status, tb_regimen') 
+          .select('treatment_start_date, status, tb_regimen')
           .eq('id', user.id)
-          .maybeSingle(); 
+          .maybeSingle();
 
       if (mounted) {
         setState(() {
           _connectionStatus = connectionData?['status'];
           _patientStatus = profileData?['status'];
-          _tbRegimen = profileData?['tb_regimen'] ?? "6-Month DOTS";
+          _tbRegimen = profileData?['tb_regimen'] ?? "Standard Regimen";
 
           if (connectionData != null) {
             _linkedDoctorId = connectionData['doctor_id'];
@@ -194,16 +204,16 @@ class _FollowUpPageState extends State<FollowUpPage> {
           }
 
           if (profileData != null && profileData['treatment_start_date'] != null) {
-             _treatmentStartDate = DateTime.tryParse(profileData['treatment_start_date'].toString());
+            _treatmentStartDate = DateTime.tryParse(profileData['treatment_start_date'].toString());
           } else {
-             _treatmentStartDate = null;
+            _treatmentStartDate = null;
           }
         });
       }
 
       if (_connectionStatus == 'active' || _patientStatus == 'cured' || _patientStatus == 'treatment_completed') {
         await Future.wait([
-          _fetchNotes(), 
+          _fetchNotes(),
           _fetchAppointments(),
         ]);
       }
@@ -216,46 +226,57 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
   Future<void> _fetchNotes() async {
     try {
-      final data = await _supabase.from('doctor_notes')
+      final data = await _supabase
+          .from('doctor_notes')
           .select()
           .eq('user_id', _supabase.auth.currentUser!.id)
-          .eq('is_checked', false) 
+          .eq('is_checked', false)
           .order('created_at', ascending: false);
       if (mounted) setState(() => _doctorNotes = List<Map<String, dynamic>>.from(data));
-    } catch (e) { debugPrint('Notes Error: $e'); }
+    } catch (e) {
+      debugPrint('Notes Error: $e');
+    }
   }
 
   Future<void> _fetchAppointments() async {
     try {
-      final data = await _supabase.from('roadmap')
+      final data = await _supabase
+          .from('roadmap')
           .select()
           .eq('patient_id', _supabase.auth.currentUser!.id)
-          .neq('status', 'completed') 
+          .neq('status', 'completed')
           .order('appointment_date', ascending: true);
       if (mounted) setState(() => _appointments = List<Map<String, dynamic>>.from(data));
-    } catch (e) { debugPrint('Appt Error: $e'); }
+    } catch (e) {
+      debugPrint('Appt Error: $e');
+    }
   }
 
   Future<void> _addNote() async {
-    if (_noteController.text.isEmpty) return;
-    final text = _noteController.text;
+    if (_noteController.text.trim().isEmpty) return;
+    final text = _noteController.text.trim();
     final category = _selectedCategory;
     _noteController.clear();
     setState(() => _selectedCategory = 'Question');
     try {
-      await _supabase.from('doctor_notes').insert({'note_text': text, 'category': category, 'user_id': _supabase.auth.currentUser!.id, 'is_checked': false});
+      await _supabase.from('doctor_notes').insert({
+        'note_text': text,
+        'category': category,
+        'user_id': _supabase.auth.currentUser!.id,
+        'is_checked': false,
+      });
       _fetchNotes();
-      _showNotificationPopup("Note successfully sent to your doctor's queue.", isSuccess: true);
-    } catch (e) { 
-      debugPrint('Add Note Error: $e'); 
+      _showNotificationPopup("Note successfully forwarded to your attending clinician's queue.", isSuccess: true);
+    } catch (e) {
+      debugPrint('Add Note Error: $e');
       if (mounted) _showNotificationPopup("Failed to add note: $e");
     }
   }
 
-  Future<void> _deleteNote(String id) async { 
+  Future<void> _deleteNote(String id) async {
     try {
-      await _supabase.from('doctor_notes').delete().eq('id', id); 
-      _fetchNotes(); 
+      await _supabase.from('doctor_notes').delete().eq('id', id);
+      _fetchNotes();
     } catch (e) {
       debugPrint('Delete Note Error: $e');
       if (mounted) _showNotificationPopup("Failed to delete note: $e");
@@ -263,182 +284,265 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   Future<void> _toggleNote(int index) async {
-    setState(() { _doctorNotes[index]['is_checked'] = true; });
-    await Future.delayed(const Duration(milliseconds: 500));
+    setState(() {
+      _doctorNotes[index]['is_checked'] = true;
+    });
+    await Future.delayed(const Duration(milliseconds: 300));
     final noteId = _doctorNotes[index]['id'];
     try {
       await _supabase.from('doctor_notes').update({'is_checked': true}).eq('id', noteId);
-      if (mounted) { setState(() { _doctorNotes.removeAt(index); }); }
+      if (mounted) {
+        setState(() {
+          _doctorNotes.removeAt(index);
+        });
+      }
     } catch (e) {
       debugPrint('Toggle Note Error: $e');
       if (mounted) {
-        setState(() { _doctorNotes[index]['is_checked'] = false; });
+        setState(() {
+          _doctorNotes[index]['is_checked'] = false;
+        });
         _showNotificationPopup("Failed to update note: $e");
       }
     }
   }
 
-  Future<void> _deleteAppointment(String id) async { 
+  Future<void> _deleteAppointment(String id) async {
     try {
       await _supabase.from('roadmap').delete().eq('id', id);
-      _fetchAppointments(); 
+      _fetchAppointments();
     } catch (e) {
       debugPrint('Delete Appt Error: $e');
-      if (mounted) _showNotificationPopup("Failed to delete appointment: $e");
+      if (mounted) _showNotificationPopup("Failed to delete milestone: $e");
     }
   }
 
   Future<void> _editNoteDialog(Map<String, dynamic> note) async {
     final editController = TextEditingController(text: note['note_text']);
     String editCategory = note['category'] ?? 'Question';
-    
+
     await showDialog(
-      context: context, 
+      context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)), 
-          title: Text("Edit Note", style: TextStyle(color: kPrimaryGreen, fontWeight: FontWeight.bold)), 
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+            side: const BorderSide(color: borderNeutral),
+          ),
+          title: Text(
+            "Edit Consultation Note",
+            style: GoogleFonts.inter(color: textCharcoal, fontWeight: FontWeight.w700, fontSize: 16),
+          ),
           content: Column(
-            mainAxisSize: MainAxisSize.min, 
+            mainAxisSize: MainAxisSize.min,
             children: [
               Wrap(
-                spacing: 8, 
-                children: _categories.map((cat) { 
-                  final isSelected = editCategory == cat; 
+                spacing: 8,
+                children: _categories.map((cat) {
+                  final isSelected = editCategory == cat;
                   return ChoiceChip(
-                    label: Text(cat), 
-                    selected: isSelected, 
-                    selectedColor: kSecondaryGreen, 
-                    labelStyle: TextStyle(color: isSelected ? Colors.white : kPrimaryGreen, fontSize: 12), 
-                    onSelected: (val) => setDialogState(() => editCategory = cat)
-                  ); 
-                }).toList()
-              ), 
-              const SizedBox(height: 15), 
+                    label: Text(cat),
+                    selected: isSelected,
+                    selectedColor: primaryTeal.withOpacity(0.12),
+                    backgroundColor: inputBg,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      side: BorderSide(color: isSelected ? primaryTeal : borderNeutral),
+                    ),
+                    labelStyle: GoogleFonts.inter(
+                      color: isSelected ? primaryTeal : textMuted,
+                      fontSize: 12,
+                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    ),
+                    onSelected: (val) => setDialogState(() => editCategory = cat),
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 14),
               TextField(
-                controller: editController, 
-                maxLines: 3, 
+                controller: editController,
+                maxLines: 3,
+                style: GoogleFonts.inter(color: textCharcoal, fontSize: 13.5),
                 decoration: InputDecoration(
-                  hintText: "Update your note...", 
-                  filled: true, 
-                  fillColor: kSoftGrey, 
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none)
-                )
-              )
-            ]
-          ), 
+                  hintText: "Update your note...",
+                  hintStyle: GoogleFonts.inter(color: Colors.black26, fontSize: 13),
+                  filled: true,
+                  fillColor: inputBg,
+                  contentPadding: const EdgeInsets.all(12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: borderNeutral)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: borderNeutral)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: primaryTeal, width: 1.5)),
+                ),
+              ),
+            ],
+          ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: const Text("Cancel", style: TextStyle(color: Colors.grey))), 
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: Text("Cancel", style: GoogleFonts.inter(color: textMuted, fontWeight: FontWeight.w600)),
+            ),
             ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))), 
-              onPressed: () async { 
+              style: ElevatedButton.styleFrom(
+                backgroundColor: primaryTeal,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                elevation: 0,
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              ),
+              onPressed: () async {
                 try {
-                  if (editController.text.isNotEmpty) { 
-                    await _supabase.from('doctor_notes').update({'note_text': editController.text, 'category': editCategory}).eq('id', note['id']); 
-                    _fetchNotes(); 
-                    if (context.mounted) Navigator.pop(context); 
+                  if (editController.text.trim().isNotEmpty) {
+                    await _supabase.from('doctor_notes').update({
+                      'note_text': editController.text.trim(),
+                      'category': editCategory,
+                    }).eq('id', note['id']);
+                    _fetchNotes();
+                    if (context.mounted) Navigator.pop(context);
                   }
                 } catch (e) {
                   if (context.mounted) _showNotificationPopup("Failed to save changes: $e");
                 }
-              }, 
-              child: const Text("Save Changes", style: TextStyle(color: Colors.white))
-            )
-          ]
-        )
-      )
+              },
+              child: Text("Save", style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
+            ),
+          ],
+        ),
+      ),
     );
   }
 
-  void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) { 
+  void _showAppointmentModal({Map<String, dynamic>? apptToEdit}) {
     final isEditing = apptToEdit != null;
-    
+
     final titleController = TextEditingController(text: isEditing ? (apptToEdit['title'] ?? "") : "Follow-up Checkup");
     final locController = TextEditingController(text: isEditing ? (apptToEdit['location'] ?? "") : "Carmona Health Center");
-    
+
     DateTime? selectedDate = isEditing ? DateTime.tryParse(apptToEdit['appointment_date']) : null;
     TimeOfDay? selectedTime;
-    
-    if (isEditing && apptToEdit['appointment_time'] != null) { 
-      final parts = apptToEdit['appointment_time'].toString().split(':'); 
-      selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1])); 
+
+    if (isEditing && apptToEdit['appointment_time'] != null) {
+      final parts = apptToEdit['appointment_time'].toString().split(':');
+      selectedTime = TimeOfDay(hour: int.parse(parts[0]), minute: int.parse(parts[1]));
     } else {
       selectedTime = const TimeOfDay(hour: 8, minute: 0);
     }
-    
+
     bool isSaving = false;
-    
+
     showModalBottomSheet(
-      context: context, isScrollControlled: true, backgroundColor: kWhite, 
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(35))), 
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
       builder: (context) => StatefulBuilder(
         builder: (context, setModalState) => Padding(
-          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 25, right: 25, top: 20), 
+          padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom, left: 20, right: 20, top: 16),
           child: Column(
-            mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, 
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey[300], borderRadius: BorderRadius.circular(10)))), 
-              const SizedBox(height: 25), 
-              Text(isEditing ? "Edit Milestone" : "Add Roadmap Milestone", style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)), 
-              const SizedBox(height: 20), 
-              _buildModernField(titleController, "Milestone Title", Icons.event_note_outlined), 
-              const SizedBox(height: 15), 
-              _buildModernField(locController, "Location / Goal", Icons.flag_outlined), 
-              const SizedBox(height: 20), 
-              Row(children: [
-                Expanded(child: _buildPickerTile(
-                  label: selectedDate == null ? "Select Date" : DateFormat('MMM dd, yyyy').format(selectedDate!), 
-                  icon: Icons.calendar_month_rounded, 
-                  onTap: () async { 
-                    final picked = await showDatePicker(context: context, initialDate: selectedDate ?? DateTime.now(), firstDate: DateTime.now(), lastDate: DateTime(2030)); 
-                    if (picked != null) setModalState(() => selectedDate = picked); 
-                  }
-                )), 
-                const SizedBox(width: 15), 
-                Expanded(child: _buildPickerTile(
-                  label: selectedTime == null ? "Select Time" : selectedTime!.format(context), 
-                  icon: Icons.access_time_rounded, 
-                  onTap: () async { 
-                    final picked = await showTimePicker(context: context, initialTime: selectedTime ?? TimeOfDay.now()); 
-                    if (picked != null) setModalState(() => selectedTime = picked); 
-                  }
-                ))
-              ]), 
-              const SizedBox(height: 30), 
-              SizedBox(width: double.infinity, child: ElevatedButton(
-                style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, padding: const EdgeInsets.symmetric(vertical: 18), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))), 
-                onPressed: isSaving ? null : () async { 
-                  if (titleController.text.isNotEmpty && selectedDate != null && selectedTime != null) { 
-                    setModalState(() => isSaving = true); 
-                    try { 
-                      final timeString = '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00'; 
-                      final Map<String, dynamic> appointmentData = {
-                        'patient_id': _supabase.auth.currentUser!.id, 
-                        'doctor_id': _linkedDoctorId, 
-                        'title': titleController.text,
-                        'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!), 
-                        'appointment_time': timeString, 
-                        'location': locController.text, 
-                        'status': 'scheduled',
-                        'type': isEditing ? apptToEdit['type'] : 'manual' 
-                      }; 
-                      if (isEditing) { await _supabase.from('roadmap').update(appointmentData).eq('id', apptToEdit['id']); } 
-                      else { await _supabase.from('roadmap').insert(appointmentData); } 
-                      await _fetchAppointments(); 
-                      if (context.mounted) Navigator.pop(context); 
-                    } catch (e) { 
-                      setModalState(() => isSaving = false); 
-                      if (mounted) _showNotificationPopup("Failed to save milestone: $e");
-                    } 
-                  } 
-                }, 
-                child: isSaving ? const CircularProgressIndicator(color: Colors.white) : Text(isEditing ? "Update Milestone" : "Add Milestone", style: TextStyle(color: kWhite, fontWeight: FontWeight.bold))
-              )), 
-              const SizedBox(height: 40)
-            ]
-          )
-        )
-      )
+              Center(
+                child: Container(
+                  width: 36,
+                  height: 4,
+                  decoration: BoxDecoration(color: borderNeutral, borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+              const SizedBox(height: 18),
+              Text(
+                isEditing ? "Edit Milestone" : "Schedule Roadmap Milestone",
+                style: GoogleFonts.inter(fontSize: 18, fontWeight: FontWeight.w700, color: textCharcoal),
+              ),
+              const SizedBox(height: 16),
+              _buildModernField(titleController, "Milestone Title", Icons.event_note_outlined),
+              const SizedBox(height: 12),
+              _buildModernField(locController, "Location / Facility", Icons.location_on_outlined),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildPickerTile(
+                      label: selectedDate == null ? "Select Date" : DateFormat('MMM dd, yyyy').format(selectedDate!),
+                      icon: Icons.calendar_month_rounded,
+                      onTap: () async {
+                        final picked = await showDatePicker(
+                          context: context,
+                          initialDate: selectedDate ?? DateTime.now(),
+                          firstDate: DateTime.now().subtract(const Duration(days: 365)),
+                          lastDate: DateTime(2030),
+                        );
+                        if (picked != null) setModalState(() => selectedDate = picked);
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: _buildPickerTile(
+                      label: selectedTime == null ? "Select Time" : selectedTime!.format(context),
+                      icon: Icons.access_time_rounded,
+                      onTap: () async {
+                        final picked = await showTimePicker(
+                          context: context,
+                          initialTime: selectedTime ?? TimeOfDay.now(),
+                        );
+                        if (picked != null) setModalState(() => selectedTime = picked);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: primaryTeal,
+                    foregroundColor: Colors.white,
+                    elevation: 0,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: isSaving
+                      ? null
+                      : () async {
+                          if (titleController.text.trim().isNotEmpty && selectedDate != null && selectedTime != null) {
+                            setModalState(() => isSaving = true);
+                            try {
+                              final timeString =
+                                  '${selectedTime!.hour.toString().padLeft(2, '0')}:${selectedTime!.minute.toString().padLeft(2, '0')}:00';
+                              final Map<String, dynamic> appointmentData = {
+                                'patient_id': _supabase.auth.currentUser!.id,
+                                'doctor_id': _linkedDoctorId,
+                                'title': titleController.text.trim(),
+                                'appointment_date': DateFormat('yyyy-MM-dd').format(selectedDate!),
+                                'appointment_time': timeString,
+                                'location': locController.text.trim(),
+                                'status': 'scheduled',
+                                'type': isEditing ? apptToEdit['type'] : 'manual',
+                              };
+                              if (isEditing) {
+                                await _supabase.from('roadmap').update(appointmentData).eq('id', apptToEdit['id']);
+                              } else {
+                                await _supabase.from('roadmap').insert(appointmentData);
+                              }
+                              await _fetchAppointments();
+                              if (context.mounted) Navigator.pop(context);
+                            } catch (e) {
+                              setModalState(() => isSaving = false);
+                              if (mounted) _showNotificationPopup("Failed to save milestone: $e");
+                            }
+                          }
+                        },
+                  child: isSaving
+                      ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                      : Text(isEditing ? "Update Milestone" : "Save Milestone", style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 14)),
+                ),
+              ),
+              const SizedBox(height: 24),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -447,114 +551,153 @@ class _FollowUpPageState extends State<FollowUpPage> {
     bool isUnlocked = _connectionStatus == 'active' || _patientStatus == 'cured' || _patientStatus == 'treatment_completed';
 
     return Scaffold(
-      backgroundColor: kWhite,
+      backgroundColor: backgroundSurface,
       appBar: AppBar(
-        backgroundColor: kWhite, elevation: 0, centerTitle: true,
-        leading: IconButton(icon: Icon(Icons.arrow_back_ios_new_rounded, color: kPrimaryGreen, size: 20), onPressed: () => Navigator.of(context).pop()),
-        title: Text('Roadmap & Milestones', style: TextStyle(fontWeight: FontWeight.w900, color: kPrimaryGreen, fontSize: 20)),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: textCharcoal, size: 18),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: Text(
+          'Roadmap & Milestones',
+          style: GoogleFonts.inter(fontWeight: FontWeight.w700, color: textCharcoal, fontSize: 17),
+        ),
       ),
-      body: _isLoading 
-        ? Center(child: CircularProgressIndicator(color: kSecondaryGreen)) 
-        : isUnlocked ? _buildUnlockedContent() : _buildLockedState(),
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator(color: primaryTeal))
+          : isUnlocked
+              ? _buildUnlockedContent()
+              : _buildLockedState(),
     );
   }
 
   Widget _buildUnlockedContent() {
     bool isCured = _patientStatus == 'cured' || _patientStatus == 'treatment_completed';
 
-    final filteredNotes = _noteFilterCategory == 'All' 
-        ? _doctorNotes 
+    final filteredNotes = _noteFilterCategory == 'All'
+        ? _doctorNotes
         : _doctorNotes.where((n) => (n['category'] ?? 'Question') == _noteFilterCategory).toList();
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (isCured)
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              margin: const EdgeInsets.only(bottom: 25),
+              padding: const EdgeInsets.all(18),
+              margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
-                color: Colors.green.shade50,
-                border: Border.all(color: Colors.green.shade200, width: 2),
-                borderRadius: BorderRadius.circular(20),
+                color: const Color(0xFFF0FDF4),
+                border: Border.all(color: const Color(0xFFBBF7D0)),
+                borderRadius: BorderRadius.circular(16),
               ),
               child: Column(
                 children: [
-                  Icon(Icons.verified_rounded, color: Colors.green.shade700, size: 40),
-                  const SizedBox(height: 10),
-                  Text("POST-TREATMENT SURVEILLANCE", style: TextStyle(fontWeight: FontWeight.w900, color: Colors.green.shade800, letterSpacing: 1.2)),
-                  const SizedBox(height: 5),
-                  Text("You have concluded active treatment. Please attend your scheduled 6-Month and 1-Year post-care clearances below.", textAlign: TextAlign.center, style: TextStyle(fontSize: 12, color: Colors.green.shade700)),
+                  const Icon(Icons.verified_rounded, color: emeraldGreen, size: 36),
+                  const SizedBox(height: 8),
+                  Text(
+                    "POST-TREATMENT SURVEILLANCE ACTIVE",
+                    style: GoogleFonts.inter(fontWeight: FontWeight.w800, color: const Color(0xFF166534), fontSize: 12, letterSpacing: 0.8),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    "You have concluded active daily intake. Please attend your scheduled 6-Month and 1-Year post-care clearances below.",
+                    textAlign: TextAlign.center,
+                    style: GoogleFonts.inter(fontSize: 12, color: textMuted, height: 1.35),
+                  ),
                 ],
               ),
             )
           else
-            _buildRecoveryRoadmap(), 
+            _buildRecoveryRoadmap(),
 
-          const SizedBox(height: 25),
-          
-          // --- REPLACED STREAK WITH DOH NTP CLINICAL TRAJECTORY STEPPER ---
+          const SizedBox(height: 18),
+
           if (!isCured) _buildClinicalTrajectoryCard(),
-          if (!isCured) const SizedBox(height: 30),
+          if (!isCured) const SizedBox(height: 24),
 
+          // Header for Milestones
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(isCured ? "Post-Care Checkpoints" : "Roadmap Milestones", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 20, color: kPrimaryGreen)),
+              Text(
+                isCured ? "Post-Care Surveillance Checkpoints" : "Roadmap Milestones",
+                style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 15, color: textCharcoal),
+              ),
               if (!isCured)
                 GestureDetector(
                   onTap: () => _showAppointmentModal(),
                   child: Container(
-                    padding: const EdgeInsets.all(8),
-                    decoration: BoxDecoration(color: kSecondaryGreen, shape: BoxShape.circle),
-                    child: const Icon(Icons.add, color: Colors.white, size: 20),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: primaryTeal.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.add, color: primaryTeal, size: 16),
+                        const SizedBox(width: 4),
+                        Text(
+                          "Add Event",
+                          style: GoogleFonts.inter(color: primaryTeal, fontWeight: FontWeight.w700, fontSize: 11.5),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
             ],
           ),
-          const SizedBox(height: 15),
+          const SizedBox(height: 12),
+
           if (_appointments.isEmpty) _buildEmptyState(isCured ? "You have no scheduled follow-ups." : "No milestones scheduled yet."),
-          
+
           ..._appointments.map((appt) => _buildDismissibleWrapper(
-            id: appt['id'].toString(), 
-            onDismiss: () => _deleteAppointment(appt['id'].toString()), 
-            child: GestureDetector(
-              onTap: () => _showAppointmentModal(apptToEdit: appt),
-              child: _buildAppointmentCard(
-                appt['title'] ?? _doctorName ?? "Follow-up", 
-                appt['appointment_date'], 
-                appt['appointment_time'] ?? "08:00:00", 
-                appt['location'] ?? "Clinic",
-                appt['type'] ?? "manual"
-              )
-            )
-          )),
-          const SizedBox(height: 40),
-          
+                id: appt['id'].toString(),
+                onDismiss: () => _deleteAppointment(appt['id'].toString()),
+                child: GestureDetector(
+                  onTap: () => _showAppointmentModal(apptToEdit: appt),
+                  child: _buildAppointmentCard(
+                    appt['title'] ?? (_doctorName != null ? _formatDoctorName(_doctorName) : "Follow-up Checkup"),
+                    appt['appointment_date'],
+                    appt['appointment_time'] ?? "08:00:00",
+                    appt['location'] ?? "Carmona Health Center",
+                    appt['type'] ?? "manual",
+                  ),
+                ),
+              )),
+          const SizedBox(height: 28),
+
           if (!isCured) ...[
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text("CONSULTATION NOTES", style: TextStyle(color: kSecondaryGreen, fontSize: 12, fontWeight: FontWeight.w800, letterSpacing: 1.5)),
-                DropdownButton<String>(
-                  value: _noteFilterCategory,
-                  underline: const SizedBox(),
-                  icon: const Icon(Icons.filter_list_rounded, size: 16),
-                  style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimaryGreen),
-                  items: ['All', ..._categories].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
-                  onChanged: (val) => setState(() => _noteFilterCategory = val ?? 'All'),
-                )
+                Text(
+                  "CONSULTATION NOTES & QUESTIONS",
+                  style: GoogleFonts.inter(color: textMuted, fontSize: 11.5, fontWeight: FontWeight.w700, letterSpacing: 1.0),
+                ),
+                DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _noteFilterCategory,
+                    icon: const Icon(Icons.filter_list_rounded, size: 16, color: primaryTeal),
+                    style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: primaryTeal),
+                    items: ['All', ..._categories].map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                    onChanged: (val) => setState(() => _noteFilterCategory = val ?? 'All'),
+                  ),
+                ),
               ],
             ),
-            const SizedBox(height: 15),
-            _buildNoteInputArea(), 
-            const SizedBox(height: 25),
-            if (filteredNotes.isEmpty) _buildEmptyState("No notes matching filter."),
+            const SizedBox(height: 8),
+            _buildNoteInputArea(),
+            const SizedBox(height: 16),
+            if (filteredNotes.isEmpty) _buildEmptyState("No notes matching the selected category."),
             ListView.builder(
-              shrinkWrap: true, physics: const NeverScrollableScrollPhysics(),
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
               itemCount: filteredNotes.length,
               itemBuilder: (context, index) {
                 final note = filteredNotes[index];
@@ -562,7 +705,7 @@ class _FollowUpPageState extends State<FollowUpPage> {
               },
             ),
           ],
-          const SizedBox(height: 100),
+          const SizedBox(height: 80),
         ],
       ),
     );
@@ -571,39 +714,72 @@ class _FollowUpPageState extends State<FollowUpPage> {
   Widget _buildLockedState() {
     bool isPending = _connectionStatus == 'pending';
     bool isAwaitingPrescription = _connectionStatus == 'active' && _treatmentStartDate == null;
+    final docDisplay = _doctorName != null ? _formatDoctorName(_doctorName) : "your doctor";
 
-    return Padding(
-      padding: const EdgeInsets.all(30),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kCreamAccent, shape: BoxShape.circle), 
-            child: Icon(isAwaitingPrescription ? Icons.medical_services_outlined : Icons.lock_outline_rounded, size: 50, color: kPrimaryGreen)
-          ),
-          const SizedBox(height: 30),
-          Text(isAwaitingPrescription ? "Awaiting Prescription" : (isPending ? "Waiting for Approval" : "Feature Locked"), 
-            style: TextStyle(fontSize: 24, fontWeight: FontWeight.w900, color: kPrimaryGreen)),
-          const SizedBox(height: 10),
-          Text(isAwaitingPrescription 
-            ? "Dr. ${(_doctorName ?? "your doctor")} has linked your account. Once your treatment dates are set, your roadmap will appear."
-            : (isPending ? "Your request is being reviewed by the clinic." : "Link with your doctor to coordinate visits."), 
-            textAlign: TextAlign.center, style: const TextStyle(color: Colors.grey, fontSize: 14)),
-          const SizedBox(height: 40),
-          Container(
-            padding: const EdgeInsets.all(25), decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(25)),
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text("YOUR TREATMENT JOURNEY", style: TextStyle(fontSize: 12, fontWeight: FontWeight.w900, color: kSecondaryGreen, letterSpacing: 1.2)),
-              const SizedBox(height: 25),
-              _buildStep("Account Created", true), 
-              _buildStep("Risk Assessment", true), 
-              _buildStep("Link to Clinic", isPending || isAwaitingPrescription), 
-              _buildStep("Unlock Roadmap & Diary", false, isLast: true),
-            ]),
-          ),
-          const SizedBox(height: 30),
-          if (!isPending && !isAwaitingPrescription) ElevatedButton(onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'), style: ElevatedButton.styleFrom(backgroundColor: kPrimaryGreen, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(15)), padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)), child: const Text("Go to Dashboard", style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold))),
-        ],
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(color: primaryTeal.withOpacity(0.08), shape: BoxShape.circle),
+              child: Icon(
+                isAwaitingPrescription ? Icons.medical_services_outlined : Icons.lock_outline_rounded,
+                size: 44,
+                color: primaryTeal,
+              ),
+            ),
+            const SizedBox(height: 20),
+            Text(
+              isAwaitingPrescription
+                  ? "Awaiting Regimen Schedule"
+                  : (isPending ? "Waiting for Clinic Verification" : "Roadmap Locked"),
+              style: GoogleFonts.inter(fontSize: 19, fontWeight: FontWeight.w700, color: textCharcoal),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              isAwaitingPrescription
+                  ? "$docDisplay has linked your account. Once your treatment timeline is set by the clinic, your trajectory milestones will appear."
+                  : (isPending ? "Your link request is currently being reviewed by the health center." : "Link with your clinic doctor to coordinate your checkup schedule."),
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(color: textMuted, fontSize: 13, height: 1.4),
+            ),
+            const SizedBox(height: 28),
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: borderNeutral),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("TREATMENT PATHWAY", style: GoogleFonts.inter(fontSize: 10.5, fontWeight: FontWeight.w700, color: textMuted, letterSpacing: 1.0)),
+                  const SizedBox(height: 18),
+                  _buildStep("Account Created", true),
+                  _buildStep("Risk Assessment", true),
+                  _buildStep("Link to Clinic", isPending || isAwaitingPrescription),
+                  _buildStep("Unlock Roadmap & Diary", false, isLast: true),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            if (!isPending && !isAwaitingPrescription)
+              ElevatedButton(
+                onPressed: () => Navigator.pushReplacementNamed(context, '/dashboard'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: primaryTeal,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  elevation: 0,
+                ),
+                child: Text("Go to Dashboard", style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -611,45 +787,95 @@ class _FollowUpPageState extends State<FollowUpPage> {
   Widget _buildRecoveryRoadmap() {
     if (_treatmentStartDate == null) {
       return Container(
-        padding: const EdgeInsets.all(20), 
-        decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), 
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderNeutral),
+        ),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start, 
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text("Treatment Roadmap", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), 
-            const SizedBox(height: 10),
-            const Text("Roadmap hasn't been set by your doctor yet.", style: TextStyle(fontSize: 14, color: Colors.grey, fontStyle: FontStyle.italic)),
-          ]
-        )
+            Text("Treatment Roadmap", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14.5, color: textCharcoal)),
+            const SizedBox(height: 6),
+            Text("Treatment timeline has not been calibrated by your clinic yet.", style: GoogleFonts.inter(fontSize: 12.5, color: textMuted, fontStyle: FontStyle.italic)),
+          ],
+        ),
       );
     }
 
     int daysPassed = DateTime.now().difference(_treatmentStartDate!).inDays;
-    double progress = (daysPassed / 180).clamp(0.0, 1.0); 
+    double progress = (daysPassed / 180).clamp(0.0, 1.0);
     int month = (daysPassed / 30).ceil().clamp(1, 6);
-    
-    return Container(padding: const EdgeInsets.all(20), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(25), border: Border.all(color: kSoftGrey, width: 2)), 
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
-          Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            Text("Treatment Progress", style: TextStyle(fontWeight: FontWeight.w900, fontSize: 16, color: kPrimaryGreen)), 
-            Text("Started: ${DateFormat('MMM dd, yyyy').format(_treatmentStartDate!)}", style: const TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.bold))
-          ]), 
-          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: kCreamAccent, borderRadius: BorderRadius.circular(10)), child: Text("Month $month of 6", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: kSecondaryGreen)))
-        ]), 
-        const SizedBox(height: 15), 
-        ClipRRect(borderRadius: BorderRadius.circular(10), child: LinearProgressIndicator(value: progress, minHeight: 12, backgroundColor: kSoftGrey, color: kSecondaryGreen)), 
-        const SizedBox(height: 10), 
-        Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text("${(progress * 100).toInt()}% Complete", style: TextStyle(fontSize: 12, color: kPrimaryGreen, fontWeight: FontWeight.bold)), Text("${180 - daysPassed} days left", style: const TextStyle(fontSize: 11, color: Colors.grey))])
-      ]));
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderNeutral),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text("Treatment Progress", style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14.5, color: textCharcoal)),
+                  const SizedBox(height: 2),
+                  Text("Initiated: ${DateFormat('MMM dd, yyyy').format(_treatmentStartDate!)}", style: GoogleFonts.inter(fontSize: 11.5, color: textMuted)),
+                ],
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: primaryTeal.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  "Month $month of 6",
+                  style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 11.5, color: primaryTeal),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(8),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 10,
+              backgroundColor: const Color(0xFFF1F5F9),
+              valueColor: const AlwaysStoppedAnimation<Color>(primaryTeal),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text("${(progress * 100).toInt()}% Complete", style: GoogleFonts.inter(fontSize: 11.5, color: textCharcoal, fontWeight: FontWeight.w700)),
+              Text("${(180 - daysPassed).clamp(0, 180)} days remaining", style: GoogleFonts.inter(fontSize: 11, color: textMuted)),
+            ],
+          ),
+        ],
+      ),
+    );
   }
 
-  // --- REPLACED STREAK CARD: MOBILE DOH NTP CLINICAL TRAJECTORY STEPPER ---
+  // --- DOH NTP CLINICAL TRAJECTORY STEPPER ---
   Widget _buildClinicalTrajectoryCard() {
     final now = DateTime.now();
-    final elapsedDays = _treatmentStartDate != null 
-        ? now.difference(_treatmentStartDate!).inDays 
-        : 0;
+    final elapsedDays = _treatmentStartDate != null ? now.difference(_treatmentStartDate!).inDays : 0;
 
     final bool isIntensive = elapsedDays <= 60;
     final String currentPhaseTitle = isIntensive ? "Intensive Phase" : "Continuation Phase";
@@ -663,17 +889,17 @@ class _FollowUpPageState extends State<FollowUpPage> {
     ];
 
     return Container(
-      padding: const EdgeInsets.all(20),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-        color: kWhite,
-        borderRadius: BorderRadius.circular(25),
-        border: Border.all(color: kSecondaryGreen.withOpacity(0.2), width: 1.5),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderNeutral),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
+            color: Colors.black.withOpacity(0.02),
             blurRadius: 10,
-            offset: const Offset(0, 4),
-          )
+            offset: const Offset(0, 2),
+          ),
         ],
       ),
       child: Column(
@@ -686,55 +912,51 @@ class _FollowUpPageState extends State<FollowUpPage> {
               Row(
                 children: [
                   Container(
-                    padding: const EdgeInsets.all(8),
+                    padding: const EdgeInsets.all(7),
                     decoration: BoxDecoration(
-                      color: kSecondaryGreen.withOpacity(0.12),
+                      color: primaryTeal.withOpacity(0.08),
                       shape: BoxShape.circle,
                     ),
-                    child: Icon(Icons.route_rounded, color: kSecondaryGreen, size: 20),
+                    child: const Icon(Icons.route_rounded, color: primaryTeal, size: 18),
                   ),
                   const SizedBox(width: 10),
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        "DOH NTP Trajectory",
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w900,
-                          color: kPrimaryGreen,
-                        ),
+                        "Clinical Trajectory",
+                        style: GoogleFonts.inter(fontSize: 14, fontWeight: FontWeight.w700, color: textCharcoal),
                       ),
                       Text(
-                        "Clinical Care Protocol",
-                        style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
+                        "DOH Standard Care Protocol",
+                        style: GoogleFonts.inter(fontSize: 10.5, color: textMuted),
                       ),
                     ],
                   ),
                 ],
               ),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
-                  color: isIntensive ? Colors.amber.shade50 : Colors.blue.shade50,
-                  border: Border.all(color: isIntensive ? Colors.amber.shade200 : Colors.blue.shade200),
-                  borderRadius: BorderRadius.circular(10),
+                  color: isIntensive ? const Color(0xFFFEF3C7) : const Color(0xFFF0FDFA),
+                  border: Border.all(color: isIntensive ? const Color(0xFFFDE68A) : const Color(0xFFCCFBF1)),
+                  borderRadius: BorderRadius.circular(8),
                 ),
                 child: Text(
                   currentPhaseTitle,
-                  style: TextStyle(
+                  style: GoogleFonts.inter(
                     fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: isIntensive ? Colors.amber.shade900 : Colors.blue.shade800,
+                    fontWeight: FontWeight.w700,
+                    color: isIntensive ? const Color(0xFFB45309) : primaryTeal,
                   ),
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: 20),
 
-          // Mathematically aligned horizontal stepper
+          // Stepper
           LayoutBuilder(
             builder: (context, constraints) {
               final totalWidth = constraints.maxWidth;
@@ -744,35 +966,24 @@ class _FollowUpPageState extends State<FollowUpPage> {
 
               return Stack(
                 children: [
-                  // Inactive background connecting track
                   Positioned(
-                    top: 15,
+                    top: 14,
                     left: startLine,
                     right: startLine,
                     child: Container(
-                      height: 3,
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade200,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                      height: 2,
+                      decoration: BoxDecoration(color: borderNeutral, borderRadius: BorderRadius.circular(2)),
                     ),
                   ),
-
-                  // Active filled track
                   Positioned(
-                    top: 15,
+                    top: 14,
                     left: startLine,
                     child: Container(
-                      height: 3,
+                      height: 2,
                       width: endLine * progressPercent,
-                      decoration: BoxDecoration(
-                        color: kSecondaryGreen,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
+                      decoration: BoxDecoration(color: primaryTeal, borderRadius: BorderRadius.circular(2)),
                     ),
                   ),
-
-                  // 4 Milestone Nodes
                   Row(
                     children: List.generate(steps.length, (idx) {
                       final s = steps[idx];
@@ -785,58 +996,46 @@ class _FollowUpPageState extends State<FollowUpPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Container(
-                              width: 30,
-                              height: 30,
+                              width: 28,
+                              height: 28,
                               decoration: BoxDecoration(
-                                color: isDone
-                                    ? kSecondaryGreen
-                                    : (isCurrent ? Colors.white : Colors.white),
+                                color: isDone ? primaryTeal : Colors.white,
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: isDone
-                                      ? kSecondaryGreen
-                                      : (isCurrent ? kSecondaryGreen : Colors.grey.shade300),
-                                  width: isCurrent ? 3 : 2,
+                                  color: isDone ? primaryTeal : (isCurrent ? primaryTeal : borderNeutral),
+                                  width: isCurrent ? 2.5 : 1.5,
                                 ),
-                                boxShadow: isCurrent ? [
-                                  BoxShadow(
-                                    color: kSecondaryGreen.withOpacity(0.3),
-                                    blurRadius: 6,
-                                    spreadRadius: 1,
-                                  )
-                                ] : [],
                               ),
                               child: Center(
                                 child: isDone
-                                    ? const Icon(Icons.check, size: 16, color: Colors.white)
+                                    ? const Icon(Icons.check, size: 15, color: Colors.white)
                                     : Text(
                                         "${idx + 1}",
-                                        style: TextStyle(
+                                        style: GoogleFonts.inter(
                                           fontSize: 11,
-                                          fontWeight: FontWeight.bold,
-                                          color: isCurrent ? kSecondaryGreen : Colors.grey.shade400,
+                                          fontWeight: FontWeight.w700,
+                                          color: isCurrent ? primaryTeal : textMuted,
                                         ),
                                       ),
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
                             Text(
                               s['title'] as String,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: isCurrent || isDone ? FontWeight.w800 : FontWeight.w600,
-                                color: isDone ? kPrimaryGreen : (isCurrent ? kSecondaryGreen : Colors.grey.shade600),
+                              style: GoogleFonts.inter(
+                                fontSize: 11.5,
+                                fontWeight: isCurrent || isDone ? FontWeight.w700 : FontWeight.w500,
+                                color: isDone ? textCharcoal : (isCurrent ? primaryTeal : textMuted),
                               ),
                             ),
-                            const SizedBox(height: 2),
                             Text(
                               s['sub'] as String,
                               textAlign: TextAlign.center,
-                              style: TextStyle(
+                              style: GoogleFonts.inter(
                                 fontSize: 10,
-                                color: Colors.grey.shade500,
-                                fontWeight: FontWeight.w500,
+                                color: textMuted,
+                                fontWeight: FontWeight.w400,
                               ),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
@@ -851,29 +1050,28 @@ class _FollowUpPageState extends State<FollowUpPage> {
             },
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: 18),
 
-          // Contextual clinical summary banner
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
-              color: kSoftGrey,
-              borderRadius: BorderRadius.circular(14),
+              color: backgroundSurface,
+              borderRadius: BorderRadius.circular(10),
             ),
             child: Row(
               children: [
-                Icon(Icons.info_outline_rounded, color: kSecondaryGreen, size: 16),
+                const Icon(Icons.info_outline_rounded, color: primaryTeal, size: 15),
                 const SizedBox(width: 8),
                 Expanded(
                   child: Text(
-                    isIntensive 
-                        ? "Intensive Phase active: $currentDrugFocus. Target: Month 2 Conversion Test."
-                        : "Continuation Phase active: $currentDrugFocus. Target: Month 6 Cure Clearance.",
-                    style: TextStyle(
+                    isIntensive
+                        ? "Intensive Phase: $currentDrugFocus. Target: Month 2 Sputum Conversion."
+                        : "Continuation Phase: $currentDrugFocus. Target: Month 6 Treatment Completion.",
+                    style: GoogleFonts.inter(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: kPrimaryGreen,
+                      color: textCharcoal,
                     ),
                   ),
                 ),
@@ -886,20 +1084,41 @@ class _FollowUpPageState extends State<FollowUpPage> {
   }
 
   Widget _buildStep(String title, bool isActive, {bool isLast = false}) {
-    return Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Column(children: [
-        Icon(isActive ? Icons.check_circle : Icons.circle_outlined, color: isActive ? kPrimaryGreen : Colors.grey, size: 22), 
-        if (!isLast) Container(height: 30, width: 2, color: isActive ? kPrimaryGreen : Colors.grey.withOpacity(0.3))
-      ]), 
-      const SizedBox(width: 15), 
-      Text(title, style: TextStyle(fontWeight: isActive ? FontWeight.bold : FontWeight.normal, color: isActive ? kPrimaryGreen : Colors.grey, fontSize: 15))
-    ]);
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Column(
+          children: [
+            Icon(
+              isActive ? Icons.check_circle_rounded : Icons.radio_button_off_rounded,
+              color: isActive ? primaryTeal : textMuted.withOpacity(0.5),
+              size: 20,
+            ),
+            if (!isLast)
+              Container(
+                height: 24,
+                width: 1.5,
+                color: isActive ? primaryTeal : borderNeutral,
+              ),
+          ],
+        ),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: GoogleFonts.inter(
+            fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+            color: isActive ? textCharcoal : textMuted,
+            fontSize: 13.5,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildAppointmentCard(String title, String date, String time, String loc, String type) {
     bool isProtocol = type == 'protocol';
     bool isPostCare = type == 'post-treatment';
-    
+
     final apptDate = DateTime.tryParse(date) ?? DateTime.now();
     final isOverdue = apptDate.isBefore(DateTime(DateTime.now().year, DateTime.now().month, DateTime.now().day));
 
@@ -916,107 +1135,313 @@ class _FollowUpPageState extends State<FollowUpPage> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 15), 
-      padding: const EdgeInsets.all(20), 
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: kWhite, 
-        borderRadius: BorderRadius.circular(25), 
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: isOverdue ? Colors.red.shade300 : (isProtocol ? kSecondaryGreen.withOpacity(0.5) : (isPostCare ? Colors.green.shade200 : kSoftGrey)), 
-          width: isOverdue ? 2 : 2
-        )
-      ), 
-      child: Row(children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 15), 
-          decoration: BoxDecoration(
-            color: isOverdue ? Colors.red.shade50 : (isProtocol ? kSecondaryGreen.withOpacity(0.1) : (isPostCare ? Colors.green.shade50 : kCreamAccent)), 
-            borderRadius: BorderRadius.circular(15)
-          ), 
-          child: Column(children: [
-            Text(date.split('-')[2], style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: isOverdue ? Colors.red.shade700 : (isPostCare ? Colors.green.shade800 : kPrimaryGreen))), 
-            Text(DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(), style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: isOverdue ? Colors.red.shade600 : (isPostCare ? Colors.green.shade700 : kSecondaryGreen)))
-          ])
-        ), 
-        const SizedBox(width: 15), 
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start, 
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      title, 
-                      style: TextStyle(fontWeight: FontWeight.w900, fontSize: 15, color: kPrimaryGreen),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    )
-                  ),
-                  if (isOverdue)
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.red.shade100, borderRadius: BorderRadius.circular(6)),
-                      child: Text("OVERDUE", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.red.shade900)),
-                    ),
-                  if (isProtocol && !isOverdue) 
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.amber.shade100, borderRadius: BorderRadius.circular(6)),
-                      child: Text("DOH Protocol", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.orange.shade900)),
-                    ),
-                  if (isPostCare && !isOverdue) 
-                    Container(
-                      margin: const EdgeInsets.only(left: 8),
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                      decoration: BoxDecoration(color: Colors.green.shade100, borderRadius: BorderRadius.circular(6)),
-                      child: Text("Clearance", style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.green.shade800)),
-                    )
-                ],
+          color: isOverdue ? const Color(0xFFFCA5A5) : borderNeutral,
+          width: isOverdue ? 1.5 : 1.0,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: isOverdue
+                  ? const Color(0xFFFEF2F2)
+                  : (isPostCare ? const Color(0xFFF0FDF4) : const Color(0xFFF0FDFA)),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                color: isOverdue
+                    ? const Color(0xFFFECACA)
+                    : (isPostCare ? const Color(0xFFBBF7D0) : const Color(0xFFCCFBF1)),
               ),
-              const SizedBox(height: 6),
-              Text("$displayTime • $loc", style: const TextStyle(color: Colors.grey, fontSize: 12))
-            ]
-          )
-        )
-      ])
+            ),
+            child: Column(
+              children: [
+                Text(
+                  date.split('-')[2],
+                  style: GoogleFonts.inter(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: isOverdue
+                        ? const Color(0xFFDC2626)
+                        : (isPostCare ? const Color(0xFF16A34A) : primaryTeal),
+                  ),
+                ),
+                Text(
+                  DateFormat('MMM').format(DateTime.parse(date)).toUpperCase(),
+                  style: GoogleFonts.inter(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w700,
+                    color: isOverdue ? const Color(0xFFDC2626) : textMuted,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: GoogleFonts.inter(fontWeight: FontWeight.w700, fontSize: 14, color: textCharcoal),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (isOverdue)
+                      Container(
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: const Color(0xFFFEE2E2), borderRadius: BorderRadius.circular(4)),
+                        child: Text("OVERDUE", style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: const Color(0xFF991B1B))),
+                      ),
+                    if (isProtocol && !isOverdue)
+                      Container(
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: const Color(0xFFFEF3C7), borderRadius: BorderRadius.circular(4)),
+                        child: Text("DOH Protocol", style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: const Color(0xFF92400E))),
+                      ),
+                    if (isPostCare && !isOverdue)
+                      Container(
+                        margin: const EdgeInsets.only(left: 6),
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(color: const Color(0xFFDCFCE7), borderRadius: BorderRadius.circular(4)),
+                        child: Text("Clearance", style: GoogleFonts.inter(fontSize: 8.5, fontWeight: FontWeight.w800, color: const Color(0xFF166534))),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "$displayTime • $loc",
+                  style: GoogleFonts.inter(color: textMuted, fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildNoteInputArea() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: _categories.map((cat) { 
-        final isSelected = _selectedCategory == cat; 
-        return Padding(padding: const EdgeInsets.only(right: 8.0), child: ChoiceChip(label: Text(cat), selected: isSelected, selectedColor: kPrimaryGreen, onSelected: (val) => setState(() => _selectedCategory = cat))); }).toList())), 
-      const SizedBox(height: 10), 
-      Container(decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(20)), 
-        child: TextField(controller: _noteController, decoration: InputDecoration(hintText: "Add a $_selectedCategory...", border: InputBorder.none, contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 15), suffixIcon: IconButton(icon: CircleAvatar(backgroundColor: kPrimaryGreen, child: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20)), onPressed: _addNote))))
-    ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: _categories.map((cat) {
+              final isSelected = _selectedCategory == cat;
+              return Padding(
+                padding: const EdgeInsets.only(right: 8.0),
+                child: ChoiceChip(
+                  label: Text(cat),
+                  selected: isSelected,
+                  selectedColor: primaryTeal.withOpacity(0.12),
+                  backgroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                    side: BorderSide(color: isSelected ? primaryTeal : borderNeutral),
+                  ),
+                  labelStyle: GoogleFonts.inter(
+                    color: isSelected ? primaryTeal : textMuted,
+                    fontSize: 11.5,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  ),
+                  onSelected: (val) => setState(() => _selectedCategory = cat),
+                ),
+              );
+            }).toList(),
+          ),
+        ),
+        const SizedBox(height: 10),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderNeutral),
+          ),
+          child: TextField(
+            controller: _noteController,
+            style: GoogleFonts.inter(fontSize: 13.5, color: textCharcoal),
+            decoration: InputDecoration(
+              hintText: "Add a $_selectedCategory to your doctor's queue...",
+              hintStyle: GoogleFonts.inter(color: Colors.black26, fontSize: 13),
+              border: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              suffixIcon: IconButton(
+                icon: const CircleAvatar(
+                  radius: 15,
+                  backgroundColor: primaryTeal,
+                  child: Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 16),
+                ),
+                onPressed: _addNote,
+              ),
+            ),
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildNoteTile(Map<String, dynamic> note, int index) {
     bool isChecked = note['is_checked'] ?? false;
     String category = note['category'] ?? 'Question';
-    Color catColor = category == 'Symptom' ? const Color(0xFFE76F51) : (category == 'Question' ? const Color(0xFF2A9D8F) : const Color(0xFFE9C46A)); 
-    return AnimatedOpacity(opacity: isChecked ? 0.0 : 1.0, duration: const Duration(milliseconds: 500), 
-      child: _buildDismissibleWrapper(id: note['id'].toString(), onDismiss: () => _deleteNote(note['id'].toString()), 
-        child: Container(margin: const EdgeInsets.only(bottom: 10), decoration: BoxDecoration(color: kWhite, borderRadius: BorderRadius.circular(18), border: Border.all(color: kSoftGrey, width: 1)), 
-          child: CheckboxListTile(activeColor: kSecondaryGreen, value: isChecked, onChanged: (bool? value) => _toggleNote(index), 
-            title: Row(children: [
-              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2), decoration: BoxDecoration(color: catColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)), child: Text(category, style: TextStyle(color: catColor, fontSize: 10, fontWeight: FontWeight.bold))), 
-              const SizedBox(width: 8), 
-              Expanded(child: Text(note['note_text'], style: TextStyle(color: kPrimaryGreen, fontWeight: FontWeight.w600, fontSize: 15)))
-            ]), controlAffinity: ListTileControlAffinity.leading))));
+
+    Color catColor = primaryTeal;
+    Color catBg = const Color(0xFFF0FDFA);
+
+    if (category == 'Symptom') {
+      catColor = const Color(0xFFDC2626);
+      catBg = const Color(0xFFFEF2F2);
+    } else if (category == 'Side Effect') {
+      catColor = const Color(0xFFD97706);
+      catBg = const Color(0xFFFFFBEB);
+    }
+
+    return AnimatedOpacity(
+      opacity: isChecked ? 0.0 : 1.0,
+      duration: const Duration(milliseconds: 300),
+      child: _buildDismissibleWrapper(
+        id: note['id'].toString(),
+        onDismiss: () => _deleteNote(note['id'].toString()),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 10),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: borderNeutral),
+          ),
+          child: CheckboxListTile(
+            activeColor: primaryTeal,
+            checkboxShape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(4)),
+            value: isChecked,
+            onChanged: (bool? value) => _toggleNote(index),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(color: catBg, borderRadius: BorderRadius.circular(6)),
+                  child: Text(
+                    category,
+                    style: GoogleFonts.inter(color: catColor, fontSize: 10, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    note['note_text'],
+                    style: GoogleFonts.inter(color: textCharcoal, fontWeight: FontWeight.w500, fontSize: 13.5),
+                  ),
+                ),
+              ],
+            ),
+            controlAffinity: ListTileControlAffinity.leading,
+          ),
+        ),
+      ),
+    );
   }
 
-  Widget _buildDismissibleWrapper({required String id, required VoidCallback onDismiss, required Widget child}) { 
-    return Dismissible(key: Key(id), direction: DismissDirection.endToStart, onDismissed: (dir) => onDismiss(), background: Container(decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(20)), alignment: Alignment.centerRight, padding: const EdgeInsets.only(right: 25), child: const Icon(Icons.delete_sweep_rounded, color: Colors.white, size: 30)), child: child); 
+  Widget _buildDismissibleWrapper({required String id, required VoidCallback onDismiss, required Widget child}) {
+    return Dismissible(
+      key: Key(id),
+      direction: DismissDirection.endToStart,
+      onDismissed: (dir) => onDismiss(),
+      background: Container(
+        decoration: BoxDecoration(
+          color: const Color(0xFFDC2626),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.only(right: 20),
+        child: const Icon(Icons.delete_outline_rounded, color: Colors.white, size: 24),
+      ),
+      child: child,
+    );
   }
 
-  Widget _buildEmptyState(String msg) { return Center(child: Padding(padding: const EdgeInsets.symmetric(vertical: 20), child: Text(msg, style: const TextStyle(color: Colors.grey, fontStyle: FontStyle.italic)))); }
-  Widget _buildModernField(TextEditingController controller, String label, IconData icon) { return TextField(controller: controller, decoration: InputDecoration(prefixIcon: Icon(icon, color: kSecondaryGreen), labelText: label, filled: true, fillColor: kSoftGrey, border: OutlineInputBorder(borderRadius: BorderRadius.circular(18), borderSide: BorderSide.none))); }
-  Widget _buildPickerTile({required String label, required IconData icon, required VoidCallback onTap}) { return InkWell(onTap: onTap, child: Container(padding: const EdgeInsets.all(15), decoration: BoxDecoration(color: kSoftGrey, borderRadius: BorderRadius.circular(18)), child: Column(children: [Icon(icon, color: kSecondaryGreen), const SizedBox(height: 8), Text(label, textAlign: TextAlign.center, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: kPrimaryGreen))]))); }
+  Widget _buildEmptyState(String msg) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Text(
+          msg,
+          style: GoogleFonts.inter(color: textMuted, fontStyle: FontStyle.italic, fontSize: 12.5),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernField(TextEditingController controller, String label, IconData icon) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(label, style: GoogleFonts.inter(fontSize: 12, fontWeight: FontWeight.w600, color: textCharcoal)),
+        const SizedBox(height: 6),
+        TextField(
+          controller: controller,
+          style: GoogleFonts.inter(fontSize: 13.5, color: textCharcoal),
+          decoration: InputDecoration(
+            prefixIcon: Icon(icon, color: primaryTeal, size: 18),
+            hintText: "Enter $label",
+            hintStyle: GoogleFonts.inter(color: Colors.black26, fontSize: 13),
+            filled: true,
+            fillColor: inputBg,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: borderNeutral)),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: borderNeutral)),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: const BorderSide(color: primaryTeal, width: 1.5)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildPickerTile({required String label, required IconData icon, required VoidCallback onTap}) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: inputBg,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: borderNeutral),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: primaryTeal, size: 18),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                label,
+                style: GoogleFonts.inter(fontSize: 12.5, fontWeight: FontWeight.w600, color: textCharcoal),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

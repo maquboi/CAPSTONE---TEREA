@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -10,142 +11,135 @@ class LoginPage extends StatefulWidget {
   State<LoginPage> createState() => _LoginPageState();
 }
 
-class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
+class _LoginPageState extends State<LoginPage> with SingleTickerProviderStateMixin {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _focusNodeEmail = FocusNode();
+  final _focusNodePassword = FocusNode();
+
   bool _isLoading = false;
   bool _obscurePassword = true;
 
-  // Background Blob Controllers
-  late AnimationController _blob1Controller;
-  late AnimationController _blob2Controller;
+  late AnimationController _fadeController;
+  late Animation<double> _fadeAnimation;
+  late Animation<Offset> _slideAnimation;
 
-  // UI Staggered Entrance Controllers (Logo uses Hero now)
-  late AnimationController _entranceController;
-  late Animation<double> _textOpacity;
-  late Animation<Offset> _textSlide;
-  late Animation<double> _cardOpacity;
-  late Animation<Offset> _cardSlide;
-  late Animation<double> _buttonOpacity;
-  late Animation<Offset> _buttonSlide;
+  // Formal Clinical Color System
+  static const Color primaryTeal = Color(0xFF0F766E);       // Deep Clinical Teal
+  static const Color primaryDark = Color(0xFF115E59);       // Spruce Slate
+  static const Color backgroundLight = Color(0xFFF8FAFC);   // Clean Slate Grey
+  static const Color textCharcoal = Color(0xFF0F172A);      // High Contrast Text
+  static const Color textMuted = Color(0xFF64748B);         // Subdued Text
+  static const Color borderNeutral = Color(0xFFE2E8F0);     // Structured Border
+  static const Color inputBg = Color(0xFFF1F5F9);          // Input Background
 
   @override
   void initState() {
     super.initState();
-    
-    // Background Blobs
-    _blob1Controller = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 8),
-    )..repeat(reverse: true);
 
-    _blob2Controller = AnimationController(
+    _fadeController = AnimationController(
       vsync: this,
-      duration: const Duration(seconds: 10),
-    )..repeat(reverse: true);
-
-    // Staggered Entrance Setup - Slowed down to 2 seconds to match Hero flight
-    _entranceController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 2),
+      duration: const Duration(milliseconds: 600),
     );
 
-    _textOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.0, 0.4, curve: Curves.easeOut)));
-    _textSlide = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.0, 0.4, curve: Curves.easeOutCubic)));
+    _fadeAnimation = CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOut,
+    );
 
-    _cardOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.3, 0.7, curve: Curves.easeOut)));
-    _cardSlide = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.3, 0.7, curve: Curves.easeOutCubic)));
+    _slideAnimation = Tween<Offset>(
+      begin: const Offset(0, 0.04),
+      end: Offset.zero,
+    ).animate(CurvedAnimation(
+      parent: _fadeController,
+      curve: Curves.easeOutCubic,
+    ));
 
-    _buttonOpacity = Tween<double>(begin: 0.0, end: 1.0).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.6, 1.0, curve: Curves.easeOut)));
-    _buttonSlide = Tween<Offset>(begin: const Offset(0, 0.2), end: Offset.zero).animate(CurvedAnimation(parent: _entranceController, curve: const Interval(0.6, 1.0, curve: Curves.easeOutCubic)));
-
-    _entranceController.forward();
+    _fadeController.forward();
   }
 
   @override
   void dispose() {
     _emailController.dispose();
     _passwordController.dispose();
-    _blob1Controller.dispose();
-    _blob2Controller.dispose();
-    _entranceController.dispose();
+    _focusNodeEmail.dispose();
+    _focusNodePassword.dispose();
+    _fadeController.dispose();
     super.dispose();
   }
 
-  // --- MODERN CENTERED POPUP ANIMATION ---
+  // --- FORMAL ALERT DIALOG ---
   void _showNotificationPopup(String message, {bool isSuccess = false}) {
     showGeneralDialog(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'Dismiss',
       barrierColor: Colors.black.withOpacity(0.4),
-      transitionDuration: const Duration(milliseconds: 300),
-      pageBuilder: (context, animation, secondaryAnimation) => const SizedBox.shrink(),
+      transitionDuration: const Duration(milliseconds: 200),
+      pageBuilder: (context, _, __) => const SizedBox.shrink(),
       transitionBuilder: (context, a1, a2, child) {
-        final color = isSuccess ? const Color(0xFF606C38) : Colors.redAccent;
-        final icon = isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded;
-        
-        return Transform.scale(
-          scale: Curves.easeOutBack.transform(a1.value),
-          child: FadeTransition(
-            opacity: a1,
-            child: AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              backgroundColor: Colors.white,
-              contentPadding: const EdgeInsets.all(24),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: color.withOpacity(0.1),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(icon, color: color, size: 32),
+        final alertColor = isSuccess ? primaryTeal : const Color(0xFFDC2626);
+        final alertIcon = isSuccess ? Icons.check_circle_outline_rounded : Icons.error_outline_rounded;
+
+        return FadeTransition(
+          opacity: a1,
+          child: AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+              side: const BorderSide(color: borderNeutral, width: 1),
+            ),
+            backgroundColor: Colors.white,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: alertColor.withOpacity(0.08),
+                    shape: BoxShape.circle,
                   ),
-                  const SizedBox(height: 20),
-                  Text(
-                    isSuccess ? "Success" : "Notice",
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                      color: const Color(0xFF2D3B1E), 
-                    ),
+                  child: Icon(alertIcon, color: alertColor, size: 28),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  isSuccess ? "Authentication Successful" : "Access Notification",
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 16,
+                    color: textCharcoal,
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    message,
-                    textAlign: TextAlign.center,
-                    style: GoogleFonts.poppins(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 14,
-                      color: Colors.black87,
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: GoogleFonts.inter(
+                    fontWeight: FontWeight.w400,
+                    fontSize: 13,
+                    color: textMuted,
+                    height: 1.4,
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF606C38),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        elevation: 0,
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: Text(
-                        "Got it",
-                        style: GoogleFonts.poppins(
-                          color: Colors.white, 
-                          fontWeight: FontWeight.w600, 
-                          fontSize: 14,
-                        ),
-                      ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: primaryTeal,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      padding: const EdgeInsets.symmetric(vertical: 12),
+                      elevation: 0,
+                    ),
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(
+                      "Acknowledge",
+                      style: GoogleFonts.inter(fontWeight: FontWeight.w600, fontSize: 13),
                     ),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         );
@@ -153,13 +147,13 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
     );
   }
 
-  // --- FORGOT PASSWORD MODAL FLOW ---
+  // --- PASSWORD RESET MODAL ---
   void _showForgotPasswordDialog() {
     final resetEmailController = TextEditingController();
-    
+
     showDialog(
       context: context,
-      barrierDismissible: false,
+      barrierDismissible: true,
       builder: (context) {
         return StatefulBuilder(
           builder: (context, setState) {
@@ -170,7 +164,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             Future<void> submitRequest() async {
               final email = resetEmailController.text.trim();
               if (email.isEmpty || !email.contains('@')) {
-                setState(() => errorMsg = "Please enter a valid email address.");
+                setState(() => errorMsg = "Please input a valid medical/patient email.");
                 return;
               }
 
@@ -183,7 +177,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 await Supabase.instance.client.from('support_tickets').insert({
                   'email': email,
                   'issue_type': 'Password Reset Request',
-                  'message': 'Patient requested a password reset from the TEREA Mobile App.',
+                  'message': 'Patient requested a password reset from TEREA Mobile App.',
                   'status': 'Pending',
                 });
 
@@ -193,7 +187,7 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                 });
               } catch (e) {
                 setState(() {
-                  errorMsg = "Failed to send request. Please try again.";
+                  errorMsg = "Unable to process request. Please contact clinic staff directly.";
                   isSubmitting = false;
                 });
               }
@@ -201,114 +195,129 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
             return Dialog(
               backgroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: borderNeutral),
+              ),
               child: Padding(
                 padding: const EdgeInsets.all(24.0),
-                child: success 
-                  ? Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(Icons.check_circle_outline, color: Color(0xFF606C38), size: 48),
-                        const SizedBox(height: 16),
-                        Text(
-                          "Request Sent",
-                          style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF2D3B1E)),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "IT Support has received your request. You will receive an email with a secure reset link shortly.",
-                          textAlign: TextAlign.center,
-                          style: GoogleFonts.poppins(color: Colors.black54, fontSize: 14),
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF606C38),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: () => Navigator.pop(context),
-                            child: Text("Okay", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: success
+                    ? Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(Icons.check_circle_outline, color: primaryTeal, size: 40),
+                          const SizedBox(height: 12),
+                          Text(
+                            "Request Submitted",
+                            style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.bold, color: textCharcoal),
                           ),
-                        )
-                      ],
-                    )
-                  : Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              "Reset Password",
-                              style: GoogleFonts.poppins(fontSize: 20, fontWeight: FontWeight.bold, color: const Color(0xFF2D3B1E)),
-                            ),
-                            IconButton(
-                              icon: const Icon(Icons.close, color: Colors.black54),
-                              onPressed: () => Navigator.pop(context),
-                            )
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          "Enter the email associated with your account to request a password reset.",
-                          style: GoogleFonts.poppins(color: Colors.black54, fontSize: 14),
-                        ),
-                        const SizedBox(height: 20),
-                        if (errorMsg != null)
-                          Container(
+                          const SizedBox(height: 8),
+                          Text(
+                            "The Carmona TB-DOTS administrator has been notified. Check your email inbox for instructions.",
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.inter(color: textMuted, fontSize: 13, height: 1.4),
+                          ),
+                          const SizedBox(height: 20),
+                          SizedBox(
                             width: double.infinity,
-                            padding: const EdgeInsets.all(10),
-                            margin: const EdgeInsets.only(bottom: 16),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade50,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.red.shade100),
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryTeal,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                elevation: 0,
+                              ),
+                              onPressed: () => Navigator.pop(context),
+                              child: Text("Done", style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600)),
                             ),
-                            child: Text(
-                              errorMsg!,
-                              style: GoogleFonts.poppins(color: Colors.red.shade700, fontSize: 12),
+                          )
+                        ],
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                "Account Recovery",
+                                style: GoogleFonts.inter(fontSize: 17, fontWeight: FontWeight.w700, color: textCharcoal),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.close, color: textMuted, size: 20),
+                                onPressed: () => Navigator.pop(context),
+                              )
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            "Enter the registered email associated with your TB-DOTS treatment profile.",
+                            style: GoogleFonts.inter(color: textMuted, fontSize: 13, height: 1.4),
+                          ),
+                          const SizedBox(height: 16),
+                          if (errorMsg != null)
+                            Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(10),
+                              margin: const EdgeInsets.only(bottom: 12),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFEF2F2),
+                                borderRadius: BorderRadius.circular(8),
+                                border: Border.all(color: const Color(0xFFFCA5A5)),
+                              ),
+                              child: Text(
+                                errorMsg!,
+                                style: GoogleFonts.inter(color: const Color(0xFF991B1B), fontSize: 12),
+                              ),
+                            ),
+                          TextField(
+                            controller: resetEmailController,
+                            keyboardType: TextInputType.emailAddress,
+                            style: GoogleFonts.inter(fontSize: 14, color: textCharcoal),
+                            decoration: InputDecoration(
+                              hintText: "patient@example.com",
+                              hintStyle: GoogleFonts.inter(color: Colors.black38, fontSize: 13),
+                              filled: true,
+                              fillColor: inputBg,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: borderNeutral),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: borderNeutral),
+                              ),
+                              focusedBorder: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(10),
+                                borderSide: const BorderSide(color: primaryTeal, width: 1.5),
+                              ),
+                              prefixIcon: const Icon(Icons.mail_outline_rounded, color: textMuted, size: 18),
                             ),
                           ),
-                        TextField(
-                          controller: resetEmailController,
-                          keyboardType: TextInputType.emailAddress,
-                          decoration: InputDecoration(
-                            hintText: "Email Address",
-                            hintStyle: GoogleFonts.poppins(color: Colors.black26),
-                            filled: true,
-                            fillColor: const Color(0xFFF4F7F4),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide.none,
+                          const SizedBox(height: 20),
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: primaryTeal,
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                                elevation: 0,
+                              ),
+                              onPressed: isSubmitting ? null : submitRequest,
+                              child: isSubmitting
+                                  ? const SizedBox(
+                                      height: 18,
+                                      width: 18,
+                                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                    )
+                                  : Text("Send Recovery Link", style: GoogleFonts.inter(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 13)),
                             ),
-                            prefixIcon: const Icon(Icons.email_outlined, color: Color(0xFF606C38)),
-                          ),
-                        ),
-                        const SizedBox(height: 24),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton(
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF606C38),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              padding: const EdgeInsets.symmetric(vertical: 14),
-                            ),
-                            onPressed: isSubmitting ? null : submitRequest,
-                            child: isSubmitting
-                                ? const SizedBox(
-                                    height: 20,
-                                    width: 20,
-                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
-                                  )
-                                : Text("Send Request", style: GoogleFonts.poppins(color: Colors.white, fontWeight: FontWeight.bold)),
-                          ),
-                        )
-                      ],
-                    ),
+                          )
+                        ],
+                      ),
               ),
             );
           },
@@ -318,11 +327,19 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
   }
 
   Future<void> _signIn() async {
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+
+    if (email.isEmpty || password.isEmpty) {
+      _showNotificationPopup("Please enter both your registered email and password.");
+      return;
+    }
+
     setState(() => _isLoading = true);
     try {
       final response = await Supabase.instance.client.auth.signInWithPassword(
-        email: _emailController.text.trim(),
-        password: _passwordController.text.trim(),
+        email: email,
+        password: password,
       );
 
       if (response.user != null) {
@@ -332,22 +349,24 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
             .eq('id', response.user!.id)
             .maybeSingle();
 
-        String role =
-            data != null && data['role'] != null ? data['role'] : 'patient';
+        String role = data != null && data['role'] != null ? data['role'] : 'patient';
 
         if (mounted) {
-          if (role == 'doctor') {
+          if (role == 'doctor' || role == 'admin') {
             await Supabase.instance.client.auth.signOut();
-            _showNotificationPopup("Access Denied: Doctors must use the Web Portal.");
+            _showNotificationPopup("Access Denied: Healthcare staff and clinicians must log in through the Web Administration Portal.");
           } else {
-            OneSignal.login(response.user!.id);
+            // Guard OneSignal for native platforms only (prevents web crash)
+            if (!kIsWeb) {
+              OneSignal.login(response.user!.id);
+            }
             Navigator.pushReplacementNamed(context, '/dashboard');
           }
         }
       }
     } catch (e) {
       if (mounted) {
-        _showNotificationPopup("Login Failed: $e");
+        _showNotificationPopup("Invalid email or password. Please verify your credentials with the health center.");
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -356,219 +375,209 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
-    const Color forestDark = Color(0xFF2D3B1E); 
-    const Color forestLight = Color(0xFF606C38); 
-    const Color bgOffWhite = Color(0xFFF4F7F4); 
-
     return Scaffold(
-      backgroundColor: bgOffWhite,
-      body: Stack(
-        children: [
-          // --- ANIMATED BACKGROUND DECORATIONS ---
-          AnimatedBuilder(
-            animation: _blob1Controller,
-            builder: (context, child) {
-              return Positioned(
-                top: -80 + (_blob1Controller.value * 20),
-                right: -80 + (_blob1Controller.value * 15),
-                child: Container(
-                  width: 300,
-                  height: 300,
-                  decoration: BoxDecoration(
-                    color: forestLight.withOpacity(0.06),
-                    shape: BoxShape.circle,
-                  ),
+      backgroundColor: backgroundLight,
+      body: SafeArea(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            return SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight,
                 ),
-              );
-            },
-          ),
-          AnimatedBuilder(
-            animation: _blob2Controller,
-            builder: (context, child) {
-              return Positioned(
-                bottom: -120 - (_blob2Controller.value * 30),
-                left: -60 + (_blob2Controller.value * 20),
-                child: Container(
-                  width: 350,
-                  height: 350,
-                  decoration: BoxDecoration(
-                    color: forestLight.withOpacity(0.04),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              );
-            },
-          ),
-
-          // --- MAIN CONTENT (STAGGERED ENTRANCE) ---
-          SafeArea(
-            child: Center(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 40),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    
-                    // --- HERO ANIMATED LOGO ---
-                    Center(child: _buildLogo(size: 70)),
-                    const SizedBox(height: 35),
-                    
-                    // TEXT ANIMATION
-                    FadeTransition(
-                      opacity: _textOpacity,
+                child: IntrinsicHeight(
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                    child: FadeTransition(
+                      opacity: _fadeAnimation,
                       child: SlideTransition(
-                        position: _textSlide,
+                        position: _slideAnimation,
                         child: Column(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Text(
-                              'Welcome back',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.poppins(
-                                fontSize: 28,
-                                fontWeight: FontWeight.w700,
-                                color: forestDark,
-                                letterSpacing: -0.5,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              'Sign in to your personalized tracker',
-                              textAlign: TextAlign.center,
-                              style: GoogleFonts.poppins(
-                                fontSize: 14,
-                                color: Colors.black45,
-                                fontWeight: FontWeight.w500,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 50),
-
-                    // INPUT CARD ANIMATION
-                    FadeTransition(
-                      opacity: _cardOpacity,
-                      child: SlideTransition(
-                        position: _cardSlide,
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(24),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(0.03),
-                                blurRadius: 20,
-                                offset: const Offset(0, 10),
-                              ),
-                            ],
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(24.0),
-                            child: Column(
+                            // TOP SECTION: Institutional Badge + Header
+                            Column(
                               children: [
-                                _buildTextField(
-                                  label: "Email Address",
-                                  hint: "you@example.com",
-                                  controller: _emailController,
-                                  icon: Icons.alternate_email_rounded,
-                                  keyboardType: TextInputType.emailAddress,
-                                ),
-                                const SizedBox(height: 24),
-                                _buildTextField(
-                                  label: "Password",
-                                  hint: "••••••••",
-                                  isPassword: true,
-                                  controller: _passwordController,
-                                  icon: Icons.lock_outline_rounded,
-                                  obscureText: _obscurePassword,
-                                  suffixIcon: IconButton(
-                                    icon: Icon(
-                                      _obscurePassword
-                                          ? Icons.visibility_outlined
-                                          : Icons.visibility_off_outlined,
-                                      color: Colors.black38,
-                                      size: 20,
-                                    ),
-                                    onPressed: () {
-                                      setState(() {
-                                        _obscurePassword = !_obscurePassword;
-                                      });
-                                    },
+                                const SizedBox(height: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                                  decoration: BoxDecoration(
+                                    color: primaryTeal.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(20),
+                                    border: Border.all(color: primaryTeal.withOpacity(0.2)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(Icons.local_hospital_rounded, color: primaryTeal, size: 15),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        "Carmona Health Center",
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                          color: primaryTeal,
+                                          letterSpacing: 0.2,
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ),
-                                const SizedBox(height: 12),
-                                Align(
-                                  alignment: Alignment.centerRight,
-                                  child: TextButton(
-                                    onPressed: _showForgotPasswordDialog,
-                                    style: TextButton.styleFrom(
-                                      padding: EdgeInsets.zero,
-                                      minimumSize: Size.zero,
-                                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                                    ),
-                                    child: Text(
-                                      "Forgot password?",
-                                      style: GoogleFonts.poppins(
-                                        color: forestLight,
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w600,
-                                      ),
-                                    ),
+                                const SizedBox(height: 24),
+                                _buildLogo(size: 72),
+                                const SizedBox(height: 18),
+                                Text(
+                                  'Welcome to TEREA',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 26,
+                                    fontWeight: FontWeight.w700,
+                                    color: textCharcoal,
+                                    letterSpacing: -0.5,
+                                  ),
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Tuberculosis Evaluation, Risk Assessment & Adherence',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.inter(
+                                    fontSize: 13,
+                                    color: textMuted,
+                                    fontWeight: FontWeight.w400,
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    
-                    const SizedBox(height: 40),
 
-                    // BOTTOM BUTTONS ANIMATION
-                    FadeTransition(
-                      opacity: _buttonOpacity,
-                      child: SlideTransition(
-                        position: _buttonSlide,
-                        child: Column(
-                          children: [
-                            _isLoading
-                                ? const Center(
-                                    child: CircularProgressIndicator(color: forestDark))
-                                : _buildGradientButton(
-                                    text: "Sign in",
-                                    onPressed: _signIn,
-                                    colors: [forestLight, forestDark],
+                            const SizedBox(height: 24),
+
+                            // MIDDLE SECTION: Clinical Form Card
+                            Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(color: borderNeutral, width: 1),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.03),
+                                    blurRadius: 16,
+                                    offset: const Offset(0, 4),
                                   ),
-
-                            const SizedBox(height: 30),
-                            
-                            TextButton(
-                              onPressed: () => Navigator.pushNamed(context, '/signup'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: forestLight,
-                                splashFactory: NoSplash.splashFactory,
+                                ],
                               ),
-                              child: RichText(
-                                text: TextSpan(
-                                  text: "Don't have an account? ",
-                                  style: GoogleFonts.poppins(
-                                    color: Colors.black45, 
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.w500
+                              padding: const EdgeInsets.symmetric(horizontal: 24.0, vertical: 28.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  _buildFieldLabel("Email Address"),
+                                  const SizedBox(height: 8),
+                                  _buildTextField(
+                                    hint: "patient@gmail.com",
+                                    controller: _emailController,
+                                    focusNode: _focusNodeEmail,
+                                    icon: Icons.alternate_email_rounded,
+                                    keyboardType: TextInputType.emailAddress,
                                   ),
-                                  children: [
-                                    TextSpan(
-                                      text: "Create an Account",
-                                      style: GoogleFonts.poppins(
-                                        color: forestDark,
-                                        fontWeight: FontWeight.w700,
+                                  const SizedBox(height: 20),
+
+                                  _buildFieldLabel("Password"),
+                                  const SizedBox(height: 8),
+                                  _buildTextField(
+                                    hint: "••••••••••••",
+                                    controller: _passwordController,
+                                    focusNode: _focusNodePassword,
+                                    icon: Icons.lock_outline_rounded,
+                                    isPassword: true,
+                                    obscureText: _obscurePassword,
+                                    suffixIcon: IconButton(
+                                      icon: Icon(
+                                        _obscurePassword ? Icons.visibility_outlined : Icons.visibility_off_outlined,
+                                        color: textMuted,
+                                        size: 19,
+                                      ),
+                                      onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+
+                                  Align(
+                                    alignment: Alignment.centerRight,
+                                    child: TextButton(
+                                      onPressed: _showForgotPasswordDialog,
+                                      style: TextButton.styleFrom(
+                                        padding: EdgeInsets.zero,
+                                        minimumSize: Size.zero,
+                                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                                      ),
+                                      child: Text(
+                                        "Forgot password?",
+                                        style: GoogleFonts.inter(
+                                          color: primaryTeal,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w600,
+                                        ),
                                       ),
                                     ),
-                                  ],
+                                  ),
+                                  const SizedBox(height: 28),
+
+                                  // Primary Button
+                                  SizedBox(
+                                    width: double.infinity,
+                                    height: 50,
+                                    child: ElevatedButton(
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: primaryTeal,
+                                        foregroundColor: Colors.white,
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                        elevation: 0,
+                                      ),
+                                      onPressed: _isLoading ? null : _signIn,
+                                      child: _isLoading
+                                          ? const SizedBox(
+                                              height: 20,
+                                              width: 20,
+                                              child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                                            )
+                                          : Text(
+                                              "Log In",
+                                              style: GoogleFonts.inter(
+                                                fontSize: 14,
+                                                fontWeight: FontWeight.w600,
+                                                letterSpacing: 0.2,
+                                              ),
+                                            ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 24),
+
+                            // BOTTOM SECTION: Register Action
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 12.0),
+                              child: Center(
+                                child: TextButton(
+                                  onPressed: () => Navigator.pushNamed(context, '/signup'),
+                                  child: RichText(
+                                    text: TextSpan(
+                                      text: "First time using our app? ",
+                                      style: GoogleFonts.inter(color: textMuted, fontSize: 13),
+                                      children: [
+                                        TextSpan(
+                                          text: "Register Here",
+                                          style: GoogleFonts.inter(
+                                            color: primaryTeal,
+                                            fontWeight: FontWeight.w700,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
                                 ),
                               ),
                             ),
@@ -576,146 +585,89 @@ class _LoginPageState extends State<LoginPage> with TickerProviderStateMixin {
                         ),
                       ),
                     ),
-                  ],
+                  ),
                 ),
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
 
-  // Modernized Text Field
+  Widget _buildFieldLabel(String label) {
+    return Text(
+      label,
+      style: GoogleFonts.inter(
+        color: textCharcoal,
+        fontWeight: FontWeight.w600,
+        fontSize: 13,
+      ),
+    );
+  }
+
   Widget _buildTextField({
-    required String label,
     required String hint,
     required TextEditingController controller,
+    required FocusNode focusNode,
+    required IconData icon,
     bool isPassword = false,
     bool obscureText = false,
-    IconData? icon,
     Widget? suffixIcon,
     TextInputType? keyboardType,
   }) {
-    const Color forestDark = Color(0xFF2D3B1E);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: GoogleFonts.poppins(
-            color: forestDark,
-            fontWeight: FontWeight.w600,
-            fontSize: 13,
-          ),
+    return TextField(
+      controller: controller,
+      focusNode: focusNode,
+      obscureText: isPassword ? obscureText : false,
+      keyboardType: keyboardType,
+      style: GoogleFonts.inter(color: textCharcoal, fontSize: 14, fontWeight: FontWeight.w500),
+      decoration: InputDecoration(
+        hintText: hint,
+        hintStyle: GoogleFonts.inter(color: Colors.black26, fontSize: 13),
+        prefixIcon: Icon(icon, color: textMuted, size: 19),
+        suffixIcon: suffixIcon,
+        filled: true,
+        fillColor: inputBg,
+        contentPadding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: borderNeutral, width: 1),
         ),
-        const SizedBox(height: 8),
-        Container(
-          decoration: BoxDecoration(
-            color: const Color(0xFFF8F9FA), 
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.black.withOpacity(0.05)),
-          ),
-          child: TextField(
-            controller: controller,
-            obscureText: isPassword ? obscureText : false,
-            keyboardType: keyboardType,
-            style: GoogleFonts.poppins(
-              color: forestDark, 
-              fontSize: 14, 
-              fontWeight: FontWeight.w500
-            ),
-            decoration: InputDecoration(
-              hintText: hint,
-              hintStyle: GoogleFonts.poppins(
-                color: Colors.black26, 
-                fontSize: 14
-              ),
-              prefixIcon: Icon(icon, color: Colors.black38, size: 20),
-              suffixIcon: suffixIcon,
-              border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
-            ),
-          ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: borderNeutral, width: 1),
         ),
-      ],
-    );
-  }
-
-  // Modernized Pill-Shaped Button
-  Widget _buildGradientButton({
-    required String text,
-    required VoidCallback onPressed,
-    required List<Color> colors,
-  }) {
-    return Container(
-      width: double.infinity,
-      height: 58,
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: colors,
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-        ),
-        borderRadius: BorderRadius.circular(20), 
-        boxShadow: [
-          BoxShadow(
-            color: colors.last.withOpacity(0.3),
-            blurRadius: 20,
-            offset: const Offset(0, 8),
-          ),
-        ],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: onPressed,
-          borderRadius: BorderRadius.circular(20),
-          splashColor: Colors.white.withOpacity(0.1),
-          highlightColor: Colors.transparent,
-          child: Center(
-            child: Text(
-              text,
-              style: GoogleFonts.poppins(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-                fontSize: 15,
-                letterSpacing: 0.5,
-              ),
-            ),
-          ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(10),
+          borderSide: const BorderSide(color: primaryTeal, width: 1.5),
         ),
       ),
     );
   }
 
-  // Linked Hero Animation Logo
   Widget _buildLogo({required double size}) {
     return Hero(
       tag: 'terea_hero_logo',
-      child: Material(
-        type: MaterialType.transparency,
-        child: Container(
-          width: size * 1.4,
-          height: size * 1.4,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.15),
-                blurRadius: 20,
-                offset: const Offset(0, 10),
-              ),
-            ],
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(24),
-            child: Image.asset(
-              'assets/LogoNoBG.png',
-              fit: BoxFit.contain,
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: borderNeutral),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.04),
+              blurRadius: 10,
+              offset: const Offset(0, 2),
             ),
-          ),
+          ],
+        ),
+        padding: const EdgeInsets.all(10),
+        child: Image.asset(
+          'assets/LogoNoBG.png',
+          fit: BoxFit.contain,
         ),
       ),
     );

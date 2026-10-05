@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class FaqPage extends StatefulWidget {
   const FaqPage({super.key});
@@ -13,12 +14,13 @@ class _FaqPageState extends State<FaqPage> {
   bool _isLoading = true;
   List<Map<String, dynamic>> _faqs = [];
 
-  // Theme Palette (Matching your Dashboard)
-  final Color forestDark = const Color(0xFF283618);
-  final Color forestMed = const Color(0xFF606C38);  
-  final Color mossGreen = const Color(0xFFADC178);
-  final Color paleGreen = const Color(0xFFDDE5B6);
-  final Color softWhite = const Color(0xFFF9FBF9);
+  // --- FORMAL CLINICAL COLOR SYSTEM ---
+  static const Color primaryTeal = Color(0xFF0F766E);       // Deep Clinical Teal
+  static const Color backgroundSurface = Color(0xFFF1F5F9); // Contrast Slate Background
+  static const Color cardBg = Colors.white;                // Pure White Card
+  static const Color textCharcoal = Color(0xFF0F172A);      // High Contrast Text
+  static const Color textMuted = Color(0xFF64748B);         // Subdued Text
+  static const Color borderNeutral = Color(0xFFE2E8F0);     // Structured Border
 
   @override
   void initState() {
@@ -32,7 +34,7 @@ class _FaqPageState extends State<FaqPage> {
           .from('faqs')
           .select()
           .order('created_at', ascending: true);
-          
+
       if (mounted) {
         setState(() {
           _faqs = List<Map<String, dynamic>>.from(response);
@@ -44,7 +46,13 @@ class _FaqPageState extends State<FaqPage> {
       if (mounted) {
         setState(() => _isLoading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to load guidelines. Please check your connection.')),
+          SnackBar(
+            content: Text(
+              'Failed to load guidelines. Please check your connection.',
+              style: GoogleFonts.inter(fontSize: 13),
+            ),
+            backgroundColor: const Color(0xFFDC2626),
+          ),
         );
       }
     }
@@ -53,31 +61,35 @@ class _FaqPageState extends State<FaqPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: softWhite,
+      backgroundColor: backgroundSurface,
       appBar: AppBar(
-        backgroundColor: softWhite,
+        backgroundColor: Colors.transparent,
         elevation: 0,
         scrolledUnderElevation: 0,
+        centerTitle: true,
         leading: IconButton(
-          icon: Icon(Icons.arrow_back_ios_new_rounded, color: forestDark, size: 20),
+          icon: const Icon(Icons.arrow_back_ios_new_rounded, color: textCharcoal, size: 18),
           onPressed: () => Navigator.pop(context),
         ),
         title: Text(
-          'DOH Guidelines',
-          style: TextStyle(fontWeight: FontWeight.w900, color: forestDark, fontSize: 22, letterSpacing: 0.5),
+          'Clinical Guidelines & FAQ',
+          style: GoogleFonts.inter(
+            fontWeight: FontWeight.w700,
+            color: textCharcoal,
+            fontSize: 17,
+          ),
         ),
-        centerTitle: true,
       ),
       body: _isLoading
-          ? Center(child: CircularProgressIndicator(color: forestMed))
+          ? const Center(child: CircularProgressIndicator(color: primaryTeal))
           : RefreshIndicator(
               onRefresh: _fetchFaqs,
-              color: forestMed,
+              color: primaryTeal,
               backgroundColor: Colors.white,
               child: _faqs.isEmpty
                   ? _buildEmptyState()
                   : ListView.builder(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
                       itemCount: _faqs.length,
                       itemBuilder: (context, index) {
                         final faq = _faqs[index];
@@ -94,19 +106,25 @@ class _FaqPageState extends State<FaqPage> {
       child: Container(
         height: MediaQuery.of(context).size.height * 0.7,
         alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.menu_book_rounded, size: 64, color: paleGreen),
+            Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: primaryTeal.withOpacity(0.08), shape: BoxShape.circle),
+              child: const Icon(Icons.menu_book_rounded, size: 40, color: primaryTeal),
+            ),
             const SizedBox(height: 16),
             Text(
-              "No guidelines available.",
-              style: TextStyle(color: forestDark, fontWeight: FontWeight.bold, fontSize: 18),
+              "No Guidelines Available",
+              style: GoogleFonts.inter(color: textCharcoal, fontWeight: FontWeight.w700, fontSize: 16),
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: 6),
             Text(
-              "Please check back later or refresh the page.",
-              style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+              "Clinical health information will appear once uploaded by Carmona Health Center.",
+              textAlign: TextAlign.center,
+              style: GoogleFonts.inter(color: textMuted, fontSize: 13),
             ),
           ],
         ),
@@ -116,61 +134,77 @@ class _FaqPageState extends State<FaqPage> {
 
   Widget _buildFaqCard(String question, String answer, String? category) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 16),
+      margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.grey.shade200),
+        color: cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: borderNeutral),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.03),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.black.withOpacity(0.015),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
           )
         ],
       ),
       child: Theme(
-        // Removes the default borders from ExpansionTile
         data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
         child: ExpansionTile(
-          iconColor: forestMed,
-          collapsedIconColor: forestDark,
-          tilePadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          childrenPadding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+          iconColor: primaryTeal,
+          collapsedIconColor: textMuted,
+          tilePadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
+          childrenPadding: const EdgeInsets.fromLTRB(18, 0, 18, 18),
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               if (category != null) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                   decoration: BoxDecoration(
-                    color: paleGreen.withOpacity(0.5),
-                    borderRadius: BorderRadius.circular(8),
+                    color: const Color(0xFFF0FDFA),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: const Color(0xFFCCFBF1)),
                   ),
                   child: Text(
                     category.toUpperCase(),
-                    style: TextStyle(color: forestMed, fontSize: 10, fontWeight: FontWeight.bold, letterSpacing: 1.0),
+                    style: GoogleFonts.inter(
+                      color: primaryTeal,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.6,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 8),
               ],
               Text(
                 question,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: forestDark, height: 1.3),
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 14,
+                  color: textCharcoal,
+                  height: 1.35,
+                ),
               ),
             ],
           ),
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(14),
               decoration: BoxDecoration(
-                color: softWhite,
-                borderRadius: BorderRadius.circular(16),
+                color: const Color(0xFFF8FAFC),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderNeutral),
               ),
               child: Text(
                 answer,
-                style: TextStyle(fontSize: 14, color: Colors.grey.shade800, height: 1.6),
+                style: GoogleFonts.inter(
+                  fontSize: 13,
+                  color: const Color(0xFF334155),
+                  height: 1.55,
+                  fontWeight: FontWeight.w400,
+                ),
               ),
             ),
           ],
