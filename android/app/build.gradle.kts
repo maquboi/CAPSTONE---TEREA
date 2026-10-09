@@ -1,15 +1,14 @@
-import com.android.build.gradle.internal.api.BaseVariantOutputImpl
+﻿import com.android.build.gradle.internal.api.BaseVariantOutputImpl
 
 plugins {
     id("com.android.application")
-    id("kotlin-android")
+    id("org.jetbrains.kotlin.android")
     id("dev.flutter.flutter-gradle-plugin")
 }
 
 android {
     namespace = "com.example.capstone_terea"
     
-    // Set to 36 to satisfy plugin compilation
     compileSdk = 36
 
     defaultConfig {
@@ -29,19 +28,17 @@ android {
 
     kotlinOptions {
         jvmTarget = "17"
+        freeCompilerArgs = freeCompilerArgs + listOf("-Xskip-metadata-version-check")
     }
 
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName("debug")
-            
-            // Prevents R8 from stripping Supabase, OneSignal, or native camera classes
             isMinifyEnabled = false
             isShrinkResources = false
         }
     }
 
-    // Automatically names the output APK to TEREA.apk
     applicationVariants.all {
         val variant = this
         variant.outputs.all {
@@ -57,7 +54,6 @@ flutter {
     source = "../.."
 }
 
-// Bypasses the CheckAarMetadata task completely so metadata warnings never block the build
 tasks.matching { it.name.contains("AarMetadata", ignoreCase = true) }.configureEach {
     enabled = false
 }
