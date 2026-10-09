@@ -24,7 +24,7 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
   static const Color primaryTeal = Color(0xFF0F766E);       // Deep Clinical Teal
   static const Color primaryDark = Color(0xFF115E59);       // Spruce Slate
   static const Color backgroundSurface = Color(0xFFF1F5F9); // Slate 100
-  static const Color cardBg = Colors.white;                // Pure White Card
+  static const Color cardBg = Colors.white;                 // Pure White Card
   static const Color textCharcoal = Color(0xFF0F172A);      // High Contrast Text
   static const Color textMuted = Color(0xFF64748B);         // Subdued Slate Text
   static const Color borderNeutral = Color(0xFFE2E8F0);     // Clean Structured Border
@@ -214,9 +214,12 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
     final String rawName = _doctorData?['full_name'] ?? 'Unknown Doctor';
     final String formattedName = _formatDoctorName(rawName);
     final String email = _doctorData?['email'] ?? 'No email provided';
-    final String phone = _doctorData?['phone_number'] ?? 'No phone provided';
+    
+    // Aligned directly with the 'contact_number' database column
+    final String phone = _doctorData?['contact_number'] ?? _doctorData?['phone_number'] ?? 'No phone provided';
+    final String licenseNumber = _doctorData?['license_number'] ?? '';
     final String avatarUrl = _doctorData?['avatar_url'] ?? '';
-    final String clinic = _doctorData?['clinic_name'] ?? 'Carmona Health Center';
+    final String clinic = _doctorData?['clinic_name'] ?? 'Carmona Health Center - TB DOTS Clinic';
 
     String formatTimeString(String timeStr) {
       try {
@@ -240,8 +243,8 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
       }
     }
 
-    final String startHour = _doctorData?['start_hour'] ?? '08:00';
-    final String endHour = _doctorData?['end_hour'] ?? '17:00';
+    final String startHour = _doctorData?['start_hour'] ?? '8:00 AM';
+    final String endHour = _doctorData?['end_hour'] ?? '5:00 PM';
     final String availability = '${formatTimeString(startHour)} - ${formatTimeString(endHour)}';
 
     return SingleChildScrollView(
@@ -297,7 +300,18 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
                           letterSpacing: -0.3,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      if (licenseNumber.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          "PRC License #$licenseNumber",
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: textMuted,
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                         decoration: BoxDecoration(
@@ -311,7 +325,7 @@ class _MyDoctorPageState extends State<MyDoctorPage> {
                             const Icon(Icons.verified_rounded, color: primaryTeal, size: 13),
                             const SizedBox(width: 6),
                             Text(
-                              "Attending Physician • Carmona",
+                              "Attending Physician • Verified DOH DOTS",
                               style: GoogleFonts.inter(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
